@@ -1,0 +1,16 @@
+{
+  "name": "edgefolio-marketing",
+  "version": "1.0.0",
+  "description": "EDGEFOLIO marketing landing page — edgefolio.iotsoft.in",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

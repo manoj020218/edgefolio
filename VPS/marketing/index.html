@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="EDGEFOLIO — Offline-first Payroll & Attendance Management for Indian SMEs and factories. Works without internet." />
+  <meta property="og:title" content="EDGEFOLIO – Edge Payroll & Attendance" />
+  <meta property="og:description" content="Offline-first payroll and attendance system for SMEs and factories. No cloud subscription needed." />
+  <meta property="og:image" content="https://edgefolio.iotsoft.in/og-image.png" />
+  <title>EDGEFOLIO – Offline-First Payroll & Attendance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #0ea5e9;
+      --primary-dark: #0284c7;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #253348;
+      --border: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 0.75rem; }
+    .nav-logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--primary); display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; color: #fff; flex-shrink: 0;
+    }
+    .nav-logo-text { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em; }
+    .nav-logo-text span { color: var(--primary); }
+    .nav-links { display: flex; align-items: center; gap: 1.5rem; }
+    .nav-links a { font-size: 0.875rem; color: var(--text-muted); transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 1.25rem; border-radius: 8px;
+      background: var(--primary); color: #fff;
+      font-weight: 600; font-size: 0.875rem;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .nav-cta:hover { background: var(--primary-dark); transform: translateY(-1px); }
+
+    /* HERO */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 7rem 2rem 4rem;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(14,165,233,0.12) 0%, transparent 70%);
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.375rem 1rem; border-radius: 999px;
+      background: rgba(14,165,233,0.1); border: 1px solid rgba(14,165,233,0.3);
+      color: var(--primary); font-size: 0.8rem; font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+    .hero-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 800; line-height: 1.1;
+      letter-spacing: -0.03em; margin-bottom: 1.25rem;
+    }
+    .hero h1 span { color: var(--primary); }
+    .hero-sub {
+      font-size: 1.15rem; color: var(--text-muted);
+      max-width: 600px; margin: 0 auto 2.5rem;
+      font-weight: 400; line-height: 1.7;
+    }
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      padding: 0.875rem 2rem; border-radius: 10px;
+      background: var(--primary); color: #fff;
+      font-weight: 700; font-size: 1rem;
+      transition: all 0.2s; border: none; cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(14,165,233,0.3); }
+
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      padding: 0.875rem 2rem; border-radius: 10px;
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border); font-weight: 600; font-size: 1rem;
+      transition: all 0.2s; cursor: pointer;
+    }
+    .btn-outline:hover { background: var(--surface); border-color: var(--text-muted); transform: translateY(-2px); }
+
+    .hero-screenshot {
+      margin-top: 4rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.5rem;
+      max-width: 900px; margin-left: auto; margin-right: auto;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+    }
+    .screenshot-bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .screenshot-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .screenshot-mockup {
+      background: #0a1628; border-radius: 8px; padding: 1.5rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      color: #64748b; text-align: left; min-height: 200px;
+      display: flex; gap: 2rem;
+    }
+    .sm-sidebar { width: 140px; border-right: 1px solid #1e293b; padding-right: 1rem; }
+    .sm-nav-item { padding: 0.4rem 0.6rem; border-radius: 6px; margin-bottom: 0.25rem; font-size: 0.7rem; color: #64748b; }
+    .sm-nav-item.active { background: rgba(14,165,233,0.1); color: #38bdf8; }
+    .sm-main { flex: 1; }
+    .sm-kpi { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.75rem; margin-bottom: 1rem; }
+    .sm-kpi-card { background: #1e293b; border-radius: 8px; padding: 0.75rem; }
+    .sm-kpi-card .val { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: 0.25rem; }
+    .sm-table { background: #1e293b; border-radius: 8px; padding: 0.75rem; }
+    .sm-table-row { display: flex; gap: 0.75rem; padding: 0.4rem 0; border-bottom: 1px solid #334155; font-size: 0.65rem; }
+    .sm-table-row:last-child { border-bottom: none; }
+    .sm-badge { padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.6rem; font-weight: 600; }
+    .badge-green { background: rgba(16,185,129,0.15); color: #10b981; }
+    .badge-amber { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .badge-blue { background: rgba(14,165,233,0.15); color: #38bdf8; }
+
+    /* STATS BAR */
+    .stats-bar {
+      display: flex; justify-content: center; flex-wrap: wrap; gap: 3rem;
+      padding: 2.5rem 2rem;
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .stat-item { text-align: center; }
+    .stat-value { font-size: 2rem; font-weight: 800; color: var(--primary); }
+    .stat-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+    /* FEATURES */
+    section { padding: 5rem 2rem; max-width: 1100px; margin: 0 auto; }
+    .section-label { color: var(--primary); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+    .section-title { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; margin: 0.5rem 0 1rem; }
+    .section-sub { color: var(--text-muted); max-width: 550px; line-height: 1.7; }
+
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.25rem; margin-top: 3rem; }
+    .feature-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.5rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .feature-card:hover { border-color: var(--primary); transform: translateY(-3px); }
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; margin-bottom: 1rem;
+    }
+    .feature-title { font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
+    .feature-desc { color: var(--text-muted); font-size: 0.875rem; line-height: 1.6; }
+
+    /* HOW IT WORKS */
+    .steps { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 3rem; max-width: 700px; }
+    .step { display: flex; gap: 1.25rem; align-items: flex-start; }
+    .step-num {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(14,165,233,0.1); border: 2px solid rgba(14,165,233,0.3);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; color: var(--primary); font-size: 0.9rem;
+    }
+    .step-content { padding-top: 0.4rem; }
+    .step-title { font-weight: 700; margin-bottom: 0.25rem; }
+    .step-desc { color: var(--text-muted); font-size: 0.875rem; }
+
+    /* DOWNLOAD */
+    #download { text-align: center; padding: 5rem 2rem; }
+    .download-box {
+      display: inline-block; max-width: 700px; width: 100%;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 3rem 2rem;
+    }
+    .version-tag {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.3rem 0.85rem; border-radius: 999px;
+      background: rgba(14,165,233,0.1); border: 1px solid rgba(14,165,233,0.25);
+      color: var(--primary); font-size: 0.75rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; margin-bottom: 1.5rem;
+    }
+    .download-title { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.75rem; }
+    .download-sub { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem; }
+    .download-actions { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+
+    .download-btn {
+      display: inline-flex; align-items: center; gap: 0.75rem;
+      padding: 0.875rem 1.75rem; border-radius: 10px;
+      font-weight: 700; font-size: 0.9rem;
+      transition: all 0.2s; border: none; cursor: pointer;
+    }
+    .download-btn.primary { background: var(--primary); color: #fff; }
+    .download-btn.primary:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(14,165,233,0.3); }
+    .download-btn.secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+    .download-btn.secondary:hover { background: #2d3f55; transform: translateY(-2px); }
+
+    .git-install {
+      margin-top: 1.75rem; background: #0a1628;
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.875rem 1.25rem; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem; color: #7dd3fc; text-align: left;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .git-copy {
+      background: none; border: 1px solid var(--border); color: var(--text-muted);
+      padding: 0.25rem 0.75rem; border-radius: 6px; cursor: pointer;
+      font-size: 0.75rem; transition: all 0.2s; flex-shrink: 0;
+    }
+    .git-copy:hover { background: var(--surface); color: var(--text); }
+
+    .changelog {
+      margin-top: 1.5rem; text-align: left;
+      background: var(--surface-2); border-radius: 10px; padding: 1rem 1.25rem;
+    }
+    .changelog-title { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .changelog-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-muted); padding: 0.25rem 0; }
+    .changelog-item::before { content: '✓'; color: var(--success); font-weight: 700; flex-shrink: 0; }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: gap;
+      gap: 1rem; flex-wrap: wrap;
+      color: var(--text-muted); font-size: 0.8rem;
+    }
+    footer a { color: var(--text-muted); transition: color 0.2s; }
+    footer a:hover { color: var(--primary); }
+
+    @media (max-width: 640px) {
+      nav { padding: 1rem; }
+      .nav-links { display: none; }
+      .hero h1 { font-size: 2.2rem; }
+      .stats-bar { gap: 2rem; }
+      .screenshot-mockup { flex-direction: column; }
+      .sm-sidebar { width: 100%; border-right: none; border-bottom: 1px solid #1e293b; padding-right: 0; padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-icon">EF</div>
+    <div class="nav-logo-text">EDGE<span>FOLIO</span></div>
+  </div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How it works</a>
+    <a href="#download">Download</a>
+    <a href="https://github.com/manoj020218/edgefolio" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <a href="#download" class="nav-cta">
+    ⬇ Download Free
+  </a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div>
+    <div class="hero-badge">
+      <span class="dot"></span>
+      v1.0.0-alpha · Open Source · Free Forever
+    </div>
+
+    <h1>
+      Payroll & Attendance<br/>
+      <span>Without Internet</span>
+    </h1>
+
+    <p class="hero-sub">
+      EDGEFOLIO runs entirely on your local PC — no cloud subscription, no data leaving your premises.
+      Designed for Indian SMEs, factories, and businesses that need rock-solid payroll even when the internet goes down.
+    </p>
+
+    <div class="hero-actions">
+      <a href="#download" class="btn-primary">
+        ⬇ Download for Windows
+      </a>
+      <a href="https://github.com/manoj020218/edgefolio" target="_blank" rel="noopener" class="btn-outline">
+        ★ View on GitHub
+      </a>
+    </div>
+
+    <!-- UI Screenshot Mockup -->
+    <div class="hero-screenshot">
+      <div class="screenshot-bar">
+        <div class="screenshot-dot" style="background:#ef4444"></div>
+        <div class="screenshot-dot" style="background:#f59e0b"></div>
+        <div class="screenshot-dot" style="background:#10b981"></div>
+        <span style="margin-left:0.5rem;font-size:0.7rem;color:#475569;font-family:'JetBrains Mono',monospace">EDGEFOLIO v1.0 · localhost:5173</span>
+      </div>
+      <div class="screenshot-mockup">
+        <div class="sm-sidebar">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;padding-bottom:0.75rem;border-bottom:1px solid #1e293b;">
+            <div style="width:24px;height:24px;border-radius:6px;background:#0ea5e9;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:9px;color:#fff;flex-shrink:0;">EF</div>
+            <span style="color:#94a3b8;font-size:0.65rem;font-weight:700;">EDGEFOLIO</span>
+          </div>
+          <div class="sm-nav-item active">📊 Dashboard</div>
+          <div class="sm-nav-item">⏰ Attendance</div>
+          <div class="sm-nav-item">👥 Employees</div>
+          <div class="sm-nav-item">💰 Payroll</div>
+          <div class="sm-nav-item">📈 Reports</div>
+          <div class="sm-nav-item">📅 Leave</div>
+          <div class="sm-nav-item">📒 Cashbook</div>
+          <div class="sm-nav-item">⚙️ Settings</div>
+        </div>
+        <div class="sm-main">
+          <div style="font-size:0.65rem;color:#94a3b8;margin-bottom:0.75rem;font-weight:600;">Dashboard — April 27, 2026</div>
+          <div class="sm-kpi">
+            <div class="sm-kpi-card">
+              <div style="font-size:0.6rem;color:#64748b;">Total Employees</div>
+              <div class="val" style="color:#38bdf8;">245</div>
+            </div>
+            <div class="sm-kpi-card">
+              <div style="font-size:0.6rem;color:#64748b;">Present Today</div>
+              <div class="val" style="color:#10b981;">238</div>
+            </div>
+            <div class="sm-kpi-card">
+              <div style="font-size:0.6rem;color:#64748b;">Monthly Payroll</div>
+              <div class="val" style="color:#f59e0b;">₹48.5L</div>
+            </div>
+          </div>
+          <div class="sm-table">
+            <div style="font-size:0.6rem;color:#64748b;margin-bottom:0.5rem;font-weight:600;">Today's Attendance</div>
+            <div class="sm-table-row">
+              <span style="flex:1;color:#cbd5e1;">Ramesh Kumar</span>
+              <span style="color:#64748b;">09:05 AM</span>
+              <span class="sm-badge badge-green">Present</span>
+            </div>
+            <div class="sm-table-row">
+              <span style="flex:1;color:#cbd5e1;">Priya Sharma</span>
+              <span style="color:#64748b;">09:12 AM</span>
+              <span class="sm-badge badge-green">Present</span>
+            </div>
+            <div class="sm-table-row">
+              <span style="flex:1;color:#cbd5e1;">Amit Patel</span>
+              <span style="color:#64748b;">—</span>
+              <span class="sm-badge badge-amber">Leave</span>
+            </div>
+            <div class="sm-table-row">
+              <span style="flex:1;color:#cbd5e1;">Sneha Rao</span>
+              <span style="color:#64748b;">10:45 AM</span>
+              <span class="sm-badge badge-blue">Late</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-value">100%</div>
+    <div class="stat-label">Offline-First</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-value">0₹</div>
+    <div class="stat-label">Subscription Cost</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-value">10</div>
+    <div class="stat-label">Pages / Modules</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-value">SQLite</div>
+    <div class="stat-label">Local Database</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-value">AES-256</div>
+    <div class="stat-label">Data Encryption</div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-label">Why EDGEFOLIO</div>
+  <h2 class="section-title">Everything your factory needs.<br/>Nothing it doesn't.</h2>
+  <p class="section-sub">
+    Built for the ground realities of Indian manufacturing — unreliable internet, power cuts, large workforces, and complex salary structures.
+  </p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(14,165,233,0.1);">⚡</div>
+      <div class="feature-title">Works Without Internet</div>
+      <div class="feature-desc">All data stored on your local PC using SQLite. Check-in, payroll, reports — everything works even during internet outages.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(16,185,129,0.1);">👁️</div>
+      <div class="feature-title">Face Recognition Attendance</div>
+      <div class="feature-desc">Biometric-quality face recognition for automated check-in/out. No buddy punching, no manual entry errors.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(245,158,11,0.1);">💰</div>
+      <div class="feature-title">Smart Payroll Engine</div>
+      <div class="feature-desc">Auto-compute salaries with PF, ESI, PT, TDS, OT, and custom deductions. Generate payslips in one click.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(139,92,246,0.1);">📊</div>
+      <div class="feature-title">Comprehensive Reports</div>
+      <div class="feature-desc">Attendance registers, salary registers, muster rolls, and compliance reports ready for audit or submission.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(239,68,68,0.1);">☁️</div>
+      <div class="feature-title">Optional Cloud Backup</div>
+      <div class="feature-desc">When internet is available, auto-sync encrypted backups to our VPS. Restore on any machine in minutes.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(20,184,166,0.1);">📱</div>
+      <div class="feature-title">Android Companion App</div>
+      <div class="feature-desc">Staff can view payslips, apply for leave, and check attendance from their phones — syncs to the Edge Node via local WiFi.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(249,115,22,0.1);">📒</div>
+      <div class="feature-title">Cashbook & Expenses</div>
+      <div class="feature-desc">Track daily cash in/out, petty cash expenses, and generate summaries — all in the same system.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(14,165,233,0.1);">🔒</div>
+      <div class="feature-title">Secure & Private</div>
+      <div class="feature-desc">AES-256 encrypted backups. Your payroll data never leaves your premises without your explicit consent.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(16,185,129,0.1);">🇮🇳</div>
+      <div class="feature-title">India-First Design</div>
+      <div class="feature-desc">Built for Indian compliance: PF, ESI, PT, Form-16, Muster Roll. INR currency, Indian date formats, Indian holidays.</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works" style="border-top:1px solid var(--border);margin-top:0;padding-top:5rem;">
+  <div class="section-label">Setup in minutes</div>
+  <h2 class="section-title">How It Works</h2>
+  <p class="section-sub">Get EDGEFOLIO running on your Windows PC in under 10 minutes.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">Clone the repository</div>
+        <div class="step-desc">Pull the latest version from GitHub using git. No installer required — runs directly from source with Node.js.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">Install dependencies</div>
+        <div class="step-desc">Run <code style="background:#1e293b;padding:0.1rem 0.4rem;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#38bdf8;">npm install</code> in the EDGE/frontend and EDGE/backend folders. One-time setup.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">Start EDGEFOLIO</div>
+        <div class="step-desc">Run <code style="background:#1e293b;padding:0.1rem 0.4rem;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#38bdf8;">npm run dev</code>. Open your browser to localhost:5173 and log in with your admin credentials.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">Add employees & start tracking</div>
+        <div class="step-desc">Import your staff from Excel or add them manually. Set shifts, salary structures, and you're ready to go.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <div class="step-title">(Optional) Connect to cloud</div>
+        <div class="step-desc">Enter your VPS token in Settings → Backup to enable encrypted cloud backup and remote monitoring from edgefolio.iotsoft.in.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section id="download" style="border-top:1px solid var(--border);margin-top:0;padding-top:5rem;text-align:center;">
+  <div class="section-label">Get Started</div>
+  <h2 class="section-title">Download EDGEFOLIO</h2>
+  <p class="section-sub" style="margin:0 auto 2.5rem;">Free and open source. Use it as-is or fork it and make it your own.</p>
+
+  <div class="download-box" style="margin:0 auto;">
+    <div class="version-tag">📦 Latest Release · v1.0.0-alpha</div>
+    <div class="download-title">EDGEFOLIO v1.0.0-alpha</div>
+    <div class="download-sub">
+      Phase 1 release — Full UI, all 10 pages, mock data, design system.<br/>
+      Backend integration coming in v1.1.0.
+    </div>
+    <div class="download-actions">
+      <a href="https://github.com/manoj020218/edgefolio/releases/latest" target="_blank" rel="noopener" class="download-btn primary">
+        ⬇ Download ZIP
+      </a>
+      <a href="https://github.com/manoj020218/edgefolio/releases" target="_blank" rel="noopener" class="download-btn secondary">
+        📋 All Releases
+      </a>
+    </div>
+
+    <div class="git-install">
+      <span>git clone https://github.com/manoj020218/edgefolio.git</span>
+      <button class="git-copy" onclick="copyGit(this)">Copy</button>
+    </div>
+
+    <div class="changelog">
+      <div class="changelog-title">v1.0.0-alpha — What's included</div>
+      <div class="changelog-item">Complete UI with dark-mode design system (100+ tokens)</div>
+      <div class="changelog-item">10 pages: Dashboard, Attendance, Employees, Payroll, Reports, Leave, Cashbook, Settings, Backup</div>
+      <div class="changelog-item">15+ atomic components (Button, Input, Table, Modal, Badge, Avatar…)</div>
+      <div class="changelog-item">Mock data for all pages — ready to demo without a backend</div>
+      <div class="changelog-item">Fully responsive layout with collapsible sidebar</div>
+      <div class="changelog-item">React 18 + Vite + Tailwind CSS — runs on any Windows PC with Node.js</div>
+    </div>
+  </div>
+
+  <!-- System requirements -->
+  <div style="margin-top:2.5rem;padding:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:700px;margin-left:auto;margin-right:auto;text-align:left;">
+    <div style="font-weight:700;margin-bottom:1rem;">System Requirements</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.75rem;font-size:0.85rem;color:var(--text-muted);">
+      <div>🖥️ <strong style="color:var(--text);">Windows 10/11</strong><br/>(64-bit recommended)</div>
+      <div>⚙️ <strong style="color:var(--text);">Node.js 18+</strong><br/>nodejs.org</div>
+      <div>💾 <strong style="color:var(--text);">2 GB RAM</strong><br/>4 GB recommended</div>
+      <div>📦 <strong style="color:var(--text);">500 MB disk</strong><br/>+ data storage</div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div style="display:flex;align-items:center;gap:0.75rem;">
+    <div style="width:28px;height:28px;border-radius:8px;background:#0ea5e9;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff;">EF</div>
+    <span>EDGEFOLIO by <a href="https://github.com/manoj020218" target="_blank">Jenix</a></span>
+  </div>
+  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+    <a href="https://github.com/manoj020218/edgefolio" target="_blank">GitHub</a>
+    <a href="https://github.com/manoj020218/edgefolio/releases" target="_blank">Releases</a>
+    <a href="https://github.com/manoj020218/edgefolio/issues" target="_blank">Issues</a>
+    <a href="mailto:support@edgefolio.com">support@edgefolio.com</a>
+  </div>
+  <span>© 2026 EDGEFOLIO · MIT License</span>
+</footer>
+
+<script>
+  function copyGit(btn) {
+    navigator.clipboard.writeText('git clone https://github.com/manoj020218/edgefolio.git').then(() => {
+      btn.textContent = 'Copied!';
+      btn.style.color = '#10b981';
+      setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
+    });
+  }
+</script>
+</body>
+</html>
