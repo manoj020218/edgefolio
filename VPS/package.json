@@ -1,0 +1,6 @@
+{
+  "name": "edgefolio-vps",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EDGEFOLIO VPS backend — cloud sync, monitoring, billing"
+}
