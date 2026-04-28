@@ -38,15 +38,19 @@
 ### Phase 2A — Electron Shell + SQLite Backend
 **Target:** Working `.exe` that opens the existing React UI as a desktop app
 
-#### 2A-1: Electron Setup
-- [ ] Add `EDGE/electron/` folder as the Electron main process
-- [ ] Install: `electron`, `electron-builder`, `electron-updater`, `concurrently`, `wait-on`
-- [ ] Create `EDGE/electron/main.js` — Electron entry point (creates BrowserWindow, loads Vite URL in dev / dist in prod)
-- [ ] Create `EDGE/electron/preload.js` — secure context bridge (exposes only safe Node APIs to renderer)
-- [ ] Create `EDGE/electron/updater.js` — auto-update logic (checks GitHub Releases)
-- [ ] Update `EDGE/frontend/vite.config.js` — set `base: './'` for Electron-compatible relative paths
-- [ ] Add `electron` script to `EDGE/frontend/package.json`
-- [ ] Test: `npm run electron` opens React UI in desktop window (no browser needed)
+#### 2A-1: Electron Setup ✅ DONE — April 27, 2026
+- [x] Add `EDGE/electron/` folder as the Electron main process
+- [x] Install: `electron` v30.5.1, `electron-builder`, `electron-updater`, `concurrently`, `wait-on`, `cross-env`
+- [x] Create `EDGE/electron/main.js` — BrowserWindow, IPC handlers (open/save dialog, open-path, version), single-instance lock, external link handling
+- [x] Create `EDGE/electron/preload.js` — secure context bridge (file dialogs, auto-updater events, cleanup helpers)
+- [x] Create `EDGE/electron/updater.js` — auto-update: checks on launch + every 4h, forwards progress events to renderer
+- [x] Update `EDGE/frontend/vite.config.js` — `base: './'`, disable auto-open when Electron runs, chunk splitting (vendor/icons)
+- [x] Create `EDGE/package.json` — orchestrator: `npm run dev` starts both Vite+Electron, `npm run build:exe` builds installer
+- [x] Create `EDGE/frontend/src/components/common/UpdateBanner.jsx` — React banner for update notifications (invisible in browser)
+- [x] Wire `UpdateBanner` into `App.jsx`
+- [x] Syntax check: all 3 Electron files pass `node --check`
+- [ ] **PENDING:** Add real `icon.ico` + `icon.png` to `EDGE/electron/assets/` (see ICON_REQUIRED.md)
+- [ ] **PENDING:** Live test: `npm run dev` in `EDGE/` to confirm window opens (requires display)
 
 #### 2A-2: electron-builder Config
 - [ ] Create `EDGE/electron/electron-builder.yml`
@@ -222,7 +226,7 @@
 
 ```
 Phase 2A: Electron Shell + SQLite Backend
-  2A-1  Electron Setup              [ ] 0%
+  2A-1  Electron Setup              [x] 100% ✅ April 27, 2026
   2A-2  electron-builder Config     [ ] 0%
   2A-3  SQLite Backend              [ ] 0%
   2A-4  Setup Wizard (first-run)    [ ] 0%

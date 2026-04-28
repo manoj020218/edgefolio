@@ -1,0 +1,214 @@
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { randomUUID } = require('crypto');
+const Database = require('better-sqlite3');
+const { DB_PATH, STORAGE_DIR } = require('./app');
+const seedData = require('./seedData');
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function ensureAdminUser(db) {
+  const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+  if (count > 0) return;
+  db.prepare(
+    'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
+  ).run(randomUUID(), 'admin@edgefolio.com', hashPassword('password'), 'admin');
+}
+
+let dbInstance = null;
+
+function runSchema(db) {
+  const schemaPath = path.resolve(__dirname, '..', 'migrations', 'sqlite-schema.sql');
+  const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  db.exec(schemaSql);
+}
+
+function columnExists(db, table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+}
+
+function runMigrations(db) {
+  // employees
+  if (!columnExists(db, 'employees', 'allow_remote_attendance')) {
+    db.exec('ALTER TABLE employees ADD COLUMN allow_remote_attendance INTEGER NOT NULL DEFAULT 0');
+  }
+  // attendance_records
+  const arCols = ['location_json', 'attendance_mode', 'device_id', 'apk_source'];
+  const arDefaults = ['NULL', "'office'", 'NULL', '0'];
+  arCols.forEach((col, i) => {
+    if (!columnExists(db, 'attendance_records', col)) {
+      db.exec(`ALTER TABLE attendance_records ADD COLUMN ${col} ${i === 3 ? 'INTEGER NOT NULL DEFAULT 0' : `TEXT${i === 1 ? " NOT NULL DEFAULT 'office'" : ''}`}`);
+    }
+  });
+  // users
+  if (!columnExists(db, 'users', 'password_must_change')) {
+    db.exec('ALTER TABLE users ADD COLUMN password_must_change INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnExists(db, 'users', 'temp_password_hash')) {
+    db.exec('ALTER TABLE users ADD COLUMN temp_password_hash TEXT');
+  }
+}
+
+function seedIfEmpty(db) {
+  const employeeCount = db.prepare('SELECT COUNT(*) AS count FROM employees').get().count;
+  if (employeeCount > 0) return;
+
+  const insertEmployee = db.prepare(`
+    INSERT INTO employees (
+      id, name, email, phone, department, designation, joining_date, salary, status, avatar
+    ) VALUES (
+      @id, @name, @email, @phone, @department, @designation, @joiningDate, @salary, @status, @avatar
+    )
+  `);
+
+  const insertAttendance = db.prepare(`
+    INSERT INTO attendance_records (
+      event_id, member_id, date, check_in, check_out, status, hours_worked, face_match
+    ) VALUES (
+      @eventId, @memberId, @date, @checkIn, @checkOut, @status, @hoursWorked, @faceMatch
+    )
+  `);
+
+  const insertPayrollRun = db.prepare(`
+    INSERT INTO payroll_runs (
+      run_id, month_key, month_label, year, status, total_employees, processed, total_amount, processed_date, processed_by
+    ) VALUES (
+      @runId, @monthKey, @monthLabel, @year, @status, @totalEmployees, @processed, @totalAmount, @processedDate, @processedBy
+    )
+  `);
+
+  const insertPayslip = db.prepare(`
+    INSERT INTO payslips (
+      payslip_id, employee_id, employee_name, month, basic_salary, earnings_json, deductions_json, gross, net_salary, bank_account, status
+    ) VALUES (
+      @payslipId, @employeeId, @employeeName, @month, @basicSalary, @earningsJson, @deductionsJson, @gross, @netSalary, @bankAccount, @status
+    )
+  `);
+
+  const insertLeave = db.prepare(`
+    INSERT INTO leave_requests (
+      leave_id, employee_id, employee_name, leave_type, from_date, to_date, days, reason, status, request_date, approved_by
+    ) VALUES (
+      @leaveId, @employeeId, @employeeName, @leaveType, @fromDate, @toDate, @days, @reason, @status, @requestDate, @approvedBy
+    )
+  `);
+
+  const insertLeaveBalance = db.prepare(`
+    INSERT INTO leave_balances (employee_id, annual, sick, casual)
+    VALUES (@employeeId, @annual, @sick, @casual)
+  `);
+
+  const insertExpense = db.prepare(`
+    INSERT INTO expenses (
+      expense_id, date, category, amount, description, vendor, receipt, status
+    ) VALUES (
+      @expenseId, @date, @category, @amount, @description, @vendor, @receipt, @status
+    )
+  `);
+
+  const insertShift = db.prepare(`
+    INSERT INTO shifts (
+      shift_id, shift_name, start_time, end_time, break_duration, employees
+    ) VALUES (
+      @shiftId, @shiftName, @startTime, @endTime, @breakDuration, @employees
+    )
+  `);
+
+  const insertHoliday = db.prepare(`
+    INSERT INTO holidays (
+      holiday_id, date, name, type
+    ) VALUES (
+      @holidayId, @date, @name, @type
+    )
+  `);
+
+  const insertDeduction = db.prepare(`
+    INSERT INTO deductions (
+      deduction_id, name, percentage, type
+    ) VALUES (
+      @deductionId, @name, @percentage, @type
+    )
+  `);
+
+  const tx = db.transaction(() => {
+    seedData.employees.forEach((row) => insertEmployee.run(row));
+    seedData.attendance.forEach((row) => insertAttendance.run(row));
+    seedData.payrollRuns.forEach((row) => insertPayrollRun.run(row));
+    seedData.payslips.forEach((row) =>
+      insertPayslip.run({
+        ...row,
+        earningsJson: JSON.stringify(row.earnings),
+        deductionsJson: JSON.stringify(row.deductions),
+      }),
+    );
+    seedData.leaves.forEach((row) => insertLeave.run(row));
+    seedData.leaveBalances.forEach((row) => insertLeaveBalance.run(row));
+    seedData.expenses.forEach((row) => insertExpense.run(row));
+    seedData.shifts.forEach((row) => insertShift.run(row));
+    seedData.holidays.forEach((row) => insertHoliday.run(row));
+    seedData.deductions.forEach((row) => insertDeduction.run(row));
+
+    db.prepare(
+      `
+      INSERT INTO company_settings (
+        id, company_name, address, city, state, country, pincode, phone, email, gst_number, pan_number, website
+      ) VALUES (
+        1, @companyName, @address, @city, @state, @country, @pincode, @phone, @email, @gstNumber, @panNumber, @website
+      )
+      `,
+    ).run(seedData.companySettings);
+
+    db.prepare(
+      `
+      INSERT INTO working_hours (
+        id, start_time, end_time, break_duration, days_per_week, hours_per_day
+      ) VALUES (
+        1, @startTime, @endTime, @breakDuration, @daysPerWeek, @hoursPerDay
+      )
+      `,
+    ).run(seedData.workingHours);
+
+    db.prepare(
+      `
+      INSERT INTO sync_status (
+        id, last_sync, next_sync, sync_status, records_synced, records_new, records_modified, offline_mode, pending_changes
+      ) VALUES (
+        1, '2026-04-24 15:30:45', '2026-04-24 20:00:00', 'completed', 1245, 45, 12, 0, 0
+      )
+      `,
+    ).run();
+  });
+
+  tx();
+}
+
+function getDb() {
+  if (dbInstance) return dbInstance;
+
+  fs.mkdirSync(STORAGE_DIR, { recursive: true });
+  dbInstance = new Database(DB_PATH);
+  dbInstance.pragma('journal_mode = WAL');
+  dbInstance.pragma('foreign_keys = ON');
+
+  runSchema(dbInstance);
+  runMigrations(dbInstance);
+  seedIfEmpty(dbInstance);
+  ensureAdminUser(dbInstance);
+  return dbInstance;
+}
+
+function closeDb() {
+  if (!dbInstance) return;
+  dbInstance.close();
+  dbInstance = null;
+}
+
+module.exports = {
+  getDb,
+  closeDb,
+};

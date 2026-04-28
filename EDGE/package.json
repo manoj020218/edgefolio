@@ -1,9 +1,65 @@
 {
-  "name": "edgefolio-edge",
+  "name": "edgefolio",
   "version": "1.0.0",
+  "description": "EDGEFOLIO — Offline-first Payroll & Attendance for Indian SMEs",
+  "main": "electron/main.js",
   "private": true,
-  "workspaces": [
-    "frontend",
-    "backend"
-  ]
+  "scripts": {
+    "dev:ui":       "npm run dev --prefix frontend",
+    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development electron .",
+    "dev":          "concurrently -n UI,Electron -c cyan,yellow \"npm:dev:ui\" \"npm:dev:electron\"",
+    "build:ui":     "npm run build --prefix frontend",
+    "build:exe":    "npm run build:ui && electron-builder --win",
+    "build:portable": "npm run build:ui && electron-builder --win portable"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.8"
+  },
+  "devDependencies": {
+    "concurrently":   "^8.2.2",
+    "cross-env":      "^7.0.3",
+    "electron":       "^30.0.0",
+    "electron-builder": "^24.13.3",
+    "wait-on":        "^7.2.0"
+  },
+  "build": {
+    "appId": "in.iotsoft.edgefolio",
+    "productName": "EDGEFOLIO",
+    "copyright": "Copyright © 2026 Jenix",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "!node_modules/**/*",
+      "!frontend/node_modules/**/*",
+      "!frontend/src/**/*"
+    ],
+    "directories": {
+      "output": "../dist-exe",
+      "buildResources": "electron/assets"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis",     "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "electron/assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "EDGEFOLIO",
+      "installerIcon": "electron/assets/icon.ico",
+      "uninstallerIcon": "electron/assets/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "manoj020218",
+      "repo": "edgefolio",
+      "releaseType": "release"
+    }
+  }
 }

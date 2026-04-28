@@ -7,6 +7,16 @@ node_modules/
 dist/
 build/
 .vite/
+dist-exe/
+
+# Electron packaged output
+EDGE/dist-exe/
+*.exe
+*.dmg
+*.AppImage
+
+# Package lock files (we use npm on Windows, pnpm on VPS)
+package-lock.json
 
 # Environment variables
 .env

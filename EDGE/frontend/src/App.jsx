@@ -10,6 +10,7 @@ import { LeaveManagementPage } from './pages/LeaveManagementPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { CashbookPage } from './pages/CashbookPage'
 import { MainLayout } from './layouts/MainLayout'
+import { UpdateBanner } from './components/common/UpdateBanner'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -28,6 +29,7 @@ function App() {
   if (!isAuthenticated) {
     return (
       <BrowserRouter>
+        <UpdateBanner />
         <LoginPage onLoginSuccess={handleLoginSuccess} />
       </BrowserRouter>
     )
@@ -35,6 +37,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <UpdateBanner />
       <MainLayout user={user} onLogout={handleLogout}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
