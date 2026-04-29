@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }),
   saveFileDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
 
+  // Folder picker — used by "Choose backup destination" in Settings
+  chooseFolderDialog: () => ipcRenderer.invoke('show-open-dialog', {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select Backup Destination Folder',
+  }),
+
   // Open a file in the OS default app (e.g., open PDF payslip in Acrobat)
   openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
 

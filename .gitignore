@@ -58,3 +58,6 @@ venv/
 # Test coverage
 coverage/
 .nyc_output/
+
+#contact info
+ImportModal.jsx

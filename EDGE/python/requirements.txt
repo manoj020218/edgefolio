@@ -1,0 +1,3 @@
+# EDGEFOLIO face service has no mandatory third-party dependency.
+# Optional package:
+# Pillow>=10.0.0

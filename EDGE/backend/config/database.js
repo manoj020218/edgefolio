@@ -52,6 +52,19 @@ function runMigrations(db) {
   if (!columnExists(db, 'users', 'temp_password_hash')) {
     db.exec('ALTER TABLE users ADD COLUMN temp_password_hash TEXT');
   }
+  // shifts
+  if (!columnExists(db, 'shifts', 'is_overnight')) {
+    db.exec('ALTER TABLE shifts ADD COLUMN is_overnight INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnExists(db, 'shifts', 'grace_minutes')) {
+    db.exec('ALTER TABLE shifts ADD COLUMN grace_minutes INTEGER NOT NULL DEFAULT 10');
+  }
+  // app_preferences (v1.1.0) — CREATE TABLE IF NOT EXISTS is safe for both new and existing DBs
+  db.exec(`CREATE TABLE IF NOT EXISTS app_preferences (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
 }
 
 function seedIfEmpty(db) {
@@ -135,6 +148,11 @@ function seedIfEmpty(db) {
     )
   `);
 
+  const insertDepartment = db.prepare(`
+    INSERT OR IGNORE INTO departments (dept_id, name, description)
+    VALUES (@deptId, @name, @description)
+  `);
+
   const tx = db.transaction(() => {
     seedData.employees.forEach((row) => insertEmployee.run(row));
     seedData.attendance.forEach((row) => insertAttendance.run(row));
@@ -152,6 +170,7 @@ function seedIfEmpty(db) {
     seedData.shifts.forEach((row) => insertShift.run(row));
     seedData.holidays.forEach((row) => insertHoliday.run(row));
     seedData.deductions.forEach((row) => insertDeduction.run(row));
+    seedData.departments.forEach((row) => insertDepartment.run(row));
 
     db.prepare(
       `
@@ -197,7 +216,11 @@ function getDb() {
 
   runSchema(dbInstance);
   runMigrations(dbInstance);
-  seedIfEmpty(dbInstance);
+  try {
+    seedIfEmpty(dbInstance);
+  } catch (e) {
+    console.error('[EDGEFOLIO] seed failed (non-fatal):', e.message);
+  }
   ensureAdminUser(dbInstance);
   return dbInstance;
 }

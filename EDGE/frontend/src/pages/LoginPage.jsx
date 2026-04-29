@@ -1,12 +1,7 @@
-/**
- * EDGEFOLIO - Login Page
- * Beautiful, modern authentication UI with validation
- */
-
 import React, { useState } from 'react';
 import { Button, Input, Alert, Spinner } from '../components/atomic';
 import { Lock, User, ArrowRight } from 'lucide-react';
-import { COLORS } from '../theme/designSystem';
+import { login } from '../services/api';
 
 export const LoginPage = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
@@ -16,6 +11,8 @@ export const LoginPage = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [show2FA, setShow2FA] = useState(false);
   const [totpCode, setTotpCode] = useState('');
+  const [pendingToken, setPendingToken] = useState(null);
+  const [pendingUser, setPendingUser] = useState(null);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,16 +20,13 @@ export const LoginPage = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      if (email === 'admin@edgefolio.com' && password === 'password') {
-        setShow2FA(true);
-      } else {
-        setError('Invalid credentials. Try: admin@edgefolio.com / password');
-      }
+      const res = await login(email, password);
+      const { token, user } = res.data;
+      setPendingToken(token);
+      setPendingUser(user);
+      setShow2FA(true);
     } catch (err) {
-      setError('Login failed. Please try again.');
+      setError(err.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -40,7 +34,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
 
   const handleVerify2FA = () => {
     if (totpCode === '123456') {
-      onLoginSuccess?.({ email, rememberMe });
+      onLoginSuccess?.(pendingUser, pendingToken);
     } else {
       setError('Invalid 2FA code');
     }
@@ -59,6 +53,12 @@ export const LoginPage = ({ onLoginSuccess }) => {
               <p className="text-slate-400 mt-2">Enter the code from your authenticator</p>
             </div>
 
+            {error && (
+              <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+                {error}
+              </div>
+            )}
+
             <Input
               type="text"
               placeholder="000000"
@@ -68,18 +68,12 @@ export const LoginPage = ({ onLoginSuccess }) => {
               className="text-center text-2xl tracking-widest mb-6"
             />
 
-            <Button
-              onClick={handleVerify2FA}
-              isFullWidth
-              isLoading={isLoading}
-              icon={ArrowRight}
-              iconPosition="right"
-            >
+            <Button onClick={handleVerify2FA} isFullWidth icon={ArrowRight} iconPosition="right">
               Verify & Login
             </Button>
 
             <button
-              onClick={() => setShow2FA(false)}
+              onClick={() => { setShow2FA(false); setError(''); }}
               className="w-full mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors"
             >
               Back to Login
@@ -92,12 +86,10 @@ export const LoginPage = ({ onLoginSuccess }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4">
-      {/* Animated background elements */}
       <div className="absolute top-20 left-10 w-72 h-72 bg-sky-500 rounded-full mix-blend-multiply filter blur-3xl opacity-5 animate-pulse" />
-      <div className="absolute bottom-20 right-10 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-5 animate-pulse animation-delay-2000" />
+      <div className="absolute bottom-20 right-10 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-5 animate-pulse" />
 
       <div className="w-full max-w-md relative z-10">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-sky-400 to-blue-600 rounded-xl shadow-lg mb-4">
             <span className="text-2xl font-bold text-white">EF</span>
@@ -106,22 +98,15 @@ export const LoginPage = ({ onLoginSuccess }) => {
           <p className="text-slate-400 mt-2">Offline-First Payroll Management</p>
         </div>
 
-        {/* Login Card */}
         <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
           <div className="px-8 py-8">
-            {/* Error Alert */}
             {error && (
-              <Alert
-                variant="danger"
-                message={error}
-                onClose={() => setError('')}
-                className="mb-6"
-              />
+              <div className="mb-6 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+                {error}
+              </div>
             )}
 
-            {/* Form */}
             <form onSubmit={handleLogin} className="space-y-5">
-              {/* Email Input */}
               <Input
                 type="email"
                 label="Email Address"
@@ -129,10 +114,8 @@ export const LoginPage = ({ onLoginSuccess }) => {
                 icon={User}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                helperText="Demo: admin@edgefolio.com"
               />
 
-              {/* Password Input */}
               <Input
                 type="password"
                 label="Password"
@@ -140,10 +123,8 @@ export const LoginPage = ({ onLoginSuccess }) => {
                 icon={Lock}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                helperText="Demo: password"
               />
 
-              {/* Remember Me */}
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -157,45 +138,19 @@ export const LoginPage = ({ onLoginSuccess }) => {
                 </label>
               </div>
 
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                isFullWidth
-                isLoading={isLoading}
-                icon={ArrowRight}
-                iconPosition="right"
-              >
+              <Button type="submit" isFullWidth isLoading={isLoading} icon={ArrowRight} iconPosition="right">
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
-
-            {/* Divider */}
-            <div className="flex items-center my-6">
-              <div className="flex-1 border-t border-slate-700" />
-              <div className="px-3 text-xs text-slate-500 uppercase tracking-wider">Or</div>
-              <div className="flex-1 border-t border-slate-700" />
-            </div>
-
-            {/* Guest Mode */}
-            <Button
-              variant="secondary"
-              isFullWidth
-              onClick={() => onLoginSuccess?.({ email: 'guest', isGuest: true })}
-            >
-              Demo Mode (No Setup Needed)
-            </Button>
           </div>
 
-          {/* Footer Info */}
-          <div className="px-8 py-4 bg-slate-900 border-t border-slate-700 text-xs text-slate-500 space-y-2">
-            <p>💡 <strong>Demo Credentials:</strong></p>
+          <div className="px-8 py-4 bg-slate-900 border-t border-slate-700 text-xs text-slate-500 space-y-1">
+            <p className="font-semibold text-slate-400">Default credentials:</p>
             <p>Email: admin@edgefolio.com</p>
-            <p>Password: password</p>
-            <p>2FA Code: 123456</p>
+            <p>Password: password &nbsp;|&nbsp; 2FA: 123456</p>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="mt-6 text-center text-sm text-slate-500">
           <p>© 2026 EDGEFOLIO by Jenix. All rights reserved.</p>
         </div>

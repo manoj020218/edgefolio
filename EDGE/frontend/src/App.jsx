@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { AttendancePage } from './pages/AttendancePage'
@@ -15,28 +15,56 @@ import { UpdateBanner } from './components/common/UpdateBanner'
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const handleLoginSuccess = (userData) => {
+  useEffect(() => {
+    const token = localStorage.getItem('ef_token')
+    const savedUser = localStorage.getItem('ef_user')
+    if (token && savedUser) {
+      try {
+        setUser(JSON.parse(savedUser))
+        setIsAuthenticated(true)
+      } catch {
+        localStorage.removeItem('ef_token')
+        localStorage.removeItem('ef_user')
+      }
+    }
+    setIsLoading(false)
+  }, [])
+
+  const handleLoginSuccess = (userData, token) => {
+    localStorage.setItem('ef_token', token)
+    localStorage.setItem('ef_user', JSON.stringify(userData))
     setUser(userData)
     setIsAuthenticated(true)
   }
 
   const handleLogout = () => {
+    localStorage.removeItem('ef_token')
+    localStorage.removeItem('ef_user')
     setUser(null)
     setIsAuthenticated(false)
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-slate-400 text-sm">Loading EDGEFOLIO...</div>
+      </div>
+    )
+  }
+
   if (!isAuthenticated) {
     return (
-      <BrowserRouter>
+      <HashRouter>
         <UpdateBanner />
         <LoginPage onLoginSuccess={handleLoginSuccess} />
-      </BrowserRouter>
+      </HashRouter>
     )
   }
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <UpdateBanner />
       <MainLayout user={user} onLogout={handleLogout}>
         <Routes>
@@ -52,7 +80,7 @@ function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </MainLayout>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
 

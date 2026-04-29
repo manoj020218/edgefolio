@@ -7,12 +7,15 @@ const { ipcMain } = require('electron')
  * The React UpdateBanner component listens and shows the UI.
  */
 function setupUpdater(win) {
+  // Portable builds have no app-update.yml — skip auto-update silently
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return
+
   autoUpdater.autoDownload        = true   // download silently in background
   autoUpdater.autoInstallOnAppQuit = true   // install if user quits normally
 
   // Check for updates silently on startup, then every 4 hours
-  autoUpdater.checkForUpdates()
-  setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000)
+  try { autoUpdater.checkForUpdates() } catch { /* no-op */ }
+  setInterval(() => { try { autoUpdater.checkForUpdates() } catch { /* no-op */ } }, 4 * 60 * 60 * 1000)
 
   // ── Events → renderer ────────────────────────────────────────────────────
 
@@ -57,7 +60,15 @@ function setupUpdater(win) {
   })
 
   // ── IPC: user clicks "Restart Now" ───────────────────────────────────────
-  ipcMain.handle('install-update', () => {
+  ipcMain.handle('install-update', async () => {
+    // Safety backup before the update replaces files
+    try {
+      const { createPreUpdateBackup } = require('../backend/services/backupService')
+      createPreUpdateBackup()
+      console.log('[updater] Pre-update backup created')
+    } catch (e) {
+      console.warn('[updater] Pre-update backup failed (non-fatal):', e.message)
+    }
     autoUpdater.quitAndInstall(false, true)  // isSilent=false, isForceRunAfter=true
   })
 }

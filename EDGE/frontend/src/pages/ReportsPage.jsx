@@ -1,32 +1,46 @@
-/**
- * ReportsPage.jsx - Report Builder & Analytics
- * Features: Generate attendance, payroll, and leave reports
- */
-
 import React, { useState } from 'react';
-import { BarChart3, Download, Filter } from 'lucide-react';
-import { Button, Card, Table, Badge } from '../components/atomic';
-import { mockReports, mockAttendanceReport } from '../utils/mockData';
+import { BarChart3, Download } from 'lucide-react';
+import { Button, Card, Badge, Alert } from '../components/atomic';
+import { getAttendanceReport, getSalaryReport } from '../services/api';
+
+const DEPARTMENTS = ['all', 'Production', 'HR', 'Finance', 'Admin', 'Maintenance'];
 
 export const ReportsPage = () => {
   const [reportType, setReportType] = useState('attendance');
-  const [month, setMonth] = useState('2026-04');
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [department, setDepartment] = useState('all');
+  const [reportData, setReportData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const reportTypes = ['attendance', 'payroll', 'leave'];
-  const departments = ['all', 'Production', 'HR', 'Finance', 'Admin', 'Maintenance'];
-
-  const handleGenerateReport = () => {
-    alert(`Generating ${reportType} report for ${month}...`);
-  };
-
-  const handleExport = (format) => {
-    alert(`Exporting report as ${format.toUpperCase()}...`);
+  const handleGenerateReport = async () => {
+    setLoading(true);
+    setError('');
+    setReportData(null);
+    try {
+      let res;
+      const params = {
+        department: department !== 'all' ? department : undefined,
+      };
+      if (reportType === 'attendance') {
+        const [year, mon] = month.split('-');
+        const from = `${year}-${mon}-01`;
+        const lastDay = new Date(year, parseInt(mon), 0).getDate();
+        const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`;
+        res = await getAttendanceReport({ ...params, from, to });
+      } else if (reportType === 'payroll') {
+        res = await getSalaryReport({ ...params, month });
+      }
+      setReportData(res?.data ?? null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">Reports & Analytics</h1>
@@ -34,56 +48,44 @@ export const ReportsPage = () => {
         </div>
       </div>
 
-      {/* Report Builder */}
+      {error && <Alert variant="danger" message={error} onClose={() => setError('')} />}
+
       <Card>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-100">Report Builder</h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Report Type */}
             <div>
               <label className="text-sm text-slate-400 mb-2 block">Report Type</label>
-              <select 
+              <select
                 value={reportType}
-                onChange={(e) => setReportType(e.target.value)}
+                onChange={(e) => { setReportType(e.target.value); setReportData(null); }}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100"
               >
-                {reportTypes.map(rt => (
-                  <option key={rt} value={rt}>
-                    {rt.charAt(0).toUpperCase() + rt.slice(1)}
-                  </option>
-                ))}
+                <option value="attendance">Attendance</option>
+                <option value="payroll">Payroll / Salary</option>
               </select>
             </div>
-
-            {/* Month */}
             <div>
               <label className="text-sm text-slate-400 mb-2 block">Month</label>
-              <input 
+              <input
                 type="month"
                 value={month}
                 onChange={(e) => setMonth(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100"
               />
             </div>
-
-            {/* Department */}
             <div>
               <label className="text-sm text-slate-400 mb-2 block">Department</label>
-              <select 
+              <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100"
               >
-                {departments.map(d => (
-                  <option key={d} value={d}>{d === 'all' ? 'All' : d}</option>
-                ))}
+                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d === 'all' ? 'All' : d}</option>)}
               </select>
             </div>
-
-            {/* Generate Button */}
             <div className="flex items-end">
-              <Button variant="primary" isFullWidth onClick={handleGenerateReport}>
+              <Button variant="primary" isFullWidth isLoading={loading} onClick={handleGenerateReport}>
                 Generate Report
               </Button>
             </div>
@@ -91,149 +93,108 @@ export const ReportsPage = () => {
         </div>
       </Card>
 
-      {/* Export Options */}
-      <Card>
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-slate-100">Export Options</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Button 
-              icon={Download} 
-              variant="secondary" 
-              isFullWidth 
-              onClick={() => handleExport('excel')}
-            >
-              Export as Excel
-            </Button>
-            <Button 
-              icon={Download} 
-              variant="secondary" 
-              isFullWidth 
-              onClick={() => handleExport('pdf')}
-            >
-              Export as PDF
-            </Button>
-            <Button 
-              icon={Download} 
-              variant="tertiary" 
-              isFullWidth 
-              onClick={() => handleExport('csv')}
-            >
-              Export as CSV
-            </Button>
-          </div>
-        </div>
-      </Card>
-
       {/* Attendance Report */}
-      {reportType === 'attendance' && (
+      {reportType === 'attendance' && reportData && Array.isArray(reportData) && (
         <Card>
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-bold text-slate-100">Attendance Report</h2>
-              <p className="text-slate-400 text-sm">Attendance summary for April 2026</p>
+              <p className="text-slate-400 text-sm">{reportData.length} records found</p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Total Days</p>
-                <p className="text-2xl font-bold text-slate-100">20</p>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Present Days</p>
-                <p className="text-2xl font-bold text-green-400">18</p>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Absent Days</p>
-                <p className="text-2xl font-bold text-red-400">1</p>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Avg Attendance</p>
-                <p className="text-2xl font-bold text-sky-400">90%</p>
-              </div>
-            </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-700">
                     <th className="text-left py-3 px-4 text-slate-400 font-semibold">Employee</th>
-                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Department</th>
-                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Present</th>
-                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Absent</th>
-                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Leave</th>
-                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">%</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Department</th>
+                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Date</th>
+                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Check-In</th>
+                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Check-Out</th>
+                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Hours</th>
+                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {mockAttendanceReport.map((row, idx) => (
-                    <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-900/50' : ''}>
-                      <td className="py-3 px-4 text-slate-100 font-medium">{row.employee}</td>
-                      <td className="py-3 px-4 text-center text-slate-400">{row.dept}</td>
-                      <td className="py-3 px-4 text-center text-green-400">{row.present}</td>
-                      <td className="py-3 px-4 text-center text-red-400">{row.absent}</td>
-                      <td className="py-3 px-4 text-center text-amber-400">{row.leave}</td>
-                      <td className="py-3 px-4 text-center font-bold text-sky-400">{row.percentage}%</td>
+                  {reportData.slice(0, 50).map((row, idx) => (
+                    <tr key={row.eventId || idx} className={idx % 2 === 0 ? 'bg-slate-900/50' : ''}>
+                      <td className="py-3 px-4 text-slate-100">{row.employeeName}</td>
+                      <td className="py-3 px-4 text-slate-400">{row.department}</td>
+                      <td className="py-3 px-4 text-center text-slate-400">{row.date}</td>
+                      <td className="py-3 px-4 text-center text-green-400">{row.checkIn || '—'}</td>
+                      <td className="py-3 px-4 text-center text-blue-400">{row.checkOut || '—'}</td>
+                      <td className="py-3 px-4 text-center text-slate-300">{row.hoursWorked > 0 ? `${Number(row.hoursWorked).toFixed(1)}h` : '—'}</td>
+                      <td className="py-3 px-4 text-center">
+                        <Badge variant={row.status === 'present' ? 'success' : 'danger'}>{row.status}</Badge>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {reportData.length > 50 && <p className="text-xs text-slate-500 mt-2 text-center">Showing 50 of {reportData.length} records</p>}
             </div>
           </div>
         </Card>
       )}
 
       {/* Payroll Report */}
-      {reportType === 'payroll' && (
+      {reportType === 'payroll' && reportData && !Array.isArray(reportData) && (
         <Card>
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-100">Payroll Report</h2>
-            
+            <h2 className="text-xl font-bold text-slate-100">Salary Report — {reportData.month}</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
                 <p className="text-slate-400 text-sm">Employees</p>
-                <p className="text-2xl font-bold text-slate-100">9</p>
+                <p className="text-2xl font-bold text-slate-100">{reportData.totalEmployees}</p>
               </div>
               <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Total Amount</p>
-                <p className="text-2xl font-bold text-green-400">₹28.5L</p>
+                <p className="text-slate-400 text-sm">Total Gross</p>
+                <p className="text-2xl font-bold text-green-400">₹{Number(reportData.totalGross).toLocaleString()}</p>
               </div>
               <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Average Salary</p>
-                <p className="text-2xl font-bold text-sky-400">₹31.6K</p>
+                <p className="text-slate-400 text-sm">Total Net</p>
+                <p className="text-2xl font-bold text-sky-400">₹{Number(reportData.totalNet).toLocaleString()}</p>
               </div>
               <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Status</p>
-                <Badge variant="success">Processed</Badge>
+                <p className="text-slate-400 text-sm">Avg Net</p>
+                <p className="text-2xl font-bold text-purple-400">
+                  ₹{reportData.totalEmployees > 0 ? (reportData.totalNet / reportData.totalEmployees).toFixed(0) : 0}
+                </p>
               </div>
             </div>
+
+            {reportData.rows && reportData.rows.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left py-3 px-4 text-slate-400 font-semibold">Employee</th>
+                      <th className="text-center py-3 px-4 text-slate-400 font-semibold">Basic</th>
+                      <th className="text-center py-3 px-4 text-slate-400 font-semibold">Gross</th>
+                      <th className="text-center py-3 px-4 text-slate-400 font-semibold">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.rows.map((row, idx) => (
+                      <tr key={row.payslipId || idx} className={idx % 2 === 0 ? 'bg-slate-900/50' : ''}>
+                        <td className="py-3 px-4 text-slate-100">{row.employeeName}</td>
+                        <td className="py-3 px-4 text-center text-slate-300">₹{Number(row.basicSalary).toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center text-slate-300">₹{Number(row.gross).toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center text-green-400 font-bold">₹{Number(row.netSalary).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </Card>
       )}
 
-      {/* Leave Report */}
-      {reportType === 'leave' && (
+      {!reportData && !loading && (
         <Card>
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-slate-100">Leave Report</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Total Requests</p>
-                <p className="text-2xl font-bold text-slate-100">5</p>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Approved</p>
-                <p className="text-2xl font-bold text-green-400">2</p>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Pending</p>
-                <p className="text-2xl font-bold text-amber-400">2</p>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <p className="text-slate-400 text-sm">Rejected</p>
-                <p className="text-2xl font-bold text-red-400">1</p>
-              </div>
-            </div>
+          <div className="h-48 flex flex-col items-center justify-center">
+            <BarChart3 className="w-12 h-12 text-slate-600 mb-3" />
+            <p className="text-slate-400">Select report type and click Generate Report</p>
           </div>
         </Card>
       )}

@@ -1,0 +1,316 @@
+const employees = [
+  {
+    id: 'EMP-001',
+    name: 'Ramesh Kumar',
+    email: 'ramesh.kumar@edgefolio.com',
+    phone: '+91-98765-43210',
+    department: 'Production',
+    designation: 'Senior Technician',
+    joiningDate: '2022-01-15',
+    salary: 35000,
+    status: 'active',
+    avatar: 'RK',
+  },
+  {
+    id: 'EMP-002',
+    name: 'Priya Sharma',
+    email: 'priya.sharma@edgefolio.com',
+    phone: '+91-98765-43211',
+    department: 'HR',
+    designation: 'HR Manager',
+    joiningDate: '2021-06-10',
+    salary: 45000,
+    status: 'active',
+    avatar: 'PS',
+  },
+  {
+    id: 'EMP-003',
+    name: 'Arun Singh',
+    email: 'arun.singh@edgefolio.com',
+    phone: '+91-98765-43212',
+    department: 'Finance',
+    designation: 'Accountant',
+    joiningDate: '2022-03-20',
+    salary: 32000,
+    status: 'active',
+    avatar: 'AS',
+  },
+  {
+    id: 'EMP-004',
+    name: 'Neha Patel',
+    email: 'neha.patel@edgefolio.com',
+    phone: '+91-98765-43213',
+    department: 'Production',
+    designation: 'Supervisor',
+    joiningDate: '2021-09-05',
+    salary: 40000,
+    status: 'active',
+    avatar: 'NP',
+  },
+  {
+    id: 'EMP-005',
+    name: 'Vikram Desai',
+    email: 'vikram.desai@edgefolio.com',
+    phone: '+91-98765-43214',
+    department: 'Admin',
+    designation: 'Admin Officer',
+    joiningDate: '2022-11-01',
+    salary: 28000,
+    status: 'active',
+    avatar: 'VD',
+  },
+];
+
+const attendance = [
+  {
+    eventId: 'EVT-001',
+    memberId: 'EMP-001',
+    date: '2026-04-24',
+    checkIn: '08:55',
+    checkOut: '17:30',
+    status: 'present',
+    hoursWorked: 8.58,
+    faceMatch: 98.5,
+  },
+  {
+    eventId: 'EVT-002',
+    memberId: 'EMP-002',
+    date: '2026-04-24',
+    checkIn: '09:05',
+    checkOut: '18:00',
+    status: 'present',
+    hoursWorked: 8.92,
+    faceMatch: 99.2,
+  },
+  {
+    eventId: 'EVT-003',
+    memberId: 'EMP-003',
+    date: '2026-04-24',
+    checkIn: null,
+    checkOut: null,
+    status: 'absent',
+    hoursWorked: 0,
+    faceMatch: 0,
+  },
+  {
+    eventId: 'EVT-004',
+    memberId: 'EMP-004',
+    date: '2026-04-24',
+    checkIn: '08:45',
+    checkOut: '17:15',
+    status: 'present',
+    hoursWorked: 8.5,
+    faceMatch: 97.8,
+  },
+  {
+    eventId: 'EVT-005',
+    memberId: 'EMP-005',
+    date: '2026-04-24',
+    checkIn: '09:15',
+    checkOut: '17:45',
+    status: 'present',
+    hoursWorked: 8.5,
+    faceMatch: 96.3,
+  },
+];
+
+const payrollRuns = [
+  {
+    runId: 'PAY-2026-04',
+    monthKey: '2026-04',
+    monthLabel: 'April 2026',
+    year: 2026,
+    status: 'processing',
+    totalEmployees: 5,
+    processed: 5,
+    totalAmount: 180000,
+    processedDate: '2026-04-24',
+    processedBy: 'admin@edgefolio.com',
+  },
+  {
+    runId: 'PAY-2026-03',
+    monthKey: '2026-03',
+    monthLabel: 'March 2026',
+    year: 2026,
+    status: 'completed',
+    totalEmployees: 5,
+    processed: 5,
+    totalAmount: 175000,
+    processedDate: '2026-03-31',
+    processedBy: 'admin@edgefolio.com',
+  },
+];
+
+const payslips = [
+  {
+    payslipId: 'SLIP-2026-04-001',
+    employeeId: 'EMP-001',
+    employeeName: 'Ramesh Kumar',
+    month: 'April 2026',
+    basicSalary: 35000,
+    earnings: { basic: 35000, da: 3500, hra: 2500, other: 0 },
+    deductions: { pf: 2500, esi: 800, tax: 2200, other: 0 },
+    gross: 41000,
+    netSalary: 35500,
+    bankAccount: 'XXXX-XXXX-XXXX-3421',
+    status: 'generated',
+  },
+  {
+    payslipId: 'SLIP-2026-04-002',
+    employeeId: 'EMP-002',
+    employeeName: 'Priya Sharma',
+    month: 'April 2026',
+    basicSalary: 45000,
+    earnings: { basic: 45000, da: 4500, hra: 3200, other: 0 },
+    deductions: { pf: 3200, esi: 1000, tax: 3500, other: 0 },
+    gross: 52700,
+    netSalary: 45000,
+    bankAccount: 'XXXX-XXXX-XXXX-5678',
+    status: 'generated',
+  },
+];
+
+const leaves = [
+  {
+    leaveId: 'LEAVE-001',
+    employeeId: 'EMP-001',
+    employeeName: 'Ramesh Kumar',
+    leaveType: 'sick',
+    fromDate: '2026-04-25',
+    toDate: '2026-04-25',
+    days: 1,
+    reason: 'Not feeling well',
+    status: 'pending',
+    requestDate: '2026-04-24',
+    approvedBy: null,
+  },
+  {
+    leaveId: 'LEAVE-002',
+    employeeId: 'EMP-003',
+    employeeName: 'Arun Singh',
+    leaveType: 'casual',
+    fromDate: '2026-04-20',
+    toDate: '2026-04-21',
+    days: 2,
+    reason: 'Family visit',
+    status: 'approved',
+    requestDate: '2026-04-19',
+    approvedBy: 'Admin',
+  },
+];
+
+const leaveBalances = [
+  { employeeId: 'EMP-001', annual: 15, sick: 10, casual: 8 },
+  { employeeId: 'EMP-002', annual: 18, sick: 10, casual: 8 },
+  { employeeId: 'EMP-003', annual: 12, sick: 8, casual: 6 },
+  { employeeId: 'EMP-004', annual: 16, sick: 10, casual: 8 },
+  { employeeId: 'EMP-005', annual: 14, sick: 7, casual: 5 },
+];
+
+const expenses = [
+  {
+    expenseId: 'EXP-001',
+    date: '2026-04-24',
+    category: 'Materials',
+    amount: 5500,
+    description: 'Raw materials for production',
+    vendor: 'ABC Suppliers',
+    receipt: 'receipt-001.pdf',
+    status: 'approved',
+  },
+  {
+    expenseId: 'EXP-002',
+    date: '2026-04-23',
+    category: 'Utilities',
+    amount: 3200,
+    description: 'Electricity bill',
+    vendor: 'Power Company',
+    receipt: 'receipt-002.pdf',
+    status: 'approved',
+  },
+  {
+    expenseId: 'EXP-003',
+    date: '2026-04-22',
+    category: 'Maintenance',
+    amount: 2800,
+    description: 'Equipment maintenance',
+    vendor: 'Tech Services',
+    receipt: 'receipt-003.pdf',
+    status: 'pending',
+  },
+];
+
+const shifts = [
+  {
+    shiftId: 'SHIFT-001',
+    shiftName: 'Morning Shift',
+    startTime: '06:00',
+    endTime: '14:00',
+    breakDuration: 60,
+    employees: 3,
+  },
+  {
+    shiftId: 'SHIFT-002',
+    shiftName: 'Evening Shift',
+    startTime: '14:00',
+    endTime: '22:00',
+    breakDuration: 60,
+    employees: 2,
+  },
+];
+
+const holidays = [
+  { holidayId: 'HOL-001', date: '2026-01-26', name: 'Republic Day', type: 'national' },
+  { holidayId: 'HOL-002', date: '2026-08-15', name: 'Independence Day', type: 'national' },
+];
+
+const deductions = [
+  { deductionId: 'DED-001', name: 'Provident Fund (PF)', percentage: 12, type: 'fixed' },
+  { deductionId: 'DED-002', name: 'Employee State Insurance (ESI)', percentage: 0.75, type: 'fixed' },
+  { deductionId: 'DED-003', name: 'Income Tax', percentage: 5, type: 'variable' },
+];
+
+const departments = [
+  { deptId: 'DEPT-001', name: 'Production', description: 'Manufacturing and production operations' },
+  { deptId: 'DEPT-002', name: 'HR', description: 'Human Resources and recruitment' },
+  { deptId: 'DEPT-003', name: 'Finance', description: 'Financial operations and accounting' },
+  { deptId: 'DEPT-004', name: 'Admin', description: 'Administration and office management' },
+];
+
+const companySettings = {
+  companyName: 'EDGEFOLIO Manufacturing',
+  address: '123 Industrial Avenue, Industrial City',
+  city: 'Mumbai',
+  state: 'Maharashtra',
+  country: 'India',
+  pincode: '400001',
+  phone: '+91-22-1234-5678',
+  email: 'contact@edgefolio.com',
+  gstNumber: '27ABCDE1234F2Z5',
+  panNumber: 'AAAPN1234K',
+  website: 'www.edgefolio.com',
+};
+
+const workingHours = {
+  startTime: '09:00',
+  endTime: '18:00',
+  breakDuration: 60,
+  daysPerWeek: 5,
+  hoursPerDay: 8,
+};
+
+module.exports = {
+  employees,
+  attendance,
+  payrollRuns,
+  payslips,
+  leaves,
+  leaveBalances,
+  expenses,
+  shifts,
+  holidays,
+  deductions,
+  departments,
+  companySettings,
+  workingHours,
+};

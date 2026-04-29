@@ -16,6 +16,11 @@ const backupRoutes        = require('./routes/backup');
 const settingsRoutes      = require('./routes/settings');
 const announcementsRoutes = require('./routes/announcements');
 const facesRoutes         = require('./routes/faces');
+const shiftsRoutes        = require('./routes/shifts');
+const departmentsRoutes   = require('./routes/departments');
+const holidaysRoutes      = require('./routes/holidays');
+const deductionsRoutes    = require('./routes/deductions');
+const machinesRoutes      = require('./routes/machines');
 
 function createServer() {
   const app = express();
@@ -51,6 +56,11 @@ function createServer() {
   app.use(`${API_PREFIX}/settings`,      settingsRoutes);
   app.use(`${API_PREFIX}/announcements`, announcementsRoutes);
   app.use(`${API_PREFIX}/faces`,         facesRoutes);
+  app.use(`${API_PREFIX}/shifts`,        shiftsRoutes);
+  app.use(`${API_PREFIX}/departments`,   departmentsRoutes);
+  app.use(`${API_PREFIX}/holidays`,      holidaysRoutes);
+  app.use(`${API_PREFIX}/deductions`,    deductionsRoutes);
+  app.use(`${API_PREFIX}/machines`,      machinesRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

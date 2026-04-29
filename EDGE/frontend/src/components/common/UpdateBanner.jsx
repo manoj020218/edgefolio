@@ -34,6 +34,8 @@ export function UpdateBanner() {
     })
 
     api.onUpdateError((msg) => {
+      // ENOENT = portable build has no app-update.yml — not a user-visible error
+      if (typeof msg === 'string' && (msg.includes('ENOENT') || msg.includes('ERR_FILE_NOT_FOUND'))) return
       setState({ type: 'error', message: msg })
     })
 

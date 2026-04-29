@@ -8,7 +8,7 @@
 // ============================================================================
 
 import React from 'react';
-import { COLORS, BUTTON, TRANSITIONS, BORDER_RADIUS } from '../theme/designSystem';
+import { COLORS, BUTTON, TRANSITIONS, BORDER_RADIUS } from '../../theme/designSystem';
 
 export const Button = ({
   children,
@@ -393,16 +393,17 @@ export const Modal = ({
   if (!isOpen) return null;
 
   const sizes = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    xl: 'max-w-xl',
+    sm:  'max-w-sm',
+    md:  'max-w-md',
+    lg:  'max-w-lg',
+    xl:  'max-w-xl',
+    '2xl': 'max-w-2xl',
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className={`bg-slate-800 rounded-lg shadow-2xl ${sizes[size]} w-full mx-4`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <div className={`bg-slate-800 rounded-lg shadow-2xl ${sizes[size] || sizes.lg} w-full flex flex-col max-h-[90vh]`}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
           <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
           <button
             onClick={onClose}
@@ -411,8 +412,8 @@ export const Modal = ({
             ✕
           </button>
         </div>
-        <div className="px-6 py-4">{children}</div>
-        {footer && <div className="px-6 py-4 border-t border-slate-700 bg-slate-900 rounded-b-lg">{footer}</div>}
+        <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
+        {footer && <div className="px-6 py-4 border-t border-slate-700 bg-slate-900 rounded-b-lg flex-shrink-0">{footer}</div>}
       </div>
     </div>
   );

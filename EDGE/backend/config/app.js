@@ -1,10 +1,13 @@
 const path = require('path');
 
 const EDGE_ROOT = path.resolve(__dirname, '..', '..');
-const STORAGE_DIR = path.join(EDGE_ROOT, 'storage', 'database');
-const BACKUP_DIR = path.join(EDGE_ROOT, 'storage', 'backups');
-const FACES_DIR = path.join(EDGE_ROOT, 'storage', 'faces');
-const LOG_DIR = path.join(EDGE_ROOT, 'logs');
+// In packaged Electron, EDGEFOLIO_STORAGE_PATH / EDGEFOLIO_LOG_PATH are set
+// by electron/main.js to app.getPath('userData') subdirs — outside the asar.
+const STORAGE_BASE = process.env.EDGEFOLIO_STORAGE_PATH || path.join(EDGE_ROOT, 'storage');
+const STORAGE_DIR = path.join(STORAGE_BASE, 'database');
+const BACKUP_DIR = path.join(STORAGE_BASE, 'backups');
+const FACES_DIR = path.join(STORAGE_BASE, 'faces');
+const LOG_DIR = process.env.EDGEFOLIO_LOG_PATH || path.join(EDGE_ROOT, 'logs');
 const IS_TEST = process.env.NODE_ENV === 'test';
 
 function toBoolean(value, fallback) {
@@ -20,6 +23,7 @@ function toNumber(value, fallback, min = Number.MIN_SAFE_INTEGER) {
 
 module.exports = {
   EDGE_ROOT,
+  STORAGE_BASE,
   STORAGE_DIR,
   BACKUP_DIR,
   FACES_DIR,

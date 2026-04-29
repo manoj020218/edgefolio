@@ -74,6 +74,54 @@ function apkSyncHandler(req, res, next) {
   }
 }
 
+// Handles "2024-04-28 08:55" combined datetime in any field
+function normalizeImportRecord(r) {
+  let { memberId, date, checkIn, checkOut } = r;
+  // datetime in date column (ZK Teco DAT: "2024-04-28 08:55:36")
+  if (date && /\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(date)) {
+    const [d, t] = date.split(' ');
+    date   = d;
+    if (!checkIn) checkIn = t.slice(0, 5);
+  }
+  // datetime in checkIn column
+  if (checkIn && /\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(checkIn)) {
+    const [d, t] = checkIn.split(' ');
+    if (!date) date = d;
+    checkIn = t.slice(0, 5);
+  }
+  // Trim seconds if present ("08:55:36" → "08:55")
+  if (checkIn  && checkIn.length > 5)  checkIn  = checkIn.slice(0, 5);
+  if (checkOut && checkOut.length > 5) checkOut = checkOut.slice(0, 5);
+  return { memberId, date, checkIn, checkOut };
+}
+
+function importHandler(req, res, next) {
+  try {
+    const records = req.body?.records;
+    if (!Array.isArray(records) || records.length === 0) {
+      throw { statusCode: 400, message: 'records array is required' };
+    }
+    const events = records
+      .map(normalizeImportRecord)
+      .filter((r) => r.memberId && r.date)
+      .map((r) => ({
+        memberId:        r.memberId,
+        date:            r.date,
+        checkIn:         r.checkIn  || null,
+        checkOut:        r.checkOut || null,
+        status:          'present',
+        faceMatch:       0,
+        attendance_mode: 'machine',
+        device_id:       r.deviceId || 'machine-import',
+        apk_source:      0,
+      }));
+    const rows = submitAttendanceBatch(events).map(serializeAttendance);
+    return sendOk(res, rows, { imported: rows.length });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   listAttendanceHandler,
   dailySummaryHandler,
@@ -81,4 +129,5 @@ module.exports = {
   createEventHandler,
   createBatchHandler,
   apkSyncHandler,
+  importHandler,
 };
