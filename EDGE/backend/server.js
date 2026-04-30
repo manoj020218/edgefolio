@@ -28,7 +28,7 @@ function createServer() {
 
   // Allow all origins for local Electron app (file:// and localhost)
   app.use(cors({ origin: (_origin, cb) => cb(null, true), credentials: true }));
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
 
   app.get('/health', (_req, res) => {

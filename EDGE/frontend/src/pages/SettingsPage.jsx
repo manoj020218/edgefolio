@@ -13,19 +13,21 @@ import {
   getDepartments, createDepartment, updateDepartment, deleteDepartment,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
   getDeductions, createDeduction, updateDeduction, deleteDeduction,
+  getCustomFields, createCustomField, updateCustomField, deleteCustomField,
 } from '../services/api'
 
 const hasElectron = () => typeof window !== 'undefined' && !!window.electronAPI
 
 const TABS = [
-  { id: 'company',      label: 'Company' },
-  { id: 'working-hours', label: 'Working Hours' },
-  { id: 'departments',  label: 'Departments' },
-  { id: 'shifts',       label: 'Shifts' },
-  { id: 'holidays',     label: 'Holidays' },
-  { id: 'deductions',   label: 'Deductions' },
-  { id: 'data',         label: 'Data & Backup' },
-  { id: 'sync',         label: 'Cloud Sync' },
+  { id: 'company',        label: 'Company' },
+  { id: 'working-hours',  label: 'Working Hours' },
+  { id: 'departments',    label: 'Departments' },
+  { id: 'shifts',         label: 'Shifts' },
+  { id: 'holidays',       label: 'Holidays' },
+  { id: 'deductions',     label: 'Deductions' },
+  { id: 'emp-fields',     label: 'Employee Fields' },
+  { id: 'data',           label: 'Data & Backup' },
+  { id: 'sync',           label: 'Cloud Sync' },
 ]
 
 // ─── tiny inline-edit row helpers ─────────────────────────────────────────────
@@ -658,6 +660,11 @@ export const SettingsPage = () => {
         </Card>
       )}
 
+      {/* ── Employee Fields ── */}
+      {activeTab === 'emp-fields' && (
+        <EmpFieldsTab />
+      )}
+
       {/* ── Data & Backup ── */}
       {activeTab === 'data' && (
         <div className="space-y-6">
@@ -804,6 +811,134 @@ export const SettingsPage = () => {
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Employee Custom Fields Tab ───────────────────────────────────────────────
+const FIELD_TYPES = [
+  { value: 'text',     label: 'Text' },
+  { value: 'number',   label: 'Number' },
+  { value: 'textarea', label: 'Multiline Text' },
+  { value: 'date',     label: 'Date' },
+]
+
+function EmpFieldsTab() {
+  const [fields, setFields] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr]     = useState('')
+  const [adding, setAdding]   = useState(false)
+  const [editId, setEditId]   = useState(null)
+  const [form, setForm]   = useState({ fieldName: '', fieldType: 'text', isRequired: false })
+  const [saving, setSaving]   = useState(false)
+
+  const reload = () => {
+    setLoading(true)
+    getCustomFields().then((r) => { setFields(r.data || []); setLoading(false) }).catch((e) => { setErr(e.message); setLoading(false) })
+  }
+  useEffect(() => { reload() }, [])
+
+  const resetForm = () => { setForm({ fieldName: '', fieldType: 'text', isRequired: false }); setAdding(false); setEditId(null) }
+
+  const handleSave = async () => {
+    if (!form.fieldName.trim()) { setErr('Field name required'); return }
+    setSaving(true); setErr('')
+    try {
+      if (editId) await updateCustomField(editId, form)
+      else await createCustomField(form)
+      resetForm(); reload()
+    } catch (e) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async (fieldId) => {
+    if (!window.confirm('Delete this custom field? All stored values will be lost.')) return
+    try { await deleteCustomField(fieldId); reload() }
+    catch (e) { setErr(e.message) }
+  }
+
+  const startEdit = (field) => {
+    setEditId(field.field_id)
+    setForm({ fieldName: field.field_name, fieldType: field.field_type, isRequired: !!field.is_required })
+    setAdding(true)
+  }
+
+  return (
+    <Card>
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-bold text-slate-100">Employee Custom Fields</h2>
+            <p className="text-slate-400 text-sm">HR-defined fields shown in each employee's detail drawer.</p>
+          </div>
+          <Button size="sm" icon={Plus} variant="primary" onClick={() => { resetForm(); setAdding(true) }}>Add Field</Button>
+        </div>
+
+        {err && <Alert variant="danger" message={err} onClose={() => setErr('')} />}
+
+        {adding && (
+          <div className="bg-slate-900 border border-sky-700 rounded-lg p-4 space-y-3">
+            <p className="text-sm font-semibold text-sky-300">{editId ? 'Edit Field' : 'New Custom Field'}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Field Name *" placeholder="e.g. Permanent Address, Aadhar No." value={form.fieldName}
+                onChange={(e) => setForm((p) => ({ ...p, fieldName: e.target.value }))} />
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Field Type</label>
+                <select value={form.fieldType} onChange={(e) => setForm((p) => ({ ...p, fieldType: e.target.value }))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-sky-500 focus:outline-none">
+                  {FIELD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+              <input type="checkbox" checked={form.isRequired} onChange={(e) => setForm((p) => ({ ...p, isRequired: e.target.checked }))} />
+              Required field
+            </label>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={resetForm}>Cancel</Button>
+              <Button size="sm" variant="primary" onClick={handleSave} isLoading={saving}>
+                {editId ? 'Update' : 'Add'} Field
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-6 text-center text-slate-400">Loading fields...</div>
+        ) : fields.length === 0 ? (
+          <div className="py-6 text-center text-slate-400 text-sm">No custom fields yet. Add one to get started.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-3 px-4 text-slate-400">#</th>
+                  <th className="text-left py-3 px-4 text-slate-400">Field Name</th>
+                  <th className="text-left py-3 px-4 text-slate-400">Type</th>
+                  <th className="text-left py-3 px-4 text-slate-400">Required</th>
+                  <th className="text-center py-3 px-4 text-slate-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fields.map((field, i) => (
+                  <tr key={field.field_id} className={i % 2 === 0 ? 'bg-slate-900/50' : ''}>
+                    <td className="py-3 px-4 text-slate-500 font-mono text-xs">{field.display_order}</td>
+                    <td className="py-3 px-4 text-slate-100 font-medium">{field.field_name}</td>
+                    <td className="py-3 px-4 text-slate-400 capitalize">{field.field_type}</td>
+                    <td className="py-3 px-4 text-slate-400">{field.is_required ? '✓' : '—'}</td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex justify-center gap-2">
+                        <button onClick={() => startEdit(field)} className="p-1 hover:bg-slate-700 rounded text-blue-400"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => handleDelete(field.field_id)} className="p-1 hover:bg-slate-700 rounded text-red-400"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Card>
   )
 }
 

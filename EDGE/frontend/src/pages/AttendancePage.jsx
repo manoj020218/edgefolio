@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { Clock, Upload, RefreshCw } from 'lucide-react'
-import { Button, Card, Badge, Alert } from '../components/atomic'
-import { getAttendance, getAttendanceSummary, logAttendanceEvent, getEmployees } from '../services/api'
+import * as XLSX from 'xlsx'
+import { Clock, Upload, RefreshCw, Download } from 'lucide-react'
+import { Button, Card, Badge, Alert, Modal, Select } from '../components/atomic'
+import { getAttendance, getAttendanceSummary, logAttendanceEvent, getEmployees, getAttendanceRange } from '../services/api'
 import { ImportModal } from '../components/attendance/ImportModal'
 
 // ─── Main AttendancePage ──────────────────────────────────────────────────────
@@ -19,6 +20,13 @@ export const AttendancePage = () => {
   const [isCheckingIn, setIsCheckingIn]   = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
   const [checkMessage, setCheckMessage]   = useState('')
+  const [showExport, setShowExport]       = useState(false)
+  const [exportForm, setExportForm]       = useState({
+    from: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
+    to: new Date().toISOString().split('T')[0],
+    format: 'xlsx',
+  })
+  const [exporting, setExporting] = useState(false)
 
   const fetchAttendance = () => {
     setLoading(true)
@@ -65,6 +73,62 @@ export const AttendancePage = () => {
 
   const percentage = stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(1) : '0'
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      // Fetch all records in range by querying each day (simple approach via backend list)
+      const allRecords = []
+      const d = new Date(exportForm.from)
+      const end = new Date(exportForm.to)
+      while (d <= end) {
+        const dateStr = d.toISOString().split('T')[0]
+        const res = await getAttendanceRange({ date: dateStr })
+        if (res.data?.length) allRecords.push(...res.data)
+        d.setDate(d.getDate() + 1)
+      }
+
+      const rows = allRecords.map((r) => ({
+        Date:        r.date,
+        Employee:    r.employeeName || r.memberId,
+        Department:  r.department || '',
+        'Check In':  r.checkIn  || '',
+        'Check Out': r.checkOut || '',
+        Hours:       r.hoursWorked ? Number(r.hoursWorked).toFixed(2) : '',
+        Status:      r.status,
+        Mode:        r.attendanceMode || '',
+      }))
+
+      const fmt = exportForm.format
+      const prefix = `attendance-${exportForm.from}-to-${exportForm.to}`
+
+      if (fmt === 'xlsx') {
+        const ws = XLSX.utils.json_to_sheet(rows)
+        ws['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 7 }, { wch: 10 }, { wch: 10 }]
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'Attendance')
+        XLSX.writeFile(wb, `${prefix}.xlsx`)
+      } else if (fmt === 'csv') {
+        const ws = XLSX.utils.json_to_sheet(rows)
+        const csv = XLSX.utils.sheet_to_csv(ws)
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+        a.download = `${prefix}.csv`; a.click()
+      } else if (fmt === 'json') {
+        const blob = new Blob([JSON.stringify(allRecords, null, 2)], { type: 'application/json' })
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+        a.download = `${prefix}.json`; a.click()
+      } else if (fmt === 'txt') {
+        const header = ['Date','Employee','Department','Check In','Check Out','Hours','Status'].join('\t')
+        const body = rows.map((r) => [r.Date, r.Employee, r.Department, r['Check In'], r['Check Out'], r.Hours, r.Status].join('\t')).join('\n')
+        const blob = new Blob([header + '\n' + body], { type: 'text/plain' })
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+        a.download = `${prefix}.txt`; a.click()
+      }
+      setShowExport(false)
+    } catch (e) { setError(e.message) }
+    finally { setExporting(false) }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-start">
@@ -73,6 +137,7 @@ export const AttendancePage = () => {
           <p className="text-slate-400 mt-1">Track employee check-in/out records</p>
         </div>
         <div className="flex gap-2">
+          <Button icon={Download} variant="secondary" onClick={() => setShowExport(true)}>Export</Button>
           <Button icon={Upload} variant="secondary" onClick={() => setShowImport(true)}>Import from Machine</Button>
           <Button icon={RefreshCw} variant="secondary" onClick={fetchAttendance}>Refresh</Button>
         </div>
@@ -226,6 +291,51 @@ export const AttendancePage = () => {
           onImported={() => { fetchAttendance(); setShowImport(false) }}
         />
       )}
+
+      {/* Export Modal */}
+      <Modal isOpen={showExport} onClose={() => setShowExport(false)} title="Export Attendance" size="md">
+        <div className="space-y-4">
+          <p className="text-slate-400 text-sm">Select date range and format to export attendance records.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">From Date</label>
+              <input type="date" value={exportForm.from}
+                onChange={(e) => setExportForm((p) => ({ ...p, from: e.target.value }))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">To Date</label>
+              <input type="date" value={exportForm.to}
+                onChange={(e) => setExportForm((p) => ({ ...p, to: e.target.value }))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Export Format</label>
+            <div className="grid grid-cols-4 gap-2">
+              {['xlsx', 'csv', 'json', 'txt'].map((fmt) => (
+                <button key={fmt} onClick={() => setExportForm((p) => ({ ...p, format: fmt }))}
+                  className={`py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                    exportForm.format === fmt
+                      ? 'bg-sky-600 border-sky-500 text-white'
+                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
+                  }`}>
+                  {fmt.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-slate-500 text-xs">
+            Each day is fetched separately — large ranges may take a moment.
+          </p>
+        </div>
+        <div className="flex gap-2 mt-6">
+          <Button variant="secondary" onClick={() => setShowExport(false)} isFullWidth>Cancel</Button>
+          <Button variant="primary" icon={Download} onClick={handleExport} isLoading={exporting} isFullWidth>
+            Export {exportForm.format.toUpperCase()}
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -2,6 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS employees (
   id TEXT PRIMARY KEY,
+  emp_code TEXT,
   name TEXT NOT NULL,
   email TEXT UNIQUE,
   phone TEXT,
@@ -11,9 +12,31 @@ CREATE TABLE IF NOT EXISTS employees (
   salary REAL NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active',
   avatar TEXT,
+  work_type TEXT NOT NULL DEFAULT 'office',
+  app_role TEXT NOT NULL DEFAULT 'user',
   allow_remote_attendance INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS custom_field_definitions (
+  field_id TEXT PRIMARY KEY,
+  field_name TEXT NOT NULL,
+  field_type TEXT NOT NULL DEFAULT 'text',
+  is_required INTEGER NOT NULL DEFAULT 0,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employee_custom_values (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id TEXT NOT NULL,
+  field_id TEXT NOT NULL,
+  value TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  FOREIGN KEY(field_id) REFERENCES custom_field_definitions(field_id) ON DELETE CASCADE,
+  UNIQUE(employee_id, field_id)
 );
 
 CREATE TABLE IF NOT EXISTS attendance_records (

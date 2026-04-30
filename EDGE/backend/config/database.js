@@ -59,11 +59,56 @@ function runMigrations(db) {
   if (!columnExists(db, 'shifts', 'grace_minutes')) {
     db.exec('ALTER TABLE shifts ADD COLUMN grace_minutes INTEGER NOT NULL DEFAULT 10');
   }
-  // app_preferences (v1.1.0) — CREATE TABLE IF NOT EXISTS is safe for both new and existing DBs
+  // app_preferences (v1.1.0)
   db.exec(`CREATE TABLE IF NOT EXISTS app_preferences (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // employees v1.2.0 — emp_code, work_type, app_role
+  if (!columnExists(db, 'employees', 'emp_code')) {
+    db.exec('ALTER TABLE employees ADD COLUMN emp_code TEXT');
+  }
+  if (!columnExists(db, 'employees', 'work_type')) {
+    db.exec("ALTER TABLE employees ADD COLUMN work_type TEXT NOT NULL DEFAULT 'office'");
+  }
+  if (!columnExists(db, 'employees', 'app_role')) {
+    db.exec("ALTER TABLE employees ADD COLUMN app_role TEXT NOT NULL DEFAULT 'user'");
+  }
+  // auto-assign emp_code to existing employees that have none
+  {
+    const unassigned = db.prepare("SELECT id FROM employees WHERE emp_code IS NULL OR emp_code = '' ORDER BY created_at ASC").all();
+    if (unassigned.length) {
+      const maxRow = db.prepare("SELECT MAX(CAST(SUBSTR(emp_code, 4) AS INTEGER)) AS n FROM employees WHERE emp_code LIKE 'EMP%'").get();
+      let counter = (maxRow?.n || 0) + 1;
+      const upd = db.prepare('UPDATE employees SET emp_code = ? WHERE id = ?');
+      const tx = db.transaction(() => {
+        for (const row of unassigned) {
+          upd.run(`EMP${String(counter).padStart(3, '0')}`, row.id);
+          counter++;
+        }
+      });
+      tx();
+    }
+  }
+  // custom field tables (v1.2.0)
+  db.exec(`CREATE TABLE IF NOT EXISTS custom_field_definitions (
+    field_id TEXT PRIMARY KEY,
+    field_name TEXT NOT NULL,
+    field_type TEXT NOT NULL DEFAULT 'text',
+    is_required INTEGER NOT NULL DEFAULT 0,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS employee_custom_values (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id TEXT NOT NULL,
+    field_id TEXT NOT NULL,
+    value TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+    FOREIGN KEY(field_id) REFERENCES custom_field_definitions(field_id) ON DELETE CASCADE,
+    UNIQUE(employee_id, field_id)
   )`);
 }
 

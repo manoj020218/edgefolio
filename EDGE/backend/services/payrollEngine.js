@@ -30,6 +30,7 @@ function getPayrollRunDetails(runId) {
   return { run, payslips };
 }
 
+
 function approveRun(runId, approvedBy) {
   return approvePayrollRun(runId, approvedBy);
 }

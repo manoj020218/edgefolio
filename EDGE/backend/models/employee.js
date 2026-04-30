@@ -1,8 +1,15 @@
+'use strict';
+const { randomUUID } = require('crypto');
 const { getDb } = require('../config/database');
+
+function getNextEmpCode(db) {
+  const row = db.prepare("SELECT MAX(CAST(SUBSTR(emp_code, 4) AS INTEGER)) AS n FROM employees WHERE emp_code LIKE 'EMP%'").get();
+  return `EMP${String((row?.n || 0) + 1).padStart(3, '0')}`;
+}
 
 function listEmployees() {
   const db = getDb();
-  return db.prepare('SELECT * FROM employees ORDER BY id').all();
+  return db.prepare('SELECT * FROM employees ORDER BY emp_code, id').all();
 }
 
 function findEmployeeById(id) {
@@ -12,8 +19,12 @@ function findEmployeeById(id) {
 
 function createEmployee(payload) {
   const db = getDb();
+  const id = payload.id || randomUUID();
+  const empCode = payload.empCode || payload.emp_code || getNextEmpCode(db);
+
   const row = {
-    id: payload.id,
+    id,
+    emp_code: empCode,
     name: payload.name,
     email: payload.email || null,
     phone: payload.phone || null,
@@ -23,18 +34,22 @@ function createEmployee(payload) {
     salary: Number(payload.salary || 0),
     status: payload.status || 'active',
     avatar: payload.avatar || null,
+    work_type: payload.workType || payload.work_type || 'office',
+    app_role: payload.appRole || payload.app_role || 'user',
+    allow_remote_attendance: payload.allowRemoteAttendance ? 1 : 0,
   };
 
-  db.prepare(
-    `
+  db.prepare(`
     INSERT INTO employees (
-      id, name, email, phone, department, designation, joining_date, salary, status, avatar
+      id, emp_code, name, email, phone, department, designation, joining_date,
+      salary, status, avatar, work_type, app_role, allow_remote_attendance
     ) VALUES (
-      @id, @name, @email, @phone, @department, @designation, @joining_date, @salary, @status, @avatar
+      @id, @emp_code, @name, @email, @phone, @department, @designation, @joining_date,
+      @salary, @status, @avatar, @work_type, @app_role, @allow_remote_attendance
     )
-    `,
-  ).run(row);
-  return findEmployeeById(row.id);
+  `).run(row);
+
+  return findEmployeeById(id);
 }
 
 function updateEmployee(id, payload) {
@@ -44,6 +59,7 @@ function updateEmployee(id, payload) {
 
   const next = {
     id: existing.id,
+    emp_code: payload.empCode ?? payload.emp_code ?? existing.emp_code,
     name: payload.name ?? existing.name,
     email: payload.email ?? existing.email,
     phone: payload.phone ?? existing.phone,
@@ -53,20 +69,22 @@ function updateEmployee(id, payload) {
     salary: Number(payload.salary ?? existing.salary ?? 0),
     status: payload.status ?? existing.status,
     avatar: payload.avatar ?? existing.avatar,
+    work_type: payload.workType ?? payload.work_type ?? existing.work_type ?? 'office',
+    app_role: payload.appRole ?? payload.app_role ?? existing.app_role ?? 'user',
     allow_remote_attendance: payload.allowRemoteAttendance != null
       ? (payload.allowRemoteAttendance ? 1 : 0)
       : (existing.allow_remote_attendance ?? 0),
     updated_at: new Date().toISOString(),
   };
 
-  db.prepare(
-    `UPDATE employees
-     SET name=@name, email=@email, phone=@phone, department=@department,
-         designation=@designation, joining_date=@joining_date, salary=@salary,
-         status=@status, avatar=@avatar, allow_remote_attendance=@allow_remote_attendance,
-         updated_at=@updated_at
-     WHERE id=@id`,
-  ).run(next);
+  db.prepare(`
+    UPDATE employees
+    SET emp_code=@emp_code, name=@name, email=@email, phone=@phone, department=@department,
+        designation=@designation, joining_date=@joining_date, salary=@salary,
+        status=@status, avatar=@avatar, work_type=@work_type, app_role=@app_role,
+        allow_remote_attendance=@allow_remote_attendance, updated_at=@updated_at
+    WHERE id=@id
+  `).run(next);
 
   return findEmployeeById(id);
 }
@@ -76,13 +94,20 @@ function patchEmployee(id, fields) {
   const existing = findEmployeeById(id);
   if (!existing) return null;
 
-  const allowed = ['allow_remote_attendance'];
   const updates = [];
   const values = [];
 
   if ('allowRemoteAttendance' in fields) {
     updates.push('allow_remote_attendance = ?');
     values.push(fields.allowRemoteAttendance ? 1 : 0);
+  }
+  if ('workType' in fields) {
+    updates.push('work_type = ?');
+    values.push(fields.workType);
+  }
+  if ('appRole' in fields) {
+    updates.push('app_role = ?');
+    values.push(fields.appRole);
   }
   if (updates.length === 0) return existing;
 
@@ -95,35 +120,26 @@ function patchEmployee(id, fields) {
 }
 
 function deleteEmployee(id) {
-  const db = getDb();
-  const res = db.prepare('DELETE FROM employees WHERE id = ?').run(id);
+  const res = getDb().prepare('DELETE FROM employees WHERE id = ?').run(id);
   return res.changes > 0;
 }
 
 function employeesSummary() {
   const db = getDb();
-  const totals = db
-    .prepare(
-      `
-      SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
-        SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) AS inactive
-      FROM employees
-      `,
-    )
-    .get();
+  const totals = db.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
+      SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) AS inactive
+    FROM employees
+  `).get();
 
-  const departments = db
-    .prepare(
-      `
-      SELECT department, COUNT(*) AS count
-      FROM employees
-      GROUP BY department
-      ORDER BY count DESC, department ASC
-      `,
-    )
-    .all();
+  const departments = db.prepare(`
+    SELECT department, COUNT(*) AS count
+    FROM employees
+    GROUP BY department
+    ORDER BY count DESC, department ASC
+  `).all();
 
   return {
     total: Number(totals.total || 0),
@@ -144,4 +160,5 @@ module.exports = {
   patchEmployee,
   deleteEmployee,
   employeesSummary,
+  getNextEmpCode,
 };

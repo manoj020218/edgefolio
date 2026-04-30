@@ -29,17 +29,27 @@ http.interceptors.response.use(
 export const login = (email, password) => http.post('/auth/login', { email, password })
 
 // ── Employees ─────────────────────────────────────────────────────────────────
-export const getEmployees   = (params) => http.get('/employees', { params })
-export const getEmployeeSummary = () => http.get('/employees/summary')
-export const createEmployee = (data)   => http.post('/employees', data)
-export const updateEmployee = (id, data) => http.put(`/employees/${id}`, data)
-export const deleteEmployee = (id)     => http.delete(`/employees/${id}`)
+export const getEmployees        = (params)     => http.get('/employees', { params })
+export const getEmployeeSummary  = ()           => http.get('/employees/summary')
+export const createEmployee      = (data)       => http.post('/employees', data)
+export const updateEmployee      = (id, data)   => http.put(`/employees/${id}`, data)
+export const deleteEmployee      = (id)         => http.delete(`/employees/${id}`)
+// Custom fields
+export const getCustomFields     = ()           => http.get('/employees/fields')
+export const createCustomField   = (data)       => http.post('/employees/fields', data)
+export const updateCustomField   = (id, data)   => http.put(`/employees/fields/${id}`, data)
+export const deleteCustomField   = (id)         => http.delete(`/employees/fields/${id}`)
+export const getEmployeeCustomValues  = (id)    => http.get(`/employees/${id}/custom-values`)
+export const setEmployeeCustomValues  = (id, data) => http.post(`/employees/${id}/custom-values`, data)
 
 // ── Attendance ────────────────────────────────────────────────────────────────
 export const getAttendance        = (params) => http.get('/attendance', { params })
 export const getAttendanceSummary = (params) => http.get('/attendance/summary', { params })
+export const getAttendanceRange   = (params) => http.get('/attendance', { params })
 export const logAttendanceEvent   = (data)   => http.post('/attendance/event', data)
 export const importAttendance     = (data)   => http.post('/attendance/import', data)
+export const getJenixSheets       = (data)   => http.post('/attendance/jenix-sheets', data, { timeout: 30000 })
+export const parseJenixFile       = (data)   => http.post('/attendance/parse-jenix', data, { timeout: 30000 })
 
 // ── Payroll ───────────────────────────────────────────────────────────────────
 export const getPayrollRuns     = ()        => http.get('/payroll/runs')

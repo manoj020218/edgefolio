@@ -50,7 +50,16 @@
       "Bash(node --check backend/controllers/backupController.js)",
       "Bash(node --check backend/routes/backup.js)",
       "Bash(node --check backend/config/app.js)",
-      "Bash(node --check backend/config/database.js)"
+      "Bash(node --check backend/config/database.js)",
+      "Bash(node --check backend/controllers/attendanceController.js)",
+      "Bash(node --check backend/controllers/employeeController.js)",
+      "Bash(node --check backend/models/employee.js)",
+      "Bash(node --check backend/models/customField.js)",
+      "Bash(node --check backend/routes/employees.js)",
+      "Bash(node --check backend/routes/attendance.js)",
+      "Bash(node --check backend/migrations/sqlite-schema.sql)",
+      "Bash(node --check backend/services/jenixService.js)",
+      "Bash(node -e \"require\\('./backend/services/jenixService'\\)\")"
     ]
   }
 }

@@ -122,6 +122,32 @@ function importHandler(req, res, next) {
   }
 }
 
+function getJenixSheetsHandler(req, res, next) {
+  try {
+    const { fileData } = req.body || {};
+    if (!fileData) return next({ statusCode: 400, message: 'fileData (base64) required' });
+    const XLSX = require('xlsx');
+    const buf = Buffer.from(fileData, 'base64');
+    const wb = XLSX.read(buf, { type: 'buffer' });
+    return sendOk(res, { sheets: wb.SheetNames });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function parseJenixHandler(req, res, next) {
+  try {
+    const { fileData, sheetName } = req.body || {};
+    if (!fileData) return next({ statusCode: 400, message: 'fileData (base64) required' });
+    const { processAttendanceFile } = require('../services/jenixService');
+    const buf = Buffer.from(fileData, 'base64');
+    const result = processAttendanceFile(buf, { sheetName });
+    return sendOk(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   listAttendanceHandler,
   dailySummaryHandler,
@@ -130,4 +156,6 @@ module.exports = {
   createBatchHandler,
   apkSyncHandler,
   importHandler,
+  getJenixSheetsHandler,
+  parseJenixHandler,
 };

@@ -2,6 +2,7 @@ function serializeEmployee(row) {
   if (!row) return null;
   return {
     id: row.id,
+    empCode: row.emp_code || null,
     name: row.name,
     email: row.email,
     phone: row.phone,
@@ -11,6 +12,9 @@ function serializeEmployee(row) {
     salary: Number(row.salary || 0),
     status: row.status,
     avatar: row.avatar,
+    workType: row.work_type || 'office',
+    appRole: row.app_role || 'user',
+    allowRemoteAttendance: Boolean(row.allow_remote_attendance),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

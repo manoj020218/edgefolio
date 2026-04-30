@@ -1,3 +1,4 @@
+'use strict';
 const {
   listEmployees,
   findEmployeeById,
@@ -7,9 +8,19 @@ const {
   deleteEmployee,
   employeesSummary,
 } = require('../models/employee');
+const {
+  listFields,
+  createField,
+  updateField,
+  deleteField,
+  getEmployeeValues,
+  setEmployeeValues,
+} = require('../models/customField');
 const { ensureRequired } = require('../utils/validators');
 const { sendOk, createHttpError } = require('../utils/http');
 const { serializeEmployee } = require('../utils/serializers');
+
+// ── Employee CRUD ─────────────────────────────────────────────────────────────
 
 function listEmployeesHandler(_req, res) {
   const rows = listEmployees().map(serializeEmployee);
@@ -24,7 +35,7 @@ function getEmployeeHandler(req, res, next) {
 
 function createEmployeeHandler(req, res, next) {
   try {
-    ensureRequired(['id', 'name', 'department', 'salary'], req.body || {});
+    ensureRequired(['name', 'department', 'salary'], req.body || {});
     const created = serializeEmployee(createEmployee(req.body));
     res.status(201);
     return sendOk(res, created);
@@ -63,6 +74,59 @@ function patchEmployeeHandler(req, res, next) {
   }
 }
 
+// ── Custom Field Definitions ──────────────────────────────────────────────────
+
+function listFieldsHandler(_req, res) {
+  sendOk(res, listFields());
+}
+
+function createFieldHandler(req, res, next) {
+  try {
+    ensureRequired(['fieldName'], req.body || {});
+    const field = createField(req.body);
+    res.status(201);
+    return sendOk(res, field);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function updateFieldHandler(req, res, next) {
+  try {
+    const field = updateField(req.params.fieldId, req.body || {});
+    if (!field) return next(createHttpError(404, 'Field not found'));
+    return sendOk(res, field);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function deleteFieldHandler(req, res, next) {
+  const deleted = deleteField(req.params.fieldId);
+  if (!deleted) return next(createHttpError(404, 'Field not found'));
+  return sendOk(res, { fieldId: req.params.fieldId, deleted: true });
+}
+
+// ── Employee Custom Values ────────────────────────────────────────────────────
+
+function getEmployeeValuesHandler(req, res, next) {
+  try {
+    sendOk(res, getEmployeeValues(req.params.id));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function setEmployeeValuesHandler(req, res, next) {
+  try {
+    const { values } = req.body || {};
+    if (!Array.isArray(values)) return next(createHttpError(400, 'values array required'));
+    sendOk(res, setEmployeeValues(req.params.id, values));
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   listEmployeesHandler,
   getEmployeeHandler,
@@ -71,4 +135,10 @@ module.exports = {
   patchEmployeeHandler,
   deleteEmployeeHandler,
   employeeSummaryHandler,
+  listFieldsHandler,
+  createFieldHandler,
+  updateFieldHandler,
+  deleteFieldHandler,
+  getEmployeeValuesHandler,
+  setEmployeeValuesHandler,
 };
