@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -17,6 +17,7 @@ import {
   Bell,
   Menu,
 } from 'lucide-react'
+import { getDisputeCount } from '../services/api'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -32,8 +33,16 @@ const navItems = [
 export function MainLayout({ children, user, onLogout }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [openDisputeCount, setOpenDisputeCount] = useState(0)
   const location = useLocation()
   const isOnline = navigator.onLine
+
+  useEffect(() => {
+    const poll = () => getDisputeCount().then((r) => setOpenDisputeCount(r.data?.open || 0)).catch(() => {})
+    poll()
+    const t = setInterval(poll, 30000)
+    return () => clearInterval(t)
+  }, [])
 
   const currentPage = navItems.find((n) => n.path === location.pathname)?.label || 'EDGEFOLIO'
 
@@ -79,24 +88,44 @@ export function MainLayout({ children, user, onLogout }) {
 
         {/* Nav */}
         <nav className="flex-1 py-4 overflow-y-auto scrollbar-thin">
-          {navItems.map(({ path, label, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 mx-2 mb-0.5 rounded-lg text-sm font-medium transition-all
-                ${isActive
-                  ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-700/60'
-                }`
-              }
-              onClick={() => setMobileOpen(false)}
-              title={collapsed ? label : ''}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && <span>{label}</span>}
-            </NavLink>
-          ))}
+          {navItems.map(({ path, label, icon: Icon }) => {
+            const isPayroll = path === '/payroll'
+            const showBadge = isPayroll && openDisputeCount > 0
+            return (
+              <NavLink
+                key={path}
+                to={path}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-2.5 mx-2 mb-0.5 rounded-lg text-sm font-medium transition-all
+                  ${isActive
+                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-700/60'
+                  }`
+                }
+                onClick={() => setMobileOpen(false)}
+                title={collapsed ? label : ''}
+              >
+                <div className="relative flex-shrink-0">
+                  <Icon className="w-5 h-5" />
+                  {showBadge && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                      {openDisputeCount > 9 ? '9+' : openDisputeCount}
+                    </span>
+                  )}
+                </div>
+                {!collapsed && (
+                  <span className="flex-1 flex items-center justify-between">
+                    {label}
+                    {showBadge && (
+                      <span className="text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 leading-none font-bold">
+                        {openDisputeCount}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </NavLink>
+            )
+          })}
         </nav>
 
         {/* User */}

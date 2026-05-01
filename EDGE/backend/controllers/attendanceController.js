@@ -122,6 +122,144 @@ function importHandler(req, res, next) {
   }
 }
 
+// ─── Machine import (staging-based, FK-safe) ────────────────────────────────
+
+function machineImportAlogHandler(req, res, next) {
+  try {
+    const { fileData, batchId } = req.body || {};
+    if (!fileData) return next({ statusCode: 400, message: 'fileData (base64) required' });
+    const { parseAlogFile } = require('../services/alogService');
+    const { stageRecords } = require('../models/machineImportModel');
+    const buf = Buffer.from(fileData, 'base64');
+    const { records, summary } = parseAlogFile(buf);
+    const batch = batchId || `ALOG-${Date.now()}`;
+    const result = stageRecords(batch, 'alog', records);
+    return sendOk(res, { ...result, parseSummary: summary });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function machineImportJenixHandler(req, res, next) {
+  try {
+    const { fileData, sheetName, batchId } = req.body || {};
+    if (!fileData) return next({ statusCode: 400, message: 'fileData (base64) required' });
+    const { processForStaging } = require('../services/jenixService');
+    const { stageRecords } = require('../models/machineImportModel');
+    const buf = Buffer.from(fileData, 'base64');
+    const { records, summary } = processForStaging(buf, { sheetName });
+    const batch = batchId || `JENIX-${Date.now()}`;
+    const result = stageRecords(batch, 'jenix', records);
+    return sendOk(res, { ...result, parseSummary: summary });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingBatchesHandler(req, res, next) {
+  try {
+    const { listBatches } = require('../models/machineImportModel');
+    return sendOk(res, listBatches());
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingUnmappedHandler(req, res, next) {
+  try {
+    const { listUnmappedIds } = require('../models/machineImportModel');
+    return sendOk(res, listUnmappedIds());
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingGetMappingsHandler(req, res, next) {
+  try {
+    const { getMappings } = require('../models/machineImportModel');
+    return sendOk(res, getMappings());
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingSaveMappingsHandler(req, res, next) {
+  try {
+    const mappings = req.body?.mappings;
+    if (!Array.isArray(mappings) || mappings.length === 0) {
+      return next({ statusCode: 400, message: 'mappings array is required: [{machineEmpId, employeeId}]' });
+    }
+    for (const m of mappings) {
+      if (!m.machineEmpId || !m.employeeId) {
+        return next({ statusCode: 400, message: 'Each mapping requires machineEmpId and employeeId' });
+      }
+    }
+    const { saveMappings } = require('../models/machineImportModel');
+    return sendOk(res, saveMappings(mappings));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingDeleteMappingsHandler(req, res, next) {
+  try {
+    const ids = req.body?.machineEmpIds;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return next({ statusCode: 400, message: 'machineEmpIds array is required' });
+    }
+    const { deleteMappings } = require('../models/machineImportModel');
+    return sendOk(res, deleteMappings(ids));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingCommitHandler(req, res, next) {
+  try {
+    const { batchId } = req.body || {};
+    const { commitMappedRecords } = require('../models/machineImportModel');
+    const result = commitMappedRecords(batchId || null);
+    return sendOk(res, result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingSummaryHandler(req, res, next) {
+  try {
+    const { batchId } = req.query;
+    const { getStagingSummary } = require('../models/machineImportModel');
+    return sendOk(res, getStagingSummary(batchId || null));
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingRecordsHandler(req, res, next) {
+  try {
+    const { batchId, machineEmpId, status, page = 1, limit = 200 } = req.query;
+    const db = require('../config/database').getDb();
+    const conditions = [];
+    const params = [];
+    if (batchId)      { conditions.push('import_batch = ?');    params.push(batchId); }
+    if (machineEmpId) { conditions.push('machine_emp_id = ?');  params.push(machineEmpId); }
+    if (status)       { conditions.push('status = ?');          params.push(status); }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const rows = db.prepare(
+      `SELECT * FROM machine_import_staging ${where} ORDER BY punch_date, machine_emp_id, punch_time LIMIT ? OFFSET ?`
+    ).all(...params, Number(limit), offset);
+    const total = db.prepare(
+      `SELECT COUNT(*) AS n FROM machine_import_staging ${where}`
+    ).get(...params).n;
+    return sendOk(res, rows, { total, page: Number(page), limit: Number(limit) });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function getJenixSheetsHandler(req, res, next) {
   try {
     const { fileData } = req.body || {};
@@ -158,4 +296,15 @@ module.exports = {
   importHandler,
   getJenixSheetsHandler,
   parseJenixHandler,
+  // machine import (staging-based)
+  machineImportAlogHandler,
+  machineImportJenixHandler,
+  stagingBatchesHandler,
+  stagingUnmappedHandler,
+  stagingGetMappingsHandler,
+  stagingSaveMappingsHandler,
+  stagingDeleteMappingsHandler,
+  stagingCommitHandler,
+  stagingSummaryHandler,
+  stagingRecordsHandler,
 };

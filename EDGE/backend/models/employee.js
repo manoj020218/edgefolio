@@ -74,6 +74,10 @@ function updateEmployee(id, payload) {
     allow_remote_attendance: payload.allowRemoteAttendance != null
       ? (payload.allowRemoteAttendance ? 1 : 0)
       : (existing.allow_remote_attendance ?? 0),
+    bank_account_number: payload.bankAccountNumber ?? payload.bank_account_number ?? existing.bank_account_number ?? null,
+    bank_ifsc: payload.bankIfsc ?? payload.bank_ifsc ?? existing.bank_ifsc ?? null,
+    bank_name: payload.bankName ?? payload.bank_name ?? existing.bank_name ?? null,
+    payment_mode: payload.paymentMode ?? payload.payment_mode ?? existing.payment_mode ?? 'NEFT',
     updated_at: new Date().toISOString(),
   };
 
@@ -82,7 +86,10 @@ function updateEmployee(id, payload) {
     SET emp_code=@emp_code, name=@name, email=@email, phone=@phone, department=@department,
         designation=@designation, joining_date=@joining_date, salary=@salary,
         status=@status, avatar=@avatar, work_type=@work_type, app_role=@app_role,
-        allow_remote_attendance=@allow_remote_attendance, updated_at=@updated_at
+        allow_remote_attendance=@allow_remote_attendance,
+        bank_account_number=@bank_account_number, bank_ifsc=@bank_ifsc,
+        bank_name=@bank_name, payment_mode=@payment_mode,
+        updated_at=@updated_at
     WHERE id=@id
   `).run(next);
 

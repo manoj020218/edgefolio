@@ -3,9 +3,11 @@ const { HOST, PORT } = require('./config/app');
 const { getDb, closeDb } = require('./config/database');
 const logger = require('./utils/logger');
 const { startSchedulers } = require('./jobs');
+const u5Service = require('./services/u5MachineService');
 
 getDb();
 const schedulerManager = startSchedulers();
+u5Service.start();
 
 const server = app.listen(PORT, HOST, () => {
   logger.info('EDGE backend started', {
@@ -17,6 +19,7 @@ const server = app.listen(PORT, HOST, () => {
 function shutdown(signal) {
   logger.info('Shutting down EDGE backend', { signal });
   schedulerManager.stopAll();
+  u5Service.stop();
   server.close(() => {
     closeDb();
     process.exit(0);

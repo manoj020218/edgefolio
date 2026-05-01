@@ -15,6 +15,10 @@ function serializeEmployee(row) {
     workType: row.work_type || 'office',
     appRole: row.app_role || 'user',
     allowRemoteAttendance: Boolean(row.allow_remote_attendance),
+    bankAccountNumber: row.bank_account_number || null,
+    bankIfsc: row.bank_ifsc || null,
+    bankName: row.bank_name || null,
+    paymentMode: row.payment_mode || 'NEFT',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -74,19 +78,23 @@ function serializePayslip(row) {
   }
 
   return {
-    payslipId: row.payslip_id,
-    employeeId: row.employee_id,
-    employeeName: row.employee_name,
-    month: row.month,
-    basicSalary: Number(row.basic_salary || 0),
+    payslipId:     row.payslip_id,
+    empCode:       row.emp_code       || null,
+    employeeId:    row.employee_id,
+    employeeName:  row.employee_name,
+    employeeEmail: row.employee_email || null,
+    employeePhone: row.employee_phone || null,
+    month:         row.month,
+    basicSalary:   Number(row.basic_salary || 0),
     earnings,
     deductions,
-    gross: Number(row.gross || 0),
-    netSalary: Number(row.net_salary || 0),
-    bankAccount: row.bank_account,
-    status: row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    gross:         Number(row.gross || 0),
+    netSalary:     Number(row.net_salary || 0),
+    bankAccount:   row.bank_account,
+    status:        row.status,
+    dispute:       row.dispute        || null,
+    createdAt:     row.created_at,
+    updatedAt:     row.updated_at,
   };
 }
 

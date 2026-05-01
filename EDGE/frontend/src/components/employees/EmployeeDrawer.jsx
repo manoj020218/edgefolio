@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit2, Save, Plus, Trash2, User, Settings } from 'lucide-react';
+import { X, Edit2, Save, User, Settings, Landmark } from 'lucide-react';
 import { Button, Badge, Input, Select } from '../atomic';
 import { updateEmployee, getCustomFields, getEmployeeCustomValues, setEmployeeCustomValues } from '../../services/api';
 
@@ -12,6 +12,13 @@ const WORK_TYPE_OPTS = [
 const ROLE_OPTS = [
   { value: 'user', label: 'User' },
   { value: 'soft_admin', label: 'Soft Admin' },
+];
+const PAYMENT_MODE_OPTS = [
+  { value: 'NEFT', label: 'NEFT' },
+  { value: 'RTGS', label: 'RTGS' },
+  { value: 'IMPS', label: 'IMPS' },
+  { value: 'UPI', label: 'UPI' },
+  { value: 'CASH', label: 'Cash' },
 ];
 
 export function EmployeeDrawer({ employee, onClose, onUpdated }) {
@@ -36,6 +43,10 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
       status: employee.status || 'active',
       workType: employee.workType || 'office',
       appRole: employee.appRole || 'user',
+      bankAccountNumber: employee.bankAccountNumber || '',
+      bankIfsc: employee.bankIfsc || '',
+      bankName: employee.bankName || '',
+      paymentMode: employee.paymentMode || 'NEFT',
     });
     setEditing(false);
     setTab('basic');
@@ -104,6 +115,7 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-slate-700 flex-shrink-0">
           {[
             { id: 'basic', label: 'Basic Info', icon: User },
+            { id: 'bank', label: 'Bank Details', icon: Landmark },
             { id: 'custom', label: 'Custom Fields', icon: Settings },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
@@ -171,6 +183,31 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
             </>
           )}
 
+          {tab === 'bank' && (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500 bg-slate-900/60 rounded px-3 py-2">
+                Bank details are used for generating bank payment advice files from Payroll.
+              </p>
+              {!editing ? (
+                <div className="space-y-3">
+                  <InfoRow label="Bank Name" value={employee.bankName} />
+                  <InfoRow label="Account Number" value={employee.bankAccountNumber} mono />
+                  <InfoRow label="IFSC Code" value={employee.bankIfsc} mono />
+                  <InfoRow label="Payment Mode" value={employee.paymentMode || 'NEFT'} />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Input label="Bank Name" value={form.bankName} onChange={f('bankName')} placeholder="e.g. HDFC Bank" />
+                  <Input label="Account Number" value={form.bankAccountNumber} onChange={f('bankAccountNumber')} placeholder="Enter bank account number" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input label="IFSC Code" value={form.bankIfsc} onChange={f('bankIfsc')} placeholder="e.g. HDFC0001234" />
+                    <Select label="Payment Mode" value={form.paymentMode} onChange={f('paymentMode')} options={PAYMENT_MODE_OPTS} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {tab === 'custom' && (
             <div className="space-y-3">
               {fields.length === 0 ? (
@@ -208,14 +245,16 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-slate-700 flex gap-2 flex-shrink-0">
-          {tab === 'basic' && (
+          {(tab === 'basic' || tab === 'bank') && (
             editing ? (
               <>
                 <Button variant="secondary" onClick={() => setEditing(false)} isFullWidth>Cancel</Button>
                 <Button variant="primary" icon={Save} onClick={handleSaveBasic} isLoading={saving} isFullWidth>Save</Button>
               </>
             ) : (
-              <Button variant="primary" icon={Edit2} onClick={() => setEditing(true)} isFullWidth>Edit Employee</Button>
+              <Button variant="primary" icon={Edit2} onClick={() => setEditing(true)} isFullWidth>
+                {tab === 'bank' ? 'Edit Bank Details' : 'Edit Employee'}
+              </Button>
             )
           )}
           {tab === 'custom' && fields.length > 0 && (

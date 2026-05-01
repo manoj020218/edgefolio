@@ -20,11 +20,13 @@
     "check:backend": "node --check backend/index.js && node --check backend/server.js"
   },
   "dependencies": {
+    "aedes": "^0.51.3",
     "better-sqlite3": "^11.9.1",
     "cors": "^2.8.5",
     "electron-updater": "^6.1.8",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
+    "mqtt": "^5.15.1",
     "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
   },

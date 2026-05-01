@@ -1,272 +1,292 @@
 const XLSX = require('xlsx');
-const fs = require('fs');
 
-// Mapping rules: keywords to look for in column headers (case-insensitive)
-const COLUMN_MAPPING = {
-  employeeId: ['userid', 'pin', 'empid', 'empno', 'id', 'employee id', 'staff id', '工号'],
-  date: ['date', 'datetime', 'checktime', 'timestamp', 'attendance date', '日期'],
-  checkIn: ['checkin', 'timein', 'in', 'intime', 'check in', '签到', '上班'],
-  checkOut: ['checkout', 'timeout', 'out', 'outtime', 'check out', '签退', '下班'],
-  // Fallback: if only a "time" column exists, we'll treat it as check-in and need extra logic
-  time: ['time', 'punch time', '打卡时间']
-};
+function processAttendanceFile(buffer, options = {}) {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-/**
- * Find the best matching column key based on header text
- * @param {string} header - Original column header
- * @returns {string|null} - Mapped field name ('employeeId', 'date', 'checkIn', 'checkOut', 'time')
- */
-function mapColumn(header) {
-  if (!header) return null;
-  const lowerHeader = String(header).toLowerCase().trim();
-  for (const [field, keywords] of Object.entries(COLUMN_MAPPING)) {
-    if (keywords.some(keyword => lowerHeader.includes(keyword))) {
-      return field;
-    }
-  }
-  return null;
-}
-
-/**
- * Detect the structure of the attendance file
- * @param {Object} worksheet - XLSX worksheet object
- * @returns {Object} - Detected column indices and mode
- */
-function detectStructure(worksheet) {
-  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-  const headers = [];
-  // Assume first row contains headers
-  for (let C = range.s.c; C <= range.e.c; C++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C });
-    const cell = worksheet[cellAddress];
-    const header = cell ? cell.v : '';
-    headers.push(header);
-  }
-
-  const detected = {
-    employeeIdCol: -1,
-    dateCol: -1,
-    checkInCol: -1,
-    checkOutCol: -1,
-    timeCol: -1,
-    mode: 'separate' // or 'single'
-  };
-
-  headers.forEach((header, idx) => {
-    const mapped = mapColumn(header);
-    if (mapped === 'employeeId') detected.employeeIdCol = idx;
-    else if (mapped === 'date') detected.dateCol = idx;
-    else if (mapped === 'checkIn') detected.checkInCol = idx;
-    else if (mapped === 'checkOut') detected.checkOutCol = idx;
-    else if (mapped === 'time') detected.timeCol = idx;
-  });
-
-  // Determine mode: if we have both checkIn & checkOut columns -> separate mode
-  if (detected.checkInCol !== -1 && detected.checkOutCol !== -1) {
-    detected.mode = 'separate';
-  } else if (detected.timeCol !== -1) {
-    detected.mode = 'single';
-  } else if (detected.dateCol !== -1 && (detected.checkInCol !== -1 || detected.checkOutCol !== -1)) {
-    detected.mode = 'separate';
-  } else {
-    throw new Error('Could not detect required columns. Ensure headers match known patterns.');
-  }
-
-  return detected;
-}
-
-/**
- * Parse separate mode (check-in and check-out in different columns, one row per day)
- * @param {Object} worksheet - XLSX worksheet
- * @param {Object} structure - Detected column indices
- * @returns {Array} - Standardized records
- */
-function parseSeparateMode(worksheet, structure) {
-  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-  const startRow = range.s.r + 1; // skip header row
-  const endRow = range.e.r;
-  const records = [];
-
-  for (let R = startRow; R <= endRow; R++) {
-    const employeeId = structure.employeeIdCol !== -1 ? getCellValue(worksheet, R, structure.employeeIdCol) : null;
-    const dateRaw = structure.dateCol !== -1 ? getCellValue(worksheet, R, structure.dateCol) : null;
-    let checkInRaw = structure.checkInCol !== -1 ? getCellValue(worksheet, R, structure.checkInCol) : null;
-    let checkOutRaw = structure.checkOutCol !== -1 ? getCellValue(worksheet, R, structure.checkOutCol) : null;
-
-    // Skip rows with no employee ID or date
-    if (!employeeId && !dateRaw) continue;
-
-    // Parse date to ISO format (YYYY-MM-DD)
-    let dateObj = null;
-    if (dateRaw) {
-      dateObj = new Date(dateRaw);
-      if (isNaN(dateObj)) dateObj = null;
-    }
-
-    // Convert time strings (e.g., "10:25" or Excel serial time)
-    const checkIn = parseTimeValue(checkInRaw);
-    const checkOut = parseTimeValue(checkOutRaw);
-
-    records.push({
-      employeeId: String(employeeId || '').trim(),
-      date: dateObj ? dateObj.toISOString().split('T')[0] : '',
-      checkIn: checkIn,
-      checkOut: checkOut
-    });
-  }
-
-  return records.filter(rec => rec.employeeId && rec.date);
-}
-
-/**
- * Parse single column mode (only one time column, each punch is a separate row)
- * Then aggregate by employee + date: first punch as check-in, last as check-out
- * @param {Object} worksheet - XLSX worksheet
- * @param {Object} structure - Detected column indices
- * @returns {Array} - Standardized records
- */
-function parseSingleMode(worksheet, structure) {
-  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-  const startRow = range.s.r + 1;
-  const endRow = range.e.r;
-  const punches = [];
-
-  for (let R = startRow; R <= endRow; R++) {
-    const employeeId = structure.employeeIdCol !== -1 ? getCellValue(worksheet, R, structure.employeeIdCol) : null;
-    let dateTimeRaw = structure.dateCol !== -1 ? getCellValue(worksheet, R, structure.dateCol) : null;
-    // If no separate date column, try using the time column as full datetime
-    if (!dateTimeRaw && structure.timeCol !== -1) {
-      dateTimeRaw = getCellValue(worksheet, R, structure.timeCol);
-    }
-
-    if (!employeeId || !dateTimeRaw) continue;
-
-    let datetime = new Date(dateTimeRaw);
-    if (isNaN(datetime)) {
-      // Try to parse if date and time are separate (e.g., date in one column, time in another)
-      const timeRaw = structure.timeCol !== -1 ? getCellValue(worksheet, R, structure.timeCol) : null;
-      if (timeRaw && dateTimeRaw) {
-        datetime = new Date(`${dateTimeRaw} ${timeRaw}`);
+  let sheetName = options.sheetName || '1.2.3';
+  if (!workbook.SheetNames.includes(sheetName)) {
+    const candidates = ['1.2.3', '4.5.6', '7.8.9'];
+    for (const cand of candidates) {
+      if (workbook.SheetNames.includes(cand)) {
+        sheetName = cand;
+        break;
       }
     }
-    if (isNaN(datetime)) continue;
-
-    punches.push({
-      employeeId: String(employeeId).trim(),
-      datetime: datetime,
-      timeValue: datetime.getHours() * 60 + datetime.getMinutes()
-    });
   }
+  const sheet = workbook.Sheets[sheetName];
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (!data.length) throw new Error('Sheet is empty');
 
-  // Group by employeeId and date
-  const grouped = new Map();
-  for (const punch of punches) {
-    const dateKey = punch.datetime.toISOString().split('T')[0];
-    const key = `${punch.employeeId}_${dateKey}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, { employeeId: punch.employeeId, date: dateKey, punches: [] });
+  // Extract period (year/month)
+  let periodStr = '';
+  if (data[1] && data[1][2]) periodStr = String(data[1][2]);
+  const yearMonthMatch = periodStr.match(/(\d{4})\/(\d{2})/);
+  const year = yearMonthMatch ? yearMonthMatch[1] : '2026';
+  const month = yearMonthMatch ? yearMonthMatch[2] : '03';
+  const yearMonth = `${year}/${month}`;
+  const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+
+  // Define the three blocks (same as before)
+  const blocks = [
+    { startCol: 0, ddCol: 0, amInCol: 1, amOutCol: 3, pmInCol: 6, pmOutCol: 8, overInCol: 10, overOutCol: 12 },
+    { startCol: 15, ddCol: 15, amInCol: 16, amOutCol: 18, pmInCol: 21, pmOutCol: 23, overInCol: 25, overOutCol: 27 },
+    { startCol: 30, ddCol: 30, amInCol: 31, amOutCol: 33, pmInCol: 36, pmOutCol: 38, overInCol: 40, overOutCol: 42 }
+  ];
+
+  // Helper: convert Excel column letter to index
+  function colLetterToIndex(letter) {
+    let idx = 0;
+    for (let i = 0; i < letter.length; i++) {
+      idx = idx * 26 + (letter.charCodeAt(i) - 64);
     }
-    grouped.get(key).punches.push(punch.datetime);
+    return idx - 1;
   }
 
-  // For each day, first punch = check-in, last punch = check-out
+  // Get employee details from rows 3 and 4 (index 2 and 3)
+  const rowNames = data[2];
+  const rowNo    = data[3];
+  const employees = [];
+
+  for (const block of blocks) {
+    let empId = null;
+    let empName = null;
+    // Find "Name"
+    for (let c = block.startCol; c <= block.startCol + 12; c++) {
+      const cell = rowNames[c] ? String(rowNames[c]).trim() : '';
+      if (cell === 'Name') {
+        const nameCandidate = rowNames[c+2] ? String(rowNames[c+2]).trim() : '';
+        if (nameCandidate && nameCandidate !== 'ta' && nameCandidate !== 'Dept') {
+          empName = nameCandidate;
+        }
+        break;
+      }
+    }
+    // Find "No."
+    for (let c = block.startCol; c <= block.startCol + 12; c++) {
+      const cell = rowNo[c] ? String(rowNo[c]).trim() : '';
+      if (cell === 'No' || cell === 'No.') {
+        const idCandidate = rowNo[c+1] ? String(rowNo[c+1]).trim() : '';
+        if (idCandidate && !isNaN(parseInt(idCandidate))) {
+          empId = idCandidate;
+        }
+        break;
+      }
+    }
+    if (!empName && !empId) continue;
+    employees.push({ empId: empId || empName, empName, block });
+  }
+
+  // Build a map: for each employee, for each day (1..daysInMonth), store checkIn/checkOut
   const records = [];
-  for (const entry of grouped.values()) {
-    const sorted = entry.punches.sort((a, b) => a - b);
-    const checkIn = sorted[0];
-    const checkOut = sorted[sorted.length - 1];
-    records.push({
-      employeeId: entry.employeeId,
-      date: entry.date,
-      checkIn: formatTime(checkIn),
-      checkOut: formatTime(checkOut)
-    });
+  const dataStartRow = 11; // row 12 (0‑based)
+  for (const emp of employees) {
+    // Initialize all days as absent
+    const dayData = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      dayData[d] = { checkIn: null, checkOut: null, hasData: false };
+    }
+
+    // Parse actual attendance from the Excel rows
+    for (let rowIdx = dataStartRow; rowIdx < data.length && rowIdx <= 41; rowIdx++) {
+      const row = data[rowIdx];
+      if (!row) continue;
+      const b = emp.block;
+      const ddCell = row[b.ddCol];
+      if (!ddCell) continue;
+      const ddStr = String(ddCell).trim();
+      const match = ddStr.match(/^(\d{2})/);
+      if (!match) continue;
+      const dayNum = parseInt(match[1]);
+      if (dayNum < 1 || dayNum > daysInMonth) continue;
+
+      const amIn   = row[b.amInCol]   ? String(row[b.amInCol]).trim() : '';
+      const amOut  = row[b.amOutCol]  ? String(row[b.amOutCol]).trim() : '';
+      const pmIn   = row[b.pmInCol]   ? String(row[b.pmInCol]).trim() : '';
+      const pmOut  = row[b.pmOutCol]  ? String(row[b.pmOutCol]).trim() : '';
+      const overIn = row[b.overInCol] ? String(row[b.overInCol]).trim() : '';
+      const overOut= row[b.overOutCol]? String(row[b.overOutCol]).trim() : '';
+
+      // Skip if explicitly "Absence" (no data at all)
+      if (amIn === 'Absence' || pmIn === 'Absence') {
+        dayData[dayNum] = { checkIn: null, checkOut: null, hasData: false };
+        continue;
+      }
+
+      let checkIn = amIn || pmIn || overIn;
+      let checkOut = overOut || pmOut || amOut;
+
+      if (checkIn || checkOut) {
+        dayData[dayNum] = { checkIn: checkIn || null, checkOut: checkOut || null, hasData: true };
+      }
+    }
+
+    // Create records for every day with status code
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = `${yearMonth}/${d.toString().padStart(2, '0')}`;
+      const data = dayData[d];
+      let status = 'AB'; // default absent
+      if (data.hasData && data.checkIn && data.checkOut) {
+        status = 'PR'; // present (full day)
+      } else if (data.hasData && (data.checkIn || data.checkOut)) {
+        status = 'HD'; // half day (optional)
+      }
+      records.push({
+        employeeId: emp.empId,
+        employeeName: emp.empName,
+        date: date,
+        checkIn: data.checkIn || null,
+        checkOut: data.checkOut || null,
+        status: status   // "AB", "PR", "HD"
+      });
+    }
   }
 
-  return records;
-}
+  if (records.length === 0) throw new Error('No records generated');
 
-/**
- * Helper: get cell value safely
- */
-function getCellValue(worksheet, row, col) {
-  const address = XLSX.utils.encode_cell({ r: row, c: col });
-  const cell = worksheet[address];
-  return cell ? cell.v : null;
-}
-
-/**
- * Parse a time value (Excel serial time, string "HH:MM", or Date object)
- */
-function parseTimeValue(value) {
-  if (!value) return '';
-  if (value instanceof Date) {
-    return formatTime(value);
-  }
-  if (typeof value === 'number') {
-    // Excel serial time (fraction of day)
-    const totalSeconds = Math.round(value * 86400);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  }
-  const str = String(value).trim();
-  // Match HH:MM or H:MM
-  const timeMatch = str.match(/(\d{1,2}):(\d{2})/);
-  if (timeMatch) {
-    return `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
-  }
-  return str;
-}
-
-function formatTime(date) {
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
-
-/**
- * Main function to process an attendance Excel file
- * @param {string|Buffer} input - File path or buffer
- * @param {Object} options - Optional settings
- * @returns {Object} - Standardized data { records, summary }
- */
-function processAttendanceFile(input, options = {}) {
-  let workbook;
-  if (typeof input === 'string') {
-    const buffer = fs.readFileSync(input);
-    workbook = XLSX.read(buffer, { type: 'buffer' });
-  } else if (Buffer.isBuffer(input)) {
-    workbook = XLSX.read(input, { type: 'buffer' });
-  } else {
-    throw new Error('Input must be a file path or buffer');
-  }
-
-  // Use the first sheet by default, or specify sheet name
-  const sheetName = options.sheetName || workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-
-  const structure = detectStructure(worksheet);
-  let records;
-  if (structure.mode === 'separate') {
-    records = parseSeparateMode(worksheet, structure);
-  } else {
-    records = parseSingleMode(worksheet, structure);
-  }
-
-  // Summary statistics
-  const uniqueEmployees = [...new Set(records.map(r => r.employeeId))];
   const summary = {
     totalRecords: records.length,
-    uniqueEmployees: uniqueEmployees.length,
-    dateRange: records.length ? {
-      from: records.reduce((min, r) => r.date < min ? r.date : min, records[0].date),
-      to: records.reduce((max, r) => r.date > max ? r.date : max, records[0].date)
-    } : null,
-    modeUsed: structure.mode
+    uniqueEmployees: [...new Set(records.map(r => r.employeeId))].length,
+    dateRange: { from: records[0].date, to: records[records.length-1].date },
+    modeUsed: 'full_month_with_status'
   };
-
   return { records, summary };
 }
 
-module.exports = { processAttendanceFile, COLUMN_MAPPING };
+/**
+ * Same parsing logic but returns staging-ready records with ALL raw column data.
+ * Records go to machine_import_staging (not attendance_records directly).
+ */
+function processForStaging(buffer, options = {}) {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+  let sheetName = options.sheetName || '1.2.3';
+  if (!workbook.SheetNames.includes(sheetName)) {
+    const candidates = ['1.2.3', '4.5.6', '7.8.9'];
+    for (const cand of candidates) {
+      if (workbook.SheetNames.includes(cand)) { sheetName = cand; break; }
+    }
+  }
+  const sheet = workbook.Sheets[sheetName];
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (!data.length) throw new Error('Sheet is empty');
+
+  let periodStr = '';
+  if (data[1] && data[1][2]) periodStr = String(data[1][2]);
+  const yearMonthMatch = periodStr.match(/(\d{4})\/(\d{2})/);
+  const year = yearMonthMatch ? yearMonthMatch[1] : '2026';
+  const month = yearMonthMatch ? yearMonthMatch[2] : '03';
+  const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+
+  const blocks = [
+    { startCol: 0,  ddCol: 0,  amInCol: 1,  amOutCol: 3,  pmInCol: 6,  pmOutCol: 8,  overInCol: 10, overOutCol: 12, otHrsCol: 13, lateCol: 14 },
+    { startCol: 15, ddCol: 15, amInCol: 16, amOutCol: 18, pmInCol: 21, pmOutCol: 23, overInCol: 25, overOutCol: 27, otHrsCol: 28, lateCol: 29 },
+    { startCol: 30, ddCol: 30, amInCol: 31, amOutCol: 33, pmInCol: 36, pmOutCol: 38, overInCol: 40, overOutCol: 42, otHrsCol: 43, lateCol: 44 },
+  ];
+
+  const rowNames = data[2];
+  const rowNo    = data[3];
+
+  // Extract department from row 2 (often at block.startCol+1 or +3)
+  function getDeptForBlock(b) {
+    for (let c = b.startCol; c <= b.startCol + 4; c++) {
+      const cell = rowNames[c] ? String(rowNames[c]).trim() : '';
+      if (cell && cell !== 'Name' && cell !== 'No' && cell !== 'No.' && cell.length > 1) return cell;
+    }
+    return null;
+  }
+
+  const employees = [];
+  for (const block of blocks) {
+    let empId = null, empName = null;
+    for (let c = block.startCol; c <= block.startCol + 12; c++) {
+      const cell = rowNames[c] ? String(rowNames[c]).trim() : '';
+      if (cell === 'Name') {
+        const nc = rowNames[c + 2] ? String(rowNames[c + 2]).trim() : '';
+        if (nc && nc !== 'ta' && nc !== 'Dept') empName = nc;
+        break;
+      }
+    }
+    for (let c = block.startCol; c <= block.startCol + 12; c++) {
+      const cell = rowNo[c] ? String(rowNo[c]).trim() : '';
+      if (cell === 'No' || cell === 'No.') {
+        const ic = rowNo[c + 1] ? String(rowNo[c + 1]).trim() : '';
+        if (ic && !isNaN(parseInt(ic))) empId = ic;
+        break;
+      }
+    }
+    if (!empName && !empId) continue;
+    employees.push({ empId: empId || empName, empName, department: getDeptForBlock(block), block });
+  }
+
+  const stagingRecords = [];
+  const dataStartRow = 11;
+
+  for (const emp of employees) {
+    for (let rowIdx = dataStartRow; rowIdx < data.length && rowIdx <= 41; rowIdx++) {
+      const row = data[rowIdx];
+      if (!row) continue;
+      const b = emp.block;
+      const ddCell = row[b.ddCol];
+      if (!ddCell) continue;
+      const ddStr = String(ddCell).trim();
+      const match = ddStr.match(/^(\d{2})/);
+      if (!match) continue;
+      const dayNum = parseInt(match[1]);
+      if (dayNum < 1 || dayNum > daysInMonth) continue;
+
+      const val = (col) => (row[col] !== undefined && row[col] !== null ? String(row[col]).trim() : null) || null;
+
+      const amIn   = val(b.amInCol);
+      const amOut  = val(b.amOutCol);
+      const pmIn   = val(b.pmInCol);
+      const pmOut  = val(b.pmOutCol);
+      const overIn = val(b.overInCol);
+      const overOut= val(b.overOutCol);
+      const otHrs  = val(b.otHrsCol);
+      const lateMins = val(b.lateCol);
+
+      const isAbsence = amIn === 'Absence' || pmIn === 'Absence';
+      const checkIn  = isAbsence ? null : (amIn || pmIn || overIn);
+      const checkOut = isAbsence ? null : (overOut || pmOut || amOut);
+
+      const dateStr = `${year}-${month}-${String(dayNum).padStart(2, '0')}`;
+      const wkday = ddStr.slice(2).trim() || null;
+
+      stagingRecords.push({
+        recordType:   'daily',
+        machineEmpId: emp.empId,
+        machineName:  emp.empName || null,
+        department:   emp.department || null,
+        punchDate:    dateStr,
+        weekday:      wkday,
+        checkIn,
+        checkOut,
+        amIn,
+        amOut,
+        pmIn,
+        pmOut,
+        overIn,
+        overOut,
+        hoursOvertime: otHrs,
+        lateMins,
+        earlyLeaveMins: null,
+        remark: isAbsence ? 'AB' : null,
+      });
+    }
+  }
+
+  if (stagingRecords.length === 0) throw new Error('No records generated for staging');
+
+  const uniqueIds = [...new Set(stagingRecords.map(r => r.machineEmpId))];
+  return {
+    records: stagingRecords,
+    summary: {
+      total: stagingRecords.length,
+      uniqueEmployees: uniqueIds.length,
+      machineIds: uniqueIds,
+      period: `${year}/${month}`,
+    },
+  };
+}
+
+module.exports = { processAttendanceFile, processForStaging };

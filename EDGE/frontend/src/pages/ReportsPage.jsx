@@ -1,9 +1,22 @@
 import React, { useState } from 'react';
 import { BarChart3, Download } from 'lucide-react';
 import { Button, Card, Badge, Alert } from '../components/atomic';
-import { getAttendanceReport, getSalaryReport } from '../services/api';
+import { getAttendanceReport, getSalaryReport, getPaymentBatches, getPaymentBatch } from '../services/api';
 
 const DEPARTMENTS = ['all', 'Production', 'HR', 'Finance', 'Admin', 'Maintenance'];
+
+function csvEscapeRpt(v) {
+  const s = String(v ?? '');
+  return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function downloadCSV(rows, headers, filename) {
+  const content = [headers.map(csvEscapeRpt).join(','), ...rows.map((r) => r.map(csvEscapeRpt).join(','))].join('\n');
+  const blob = new Blob([content], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 
 export const ReportsPage = () => {
   const [reportType, setReportType] = useState('attendance');
@@ -12,31 +25,49 @@ export const ReportsPage = () => {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [paymentBatches, setPaymentBatches] = useState([]);
+  const [selectedBatchId, setSelectedBatchId] = useState('');
+  const [paymentReport, setPaymentReport] = useState(null);
 
   const handleGenerateReport = async () => {
     setLoading(true);
     setError('');
     setReportData(null);
+    setPaymentReport(null);
     try {
-      let res;
-      const params = {
-        department: department !== 'all' ? department : undefined,
-      };
+      const params = { department: department !== 'all' ? department : undefined };
       if (reportType === 'attendance') {
         const [year, mon] = month.split('-');
         const from = `${year}-${mon}-01`;
         const lastDay = new Date(year, parseInt(mon), 0).getDate();
         const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`;
-        res = await getAttendanceReport({ ...params, from, to });
+        const res = await getAttendanceReport({ ...params, from, to });
+        setReportData(res?.data ?? null);
       } else if (reportType === 'payroll') {
-        res = await getSalaryReport({ ...params, month });
+        const res = await getSalaryReport({ ...params, month });
+        setReportData(res?.data ?? null);
+      } else if (reportType === 'payment') {
+        const batchesRes = await getPaymentBatches();
+        const batches = batchesRes?.data || [];
+        setPaymentBatches(batches);
+        if (selectedBatchId) {
+          const batchRes = await getPaymentBatch(selectedBatchId);
+          setPaymentReport(batchRes?.data || null);
+        } else {
+          setPaymentReport({ batches });
+        }
       }
-      setReportData(res?.data ?? null);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDownloadPaymentCSV = (records, batchLabel) => {
+    const headers = ['Emp Code', 'Employee Name', 'Bank Name', 'Account Number', 'IFSC', 'Amount', 'Mode', 'Status', 'Txn ID', 'Payment Date', 'Error Reason'];
+    const rows = records.map((r) => [r.empCode || '', r.employeeName, r.bankName || '', r.accountNumber || '', r.ifsc || '', r.amount, r.mode, r.status, r.bankTransactionId || '', r.paymentDate || '', r.errorReason || '']);
+    downloadCSV(rows, headers, `payment_report_${batchLabel}.csv`);
   };
 
   return (
@@ -58,32 +89,40 @@ export const ReportsPage = () => {
               <label className="text-sm text-slate-400 mb-2 block">Report Type</label>
               <select
                 value={reportType}
-                onChange={(e) => { setReportType(e.target.value); setReportData(null); }}
+                onChange={(e) => { setReportType(e.target.value); setReportData(null); setPaymentReport(null); }}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100"
               >
                 <option value="attendance">Attendance</option>
                 <option value="payroll">Payroll / Salary</option>
+                <option value="payment">Bank Payment Status</option>
               </select>
             </div>
-            <div>
-              <label className="text-sm text-slate-400 mb-2 block">Month</label>
-              <input
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-slate-400 mb-2 block">Department</label>
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100"
-              >
-                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d === 'all' ? 'All' : d}</option>)}
-              </select>
-            </div>
+            {reportType !== 'payment' && (
+              <div>
+                <label className="text-sm text-slate-400 mb-2 block">Month</label>
+                <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100" />
+              </div>
+            )}
+            {reportType === 'payment' && (
+              <div>
+                <label className="text-sm text-slate-400 mb-2 block">Payment Batch (optional)</label>
+                <select value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm">
+                  <option value="">— All batches —</option>
+                  {paymentBatches.map((b) => <option key={b.batchId} value={b.batchId}>{b.monthLabel} ({b.status})</option>)}
+                </select>
+              </div>
+            )}
+            {reportType !== 'payment' && (
+              <div>
+                <label className="text-sm text-slate-400 mb-2 block">Department</label>
+                <select value={department} onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100">
+                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{d === 'all' ? 'All' : d}</option>)}
+                </select>
+              </div>
+            )}
             <div className="flex items-end">
               <Button variant="primary" isFullWidth isLoading={loading} onClick={handleGenerateReport}>
                 Generate Report
@@ -190,7 +229,113 @@ export const ReportsPage = () => {
         </Card>
       )}
 
-      {!reportData && !loading && (
+      {/* Payment Report — batch list */}
+      {reportType === 'payment' && paymentReport && !paymentReport.batch && paymentReport.batches && (
+        <Card>
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-slate-100">Bank Payment Batches</h2>
+            {paymentReport.batches.length === 0 ? (
+              <p className="text-slate-400 text-sm py-4">No payment batches found. Use Payroll → Bank Payment to create one.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left py-3 px-4 text-slate-400 font-semibold">Month</th>
+                      <th className="text-left py-3 px-4 text-slate-400 font-semibold">Bank Template</th>
+                      <th className="text-center py-3 px-4 text-slate-400 font-semibold">Employees</th>
+                      <th className="text-right py-3 px-4 text-slate-400 font-semibold">Total Amount</th>
+                      <th className="text-center py-3 px-4 text-slate-400 font-semibold">Paid</th>
+                      <th className="text-center py-3 px-4 text-slate-400 font-semibold">Failed</th>
+                      <th className="text-center py-3 px-4 text-slate-400 font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentReport.batches.map((b, i) => (
+                      <tr key={b.batchId} className={i % 2 === 0 ? 'bg-slate-900/50' : ''}>
+                        <td className="py-3 px-4 text-slate-100 font-medium">{b.monthLabel}</td>
+                        <td className="py-3 px-4 text-slate-400">{b.templateName || '—'} {b.bankName ? `(${b.bankName})` : ''}</td>
+                        <td className="py-3 px-4 text-center text-slate-300">{b.totalEmployees}</td>
+                        <td className="py-3 px-4 text-right text-green-400 font-bold">₹{Number(b.totalAmount).toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center text-green-400">{b.paidCount}</td>
+                        <td className="py-3 px-4 text-center text-red-400">{b.failedCount}</td>
+                        <td className="py-3 px-4 text-center">
+                          <Badge variant={b.status === 'ready' ? 'warning' : b.status === 'completed' ? 'success' : 'default'}>{b.status}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Payment Report — single batch detail */}
+      {reportType === 'payment' && paymentReport && paymentReport.batch && (
+        <Card>
+          <div className="space-y-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-bold text-slate-100">{paymentReport.batch.monthLabel} — Payment Report</h2>
+                <p className="text-slate-400 text-sm mt-1">{paymentReport.batch.templateName || 'No template'} · {paymentReport.records?.length || 0} employees</p>
+              </div>
+              <Button icon={Download} variant="secondary" size="sm"
+                onClick={() => handleDownloadPaymentCSV(paymentReport.records || [], paymentReport.batch.monthKey)}>
+                Download CSV
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'Total Amount', value: `₹${Number(paymentReport.batch.totalAmount).toLocaleString()}`, cls: 'text-green-400' },
+                { label: 'Employees', value: paymentReport.batch.totalEmployees, cls: 'text-sky-400' },
+                { label: 'Paid', value: paymentReport.batch.paidCount, cls: 'text-green-400' },
+                { label: 'Failed / Pending', value: `${paymentReport.batch.failedCount} / ${(paymentReport.batch.totalEmployees - paymentReport.batch.paidCount - paymentReport.batch.failedCount)}`, cls: 'text-amber-400' },
+              ].map((s) => (
+                <div key={s.label} className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-center">
+                  <p className="text-slate-400 text-xs mb-1">{s.label}</p>
+                  <p className={`text-xl font-bold ${s.cls}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Emp Code</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Name</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Account No</th>
+                    <th className="text-right py-3 px-4 text-slate-400 font-semibold">Amount</th>
+                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Mode</th>
+                    <th className="text-center py-3 px-4 text-slate-400 font-semibold">Status</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Txn ID</th>
+                    <th className="text-left py-3 px-4 text-slate-400 font-semibold">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(paymentReport.records || []).map((r, i) => (
+                    <tr key={r.recordId} className={i % 2 === 0 ? 'bg-slate-900/50' : ''}>
+                      <td className="py-3 px-4 font-mono text-slate-400 text-xs">{r.empCode || '—'}</td>
+                      <td className="py-3 px-4 text-slate-100">{r.employeeName}</td>
+                      <td className="py-3 px-4 font-mono text-slate-300 text-xs">{r.accountNumber || '—'}</td>
+                      <td className="py-3 px-4 text-right text-green-400 font-bold">₹{Number(r.amount).toLocaleString()}</td>
+                      <td className="py-3 px-4 text-center text-slate-300">{r.mode}</td>
+                      <td className="py-3 px-4 text-center">
+                        <Badge variant={r.status === 'paid' ? 'success' : r.status === 'failed' ? 'danger' : 'warning'}>{r.status}</Badge>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-400 text-xs">{r.bankTransactionId || '—'}</td>
+                      <td className="py-3 px-4 text-slate-400 text-xs">{r.paymentDate || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {!reportData && !paymentReport && !loading && (
         <Card>
           <div className="h-48 flex flex-col items-center justify-center">
             <BarChart3 className="w-12 h-12 text-slate-600 mb-3" />

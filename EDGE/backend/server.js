@@ -20,7 +20,10 @@ const shiftsRoutes        = require('./routes/shifts');
 const departmentsRoutes   = require('./routes/departments');
 const holidaysRoutes      = require('./routes/holidays');
 const deductionsRoutes    = require('./routes/deductions');
+const earningsRoutes      = require('./routes/earnings');
 const machinesRoutes      = require('./routes/machines');
+const paymentsRoutes      = require('./routes/payments');
+const u5machinesRoutes    = require('./routes/u5machines');
 
 function createServer() {
   const app = express();
@@ -60,7 +63,10 @@ function createServer() {
   app.use(`${API_PREFIX}/departments`,   departmentsRoutes);
   app.use(`${API_PREFIX}/holidays`,      holidaysRoutes);
   app.use(`${API_PREFIX}/deductions`,    deductionsRoutes);
+  app.use(`${API_PREFIX}/earnings`,      earningsRoutes);
   app.use(`${API_PREFIX}/machines`,      machinesRoutes);
+  app.use(`${API_PREFIX}/payments`,     paymentsRoutes);
+  app.use(`${API_PREFIX}/u5`,           u5machinesRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -286,3 +286,72 @@ CREATE TABLE IF NOT EXISTS face_enrollments (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(emp_id) REFERENCES employees(id) ON DELETE CASCADE
 );
+
+-- Configurable earnings components (DA, HRA, etc.) used in payroll calculation
+CREATE TABLE IF NOT EXISTS earnings_config (
+  earning_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  percentage REAL NOT NULL DEFAULT 0,
+  type TEXT NOT NULL DEFAULT 'fixed',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Payslip disputes raised by employees (from APK or manually)
+CREATE TABLE IF NOT EXISTS payslip_disputes (
+  dispute_id TEXT PRIMARY KEY,
+  payslip_id TEXT NOT NULL,
+  employee_id TEXT NOT NULL,
+  employee_name TEXT NOT NULL,
+  month TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  raised_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TEXT,
+  resolved_by TEXT,
+  resolution_notes TEXT,
+  FOREIGN KEY(payslip_id) REFERENCES payslips(payslip_id) ON DELETE CASCADE,
+  FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+);
+
+-- Machine attendance import: maps machine enrollment numbers to employee UUIDs
+CREATE TABLE IF NOT EXISTS machine_id_mappings (
+  machine_emp_id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL,
+  machine_name TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+);
+
+-- Staging area for raw machine data — no FK on machine_emp_id intentionally
+CREATE TABLE IF NOT EXISTS machine_import_staging (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_batch TEXT NOT NULL,
+  source_type TEXT NOT NULL DEFAULT 'alog',
+  record_type TEXT NOT NULL DEFAULT 'punch',
+  machine_emp_id TEXT NOT NULL,
+  machine_name TEXT,
+  department TEXT,
+  punch_date TEXT NOT NULL,
+  punch_time TEXT,
+  direction TEXT,
+  check_in TEXT,
+  check_out TEXT,
+  am_in TEXT,
+  am_out TEXT,
+  pm_in TEXT,
+  pm_out TEXT,
+  over_in TEXT,
+  over_out TEXT,
+  hours_overtime TEXT,
+  late_mins TEXT,
+  early_leave_mins TEXT,
+  remark TEXT,
+  tm_no TEXT,
+  mode TEXT,
+  raw_json TEXT,
+  mapped_employee_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

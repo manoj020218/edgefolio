@@ -91,6 +91,168 @@ function runMigrations(db) {
       tx();
     }
   }
+  // earnings config table (v1.3.0)
+  db.exec(`CREATE TABLE IF NOT EXISTS earnings_config (
+    earning_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    percentage REAL NOT NULL DEFAULT 0,
+    type TEXT NOT NULL DEFAULT 'fixed',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // seed default earnings if table is empty
+  {
+    const n = db.prepare('SELECT COUNT(*) AS n FROM earnings_config').get().n;
+    if (n === 0) {
+      const ins = db.prepare("INSERT OR IGNORE INTO earnings_config (earning_id, name, percentage, type) VALUES (?, ?, ?, ?)");
+      ins.run('EAR-001', 'DA',  10,  'fixed');
+      ins.run('EAR-002', 'HRA',  8,  'fixed');
+    }
+  }
+  // payslip_disputes table (v1.3.0)
+  db.exec(`CREATE TABLE IF NOT EXISTS payslip_disputes (
+    dispute_id TEXT PRIMARY KEY,
+    payslip_id TEXT NOT NULL,
+    employee_id TEXT NOT NULL,
+    employee_name TEXT NOT NULL,
+    month TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    raised_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TEXT,
+    resolved_by TEXT,
+    resolution_notes TEXT,
+    FOREIGN KEY(payslip_id) REFERENCES payslips(payslip_id) ON DELETE CASCADE,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )`);
+  // emp_code on payslips (v1.3.0)
+  if (!columnExists(db, 'payslips', 'emp_code')) {
+    db.exec('ALTER TABLE payslips ADD COLUMN emp_code TEXT');
+  }
+  // employee_email / employee_phone on payslips for share features (v1.3.0)
+  if (!columnExists(db, 'payslips', 'employee_email')) {
+    db.exec('ALTER TABLE payslips ADD COLUMN employee_email TEXT');
+  }
+  if (!columnExists(db, 'payslips', 'employee_phone')) {
+    db.exec('ALTER TABLE payslips ADD COLUMN employee_phone TEXT');
+  }
+  // machine import staging tables (v1.3.0)
+  db.exec(`CREATE TABLE IF NOT EXISTS machine_id_mappings (
+    machine_emp_id TEXT PRIMARY KEY,
+    employee_id TEXT NOT NULL,
+    machine_name TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS machine_import_staging (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    import_batch TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'alog',
+    record_type TEXT NOT NULL DEFAULT 'punch',
+    machine_emp_id TEXT NOT NULL,
+    machine_name TEXT,
+    department TEXT,
+    punch_date TEXT NOT NULL,
+    punch_time TEXT,
+    direction TEXT,
+    check_in TEXT,
+    check_out TEXT,
+    am_in TEXT, am_out TEXT,
+    pm_in TEXT, pm_out TEXT,
+    over_in TEXT, over_out TEXT,
+    hours_overtime TEXT,
+    late_mins TEXT,
+    early_leave_mins TEXT,
+    remark TEXT,
+    tm_no TEXT,
+    mode TEXT,
+    raw_json TEXT,
+    mapped_employee_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // employees bank fields (v1.4.0)
+  ['bank_account_number', 'bank_ifsc', 'bank_name'].forEach((col) => {
+    if (!columnExists(db, 'employees', col)) {
+      db.exec(`ALTER TABLE employees ADD COLUMN ${col} TEXT`);
+    }
+  });
+  if (!columnExists(db, 'employees', 'payment_mode')) {
+    db.exec("ALTER TABLE employees ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'NEFT'");
+  }
+  // bank payment tables (v1.4.0)
+  db.exec(`CREATE TABLE IF NOT EXISTS bank_templates (
+    template_id TEXT PRIMARY KEY,
+    template_name TEXT NOT NULL,
+    bank_name TEXT NOT NULL,
+    export_format TEXT NOT NULL DEFAULT 'csv',
+    field_mappings TEXT NOT NULL DEFAULT '{}',
+    payer_account TEXT,
+    payer_ifsc TEXT,
+    payer_name TEXT,
+    purpose_code TEXT NOT NULL DEFAULT 'SALARY',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS payment_batches (
+    batch_id TEXT PRIMARY KEY,
+    month_key TEXT NOT NULL,
+    month_label TEXT NOT NULL,
+    template_id TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    total_employees INTEGER NOT NULL DEFAULT 0,
+    total_amount REAL NOT NULL DEFAULT 0,
+    paid_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS payment_records (
+    record_id TEXT PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    payslip_id TEXT,
+    employee_id TEXT NOT NULL,
+    employee_name TEXT NOT NULL,
+    emp_code TEXT,
+    account_name TEXT,
+    account_number TEXT,
+    ifsc TEXT,
+    bank_name TEXT,
+    amount REAL NOT NULL DEFAULT 0,
+    mode TEXT NOT NULL DEFAULT 'NEFT',
+    purpose_code TEXT NOT NULL DEFAULT 'SALARY',
+    currency TEXT NOT NULL DEFAULT 'INR',
+    payment_date TEXT,
+    bank_transaction_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error_reason TEXT,
+    remarks TEXT,
+    employee_email TEXT,
+    employee_phone TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(batch_id) REFERENCES payment_batches(batch_id) ON DELETE CASCADE
+  )`);
+  // U5 face recognition devices (v1.5.0)
+  db.exec(`CREATE TABLE IF NOT EXISTS u5_devices (
+    id TEXT PRIMARY KEY,
+    device_name TEXT NOT NULL,
+    device_sn TEXT NOT NULL UNIQUE,
+    connection_mode TEXT NOT NULL DEFAULT 'embedded',
+    mqtt_token TEXT NOT NULL DEFAULT 'edge',
+    vps_host TEXT,
+    vps_port INTEGER NOT NULL DEFAULT 1883,
+    vps_username TEXT,
+    vps_password TEXT,
+    embedded_port INTEGER NOT NULL DEFAULT 1883,
+    status TEXT NOT NULL DEFAULT 'offline',
+    last_seen TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // custom field tables (v1.2.0)
   db.exec(`CREATE TABLE IF NOT EXISTS custom_field_definitions (
     field_id TEXT PRIMARY KEY,

@@ -107,6 +107,18 @@ export const createDeduction  = (data)       => http.post('/deductions', data)
 export const updateDeduction  = (id, data)   => http.put(`/deductions/${id}`, data)
 export const deleteDeduction  = (id)         => http.delete(`/deductions/${id}`)
 
+// ── Earnings Config ───────────────────────────────────────────────────────────
+export const getEarnings      = ()           => http.get('/earnings')
+export const createEarning    = (data)       => http.post('/earnings', data)
+export const updateEarning    = (id, data)   => http.put(`/earnings/${id}`, data)
+export const deleteEarning    = (id)         => http.delete(`/earnings/${id}`)
+
+// ── Payslip Disputes ──────────────────────────────────────────────────────────
+export const getDisputes      = (status)     => http.get('/payroll/disputes', { params: status ? { status } : {} })
+export const getDisputeCount  = ()           => http.get('/payroll/disputes/count')
+export const raiseDispute     = (payslipId, data) => http.post(`/payroll/slip/${payslipId}/dispute`, data)
+export const resolveDispute   = (disputeId, data) => http.patch(`/payroll/disputes/${disputeId}/resolve`, data)
+
 // ── Machine (ZK Teco / network pull) ─────────────────────────────────────────
 export const testMachineConnection = (data) => http.post('/machines/test', data, { timeout: 35000 })
 export const pullFromMachine       = (data) => http.post('/machines/pull', data, { timeout: 125000 })
@@ -123,5 +135,27 @@ export const getCustomBackupPath = ()          => http.get('/backup/custom-path'
 export const setCustomBackupPath = (data)      => http.put('/backup/custom-path', data)
 export const clearCustomBackupPath = ()        => http.delete('/backup/custom-path')
 export const restoreFromBackup  = (data)       => http.post('/backup/restore', data, { timeout: 60000 })
+
+// ── Bank Payment Advice ───────────────────────────────────────────────────────
+export const getBankTemplates    = ()           => http.get('/payments/templates')
+export const createBankTemplate  = (data)       => http.post('/payments/templates', data)
+export const updateBankTemplate  = (id, data)   => http.put(`/payments/templates/${id}`, data)
+export const deleteBankTemplate  = (id)         => http.delete(`/payments/templates/${id}`)
+
+export const getPaymentBatches   = ()           => http.get('/payments/batches')
+export const getPaymentBatch     = (id)         => http.get(`/payments/batches/${id}`)
+export const createPaymentBatch  = (data)       => http.post('/payments/batches', data)
+export const deletePaymentBatch  = (id)         => http.delete(`/payments/batches/${id}`)
+export const importBankResponse  = (id, data)   => http.post(`/payments/batches/${id}/import-response`, data)
+
+// ── U5 Face Recognition Machines ─────────────────────────────────────────────
+export const getU5Devices        = ()           => http.get('/u5/devices')
+export const createU5Device      = (data)       => http.post('/u5/devices', data)
+export const updateU5Device      = (id, data)   => http.put(`/u5/devices/${id}`, data)
+export const deleteU5Device      = (id)         => http.delete(`/u5/devices/${id}`)
+export const getU5Status         = ()           => http.get('/u5/status')
+export const sendU5Command       = (data)       => http.post('/u5/command', data)
+export const getU5Preferences    = ()           => http.get('/u5/preferences')
+export const updateU5Preferences = (data)       => http.put('/u5/preferences', data)
 
 export default http

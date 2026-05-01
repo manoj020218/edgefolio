@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node --check backend/services/alogService.js)",
+      "Bash(node --check backend/models/machineImportModel.js)",
+      "Bash(node --check backend/controllers/attendanceController.js)",
+      "Bash(node --check backend/routes/attendance.js)",
+      "Bash(node --check \"D:\\\\IOT Device\\\\Salary_On\\\\smart_salary\\\\EdgeFolio\\\\EDGE\\\\backend\\\\services\\\\jenixService.js\")",
+      "Bash(node *)",
+      "Bash(dir D:\\\\IOT Device\\\\Salary_On\\\\U5_Zhongshen *)",
+      "Bash(npm install *)"
+    ]
+  }
+}
