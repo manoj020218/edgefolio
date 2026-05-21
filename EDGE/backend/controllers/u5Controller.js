@@ -7,20 +7,23 @@ const u5Service = require('../services/u5MachineService');
 function serializeDevice(row) {
   if (!row) return null;
   return {
-    id: row.id,
-    deviceName: row.device_name,
-    deviceSn: row.device_sn,
+    id:             row.id,
+    deviceName:     row.device_name,
+    deviceSn:       row.device_sn,
     connectionMode: row.connection_mode,
-    mqttToken: row.mqtt_token,
-    vpsHost: row.vps_host,
-    vpsPort: row.vps_port,
-    vpsUsername: row.vps_username,
-    // Never return vps_password to client
-    embeddedPort: row.embedded_port,
-    status: row.status,
-    lastSeen: row.last_seen,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    mqttToken:      row.mqtt_token,
+    vpsHost:        row.vps_host,
+    vpsPort:        row.vps_port,
+    vpsUsername:    row.vps_username,
+    // Never return vps_password or device_password to client
+    embeddedPort:   row.embedded_port,
+    deviceIp:       row.device_ip,
+    devicePort:     row.device_port,
+    lastPolledAt:   row.last_polled_at,
+    status:         row.status,
+    lastSeen:       row.last_seen,
+    createdAt:      row.created_at,
+    updatedAt:      row.updated_at,
   };
 }
 
@@ -34,17 +37,20 @@ async function listDevicesHandler(req, res, next) {
 async function createDeviceHandler(req, res, next) {
   try {
     const { deviceName, deviceSn, connectionMode, mqttToken,
-            vpsHost, vpsPort, vpsUsername, vpsPassword, embeddedPort } = req.body || {};
+            vpsHost, vpsPort, vpsUsername, vpsPassword, embeddedPort,
+            deviceIp, devicePort, devicePassword } = req.body || {};
     if (!deviceName) throw createHttpError(400, 'deviceName is required');
     if (!deviceSn)   throw createHttpError(400, 'deviceSn (serial number) is required');
+    if (connectionMode === 'http' && !deviceIp) throw createHttpError(400, 'deviceIp is required for HTTP mode');
 
     const row = model.createDevice({
       deviceName, deviceSn, connectionMode, mqttToken,
       vpsHost, vpsPort, vpsUsername, vpsPassword, embeddedPort,
+      deviceIp, devicePort, devicePassword,
     });
 
-    // If VPS device added, reconnect VPS client to pick up new subscription
-    if (connectionMode === 'vps') u5Service.restartVps();
+    if (connectionMode === 'vps')  u5Service.restartVps();
+    if (connectionMode === 'http') u5Service.startHttpPolling();
 
     sendOk(res, serializeDevice(row));
   } catch (e) { next(e); }
@@ -56,7 +62,11 @@ async function updateDeviceHandler(req, res, next) {
     const row = model.updateDevice(id, req.body || {});
     if (!row) throw createHttpError(404, 'Device not found');
 
-    if (row.connection_mode === 'vps') u5Service.restartVps();
+    if (row.connection_mode === 'vps')  u5Service.restartVps();
+    if (row.connection_mode === 'http') {
+      u5Service.stopHttpPolling(row.device_sn);
+      u5Service.startHttpPolling();
+    }
 
     sendOk(res, serializeDevice(row));
   } catch (e) { next(e); }
@@ -131,6 +141,68 @@ async function updatePreferencesHandler(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── HTTP adapter endpoints (connection_mode='http' devices only) ───────────────
+
+async function enrollFaceHandler(req, res, next) {
+  try {
+    const { deviceSn, idNumber, name, picLarge, cardNumber } = req.body || {};
+    if (!deviceSn)  throw createHttpError(400, 'deviceSn is required');
+    if (!idNumber)  throw createHttpError(400, 'idNumber is required');
+    if (!name)      throw createHttpError(400, 'name is required');
+    if (!picLarge)  throw createHttpError(400, 'picLarge (data URL) is required');
+    const result = await u5Service.enrollFaceOnDevice(deviceSn, { idNumber, name, picLarge, cardNumber });
+    if (!result.success) throw createHttpError(400, result.message || 'Enrollment failed');
+    sendOk(res, result);
+  } catch (e) { next(e); }
+}
+
+async function deleteEmployeeHandler(req, res, next) {
+  try {
+    const { deviceSn, userId } = req.body || {};
+    if (!deviceSn) throw createHttpError(400, 'deviceSn is required');
+    if (!userId)   throw createHttpError(400, 'userId is required');
+    const result = await u5Service.deleteEmployeeFromDevice(deviceSn, userId);
+    if (!result.success) throw createHttpError(400, result.message || 'Delete failed');
+    sendOk(res, result);
+  } catch (e) { next(e); }
+}
+
+async function listDeviceEmployeesHandler(req, res, next) {
+  try {
+    const { deviceSn } = req.params;
+    const result = await u5Service.getDeviceEmployeeList(deviceSn);
+    if (!result.success) throw createHttpError(400, result.message || 'Failed to fetch employee list');
+    sendOk(res, result.data);
+  } catch (e) { next(e); }
+}
+
+async function openDoorHandler(req, res, next) {
+  try {
+    const { deviceSn } = req.body || {};
+    if (!deviceSn) throw createHttpError(400, 'deviceSn is required');
+    const result = await u5Service.openDeviceDoor(deviceSn);
+    if (!result.success) throw createHttpError(400, result.message || 'Door open failed');
+    sendOk(res, result);
+  } catch (e) { next(e); }
+}
+
+async function pingDeviceHandler(req, res, next) {
+  try {
+    const { deviceSn } = req.params;
+    const result = await u5Service.pingDevice(deviceSn);
+    sendOk(res, result);
+  } catch (e) { next(e); }
+}
+
+async function getDeviceInfoHandler(req, res, next) {
+  try {
+    const { deviceSn } = req.params;
+    const result = await u5Service.getDeviceInfo(deviceSn);
+    if (!result.success) throw createHttpError(400, result.message || 'Failed to read device info');
+    sendOk(res, result.info);
+  } catch (e) { next(e); }
+}
+
 module.exports = {
   listDevicesHandler,
   createDeviceHandler,
@@ -140,4 +212,11 @@ module.exports = {
   sendCommandHandler,
   getPreferencesHandler,
   updatePreferencesHandler,
+  // HTTP adapter endpoints
+  enrollFaceHandler,
+  deleteEmployeeHandler,
+  listDeviceEmployeesHandler,
+  openDoorHandler,
+  pingDeviceHandler,
+  getDeviceInfoHandler,
 };

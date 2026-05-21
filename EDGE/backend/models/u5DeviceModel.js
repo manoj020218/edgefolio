@@ -20,10 +20,12 @@ function createDevice(payload) {
   db.prepare(`
     INSERT INTO u5_devices (
       id, device_name, device_sn, connection_mode, mqtt_token,
-      vps_host, vps_port, vps_username, vps_password, embedded_port, status
+      vps_host, vps_port, vps_username, vps_password, embedded_port,
+      device_ip, device_port, device_password, status
     ) VALUES (
       @id, @device_name, @device_sn, @connection_mode, @mqtt_token,
-      @vps_host, @vps_port, @vps_username, @vps_password, @embedded_port, @status
+      @vps_host, @vps_port, @vps_username, @vps_password, @embedded_port,
+      @device_ip, @device_port, @device_password, @status
     )
   `).run({
     id,
@@ -36,6 +38,9 @@ function createDevice(payload) {
     vps_username: payload.vpsUsername || payload.vps_username || null,
     vps_password: payload.vpsPassword || payload.vps_password || null,
     embedded_port: Number(payload.embeddedPort || payload.embedded_port || 1883),
+    device_ip: payload.deviceIp || payload.device_ip || null,
+    device_port: Number(payload.devicePort || payload.device_port || 80),
+    device_password: payload.devicePassword || payload.device_password || null,
     status: 'offline',
   });
   return findDeviceById(id);
@@ -50,20 +55,25 @@ function updateDevice(id, payload) {
     SET device_name=@device_name, device_sn=@device_sn, connection_mode=@connection_mode,
         mqtt_token=@mqtt_token, vps_host=@vps_host, vps_port=@vps_port,
         vps_username=@vps_username, vps_password=@vps_password,
-        embedded_port=@embedded_port, updated_at=@updated_at
+        embedded_port=@embedded_port,
+        device_ip=@device_ip, device_port=@device_port, device_password=@device_password,
+        updated_at=@updated_at
     WHERE id=@id
   `).run({
     id,
-    device_name: payload.deviceName ?? payload.device_name ?? existing.device_name,
-    device_sn: payload.deviceSn ?? payload.device_sn ?? existing.device_sn,
+    device_name:     payload.deviceName     ?? payload.device_name     ?? existing.device_name,
+    device_sn:       payload.deviceSn       ?? payload.device_sn       ?? existing.device_sn,
     connection_mode: payload.connectionMode ?? payload.connection_mode ?? existing.connection_mode,
-    mqtt_token: payload.mqttToken ?? payload.mqtt_token ?? existing.mqtt_token,
-    vps_host: payload.vpsHost ?? payload.vps_host ?? existing.vps_host,
-    vps_port: Number(payload.vpsPort ?? payload.vps_port ?? existing.vps_port),
-    vps_username: payload.vpsUsername ?? payload.vps_username ?? existing.vps_username,
-    vps_password: payload.vpsPassword ?? payload.vps_password ?? existing.vps_password,
-    embedded_port: Number(payload.embeddedPort ?? payload.embedded_port ?? existing.embedded_port),
-    updated_at: new Date().toISOString(),
+    mqtt_token:      payload.mqttToken      ?? payload.mqtt_token      ?? existing.mqtt_token,
+    vps_host:        payload.vpsHost        ?? payload.vps_host        ?? existing.vps_host,
+    vps_port:        Number(payload.vpsPort ?? payload.vps_port ?? existing.vps_port),
+    vps_username:    payload.vpsUsername    ?? payload.vps_username    ?? existing.vps_username,
+    vps_password:    payload.vpsPassword    ?? payload.vps_password    ?? existing.vps_password,
+    embedded_port:   Number(payload.embeddedPort ?? payload.embedded_port ?? existing.embedded_port),
+    device_ip:       payload.deviceIp       ?? payload.device_ip       ?? existing.device_ip,
+    device_port:     Number(payload.devicePort ?? payload.device_port ?? existing.device_port ?? 80),
+    device_password: payload.devicePassword ?? payload.device_password ?? existing.device_password,
+    updated_at:      new Date().toISOString(),
   });
   return findDeviceById(id);
 }

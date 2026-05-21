@@ -252,6 +252,18 @@ function runMigrations(db) {
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
+  // U5 HTTP polling mode columns (v1.6.0) — added for direct HTTP connection (no MQTT broker needed)
+  ['device_ip', 'device_password'].forEach(col => {
+    if (!columnExists(db, 'u5_devices', col)) {
+      db.exec(`ALTER TABLE u5_devices ADD COLUMN ${col} TEXT`);
+    }
+  });
+  if (!columnExists(db, 'u5_devices', 'device_port')) {
+    db.exec('ALTER TABLE u5_devices ADD COLUMN device_port INTEGER NOT NULL DEFAULT 80');
+  }
+  if (!columnExists(db, 'u5_devices', 'last_polled_at')) {
+    db.exec('ALTER TABLE u5_devices ADD COLUMN last_polled_at TEXT');
+  }
 
   // custom field tables (v1.2.0)
   db.exec(`CREATE TABLE IF NOT EXISTS custom_field_definitions (

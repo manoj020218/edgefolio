@@ -1,12 +1,14 @@
 'use strict';
 /**
- * U5-Zhongyan Face Recognition Machine — MQTT Service
+ * U5-Zhongyan Face Recognition Machine — Service
  *
- * Supports two connection modes:
+ * Supports three connection modes:
+ *   http     — edge directly polls the device HTTP API (/getWorkNoteList etc.) on a timer.
+ *              Same approach as the Gym EDGE-PC project. No MQTT broker needed.
+ *              Device IP + port + password configured per-device in u5_devices table.
  *   embedded — starts a built-in aedes MQTT broker (zero user setup).
  *              The U5 device on the LAN connects directly to this broker.
- *   vps      — connects as an MQTT client to the user's existing VPS broker
- *              (relay-app at 154.61.69.200:1883).
+ *   vps      — connects as an MQTT client to the user's existing VPS broker.
  *
  * Attendance records are staged into machine_import_staging with source_type='u5_face'
  * following the same pipeline used by ZK / ALOG / Jenix machines.
@@ -14,6 +16,7 @@
 
 const { getDb } = require('../config/database');
 const { stageRecords } = require('../models/machineImportModel');
+const { U5Adapter } = require('../hardware/u5/u5Adapter');
 
 // ── Runtime state ─────────────────────────────────────────────────────────────
 const _state = {
@@ -22,7 +25,9 @@ const _state = {
   localClient: null,
   vpsClient: null,
   embeddedPort: 1883,
-  deviceStatus: {},    // deviceSn → { online, lastSeen }
+  deviceStatus: {},       // deviceSn → { online, lastSeen }
+  httpPollTimers: {},     // deviceSn → setInterval handle
+  httpAdapters: {},       // deviceSn → U5Adapter instance
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -172,6 +177,130 @@ function handleAccessRecord(deviceSn, data) {
   try { stageRecords(batchId, 'u5_face', [stagingRecord]); } catch {}
 }
 
+// ── HTTP polling (direct device API) ─────────────────────────────────────────
+
+function getAdapter(device) {
+  const sn = device.device_sn;
+  if (!_state.httpAdapters[sn]) {
+    _state.httpAdapters[sn] = new U5Adapter({
+      ip:         device.device_ip,
+      port:       device.device_port || 80,
+      password:   device.device_password || '123456',
+      timeoutMs:  15000,
+    });
+  }
+  return _state.httpAdapters[sn];
+}
+
+async function pollHttpDevice(device) {
+  const sn      = device.device_sn;
+  const adapter = getAdapter(device);
+
+  // Read last polled timestamp so we only fetch new records
+  let afterTime = null;
+  try {
+    const row = getDb().prepare('SELECT last_polled_at FROM u5_devices WHERE device_sn = ?').get(sn);
+    afterTime = row && row.last_polled_at ? row.last_polled_at : null;
+  } catch {}
+
+  const result = await adapter.getAttendanceLogs(afterTime);
+  if (!result.success) {
+    console.warn(`[U5-HTTP] ${sn}: poll failed — ${result.message}`);
+    markDeviceOffline(sn);
+    return;
+  }
+
+  markDeviceOnline(sn);
+
+  const rows = result.data;
+  if (!rows.length) return;
+
+  const today    = new Date().toISOString().slice(0, 10);
+  const batchId  = `U5-HTTP-${sn}-${today}`;
+
+  const stagingRows = rows.map(row => {
+    const noteTime  = row.checkin_time || '';
+    const parts     = noteTime.includes(' ') ? noteTime.split(' ') : [noteTime, null];
+    return {
+      machineEmpId: String(row.id_number || row.userId || '').trim(),
+      machineName:  row.name || null,
+      punchDate:    parts[0] || today,
+      punchTime:    parts[1] || null,
+      direction:    'in',
+      mode:         'face',
+      remark:       row.ispass === 0 ? 'denied' : 'pass',
+      recordType:   'punch',
+      deviceData:   row,
+    };
+  }).filter(r => r.machineEmpId);
+
+  if (stagingRows.length) {
+    try {
+      stageRecords(batchId, 'u5_face', stagingRows);
+      console.log(`[U5-HTTP] ${sn}: staged ${stagingRows.length} record(s)`);
+    } catch (err) {
+      console.error(`[U5-HTTP] ${sn}: stageRecords failed — ${err.message}`);
+    }
+  }
+
+  // Advance the watermark to the latest checkin_time seen
+  const times = rows.map(r => r.checkin_time).filter(Boolean).sort();
+  if (times.length) {
+    const latest = times[times.length - 1];
+    try {
+      getDb().prepare(
+        'UPDATE u5_devices SET last_polled_at=?, updated_at=? WHERE device_sn=?'
+      ).run(latest, new Date().toISOString(), sn);
+    } catch {}
+  }
+}
+
+function startHttpPolling() {
+  const devices = loadDevices().filter(d => d.connection_mode === 'http' && d.device_ip);
+  if (!devices.length) return;
+
+  const intervalMs = Number(getPref('u5_http_poll_interval_sec', '30')) * 1000;
+
+  for (const device of devices) {
+    const sn = device.device_sn;
+    if (_state.httpPollTimers[sn]) continue;   // already polling
+
+    console.log(`[U5-HTTP] Starting HTTP poll for ${sn} at ${device.device_ip} every ${intervalMs / 1000}s`);
+
+    // Initial poll immediately, then on interval
+    pollHttpDevice(device).catch(() => {});
+    _state.httpPollTimers[sn] = setInterval(() => {
+      // Reload device row each tick so IP/password changes take effect without restart
+      const fresh = loadDevices().find(d => d.device_sn === sn);
+      if (!fresh || fresh.connection_mode !== 'http') {
+        stopHttpPolling(sn);
+        return;
+      }
+      // Invalidate cached adapter if IP/password changed
+      const cached = _state.httpAdapters[sn];
+      if (cached && (cached._base !== `http://${fresh.device_ip}:${fresh.device_port || 80}` ||
+                     cached._password !== (fresh.device_password || '123456'))) {
+        delete _state.httpAdapters[sn];
+      }
+      pollHttpDevice(fresh).catch(() => {});
+    }, intervalMs);
+  }
+}
+
+function stopHttpPolling(sn) {
+  if (_state.httpPollTimers[sn]) {
+    clearInterval(_state.httpPollTimers[sn]);
+    delete _state.httpPollTimers[sn];
+  }
+  delete _state.httpAdapters[sn];
+}
+
+function stopAllHttpPolling() {
+  for (const sn of Object.keys(_state.httpPollTimers)) {
+    stopHttpPolling(sn);
+  }
+}
+
 // ── Embedded MQTT broker (aedes) ──────────────────────────────────────────────
 function startEmbeddedBroker() {
   const aedes = tryRequire('aedes');
@@ -272,15 +401,17 @@ function startVpsClient() {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 function start() {
+  startHttpPolling();
   startEmbeddedBroker();
   // Slight delay so the broker is ready before VPS client also needs mqtt
   setTimeout(startVpsClient, 1500);
 }
 
 function stop() {
-  if (_state.vpsClient)      { _state.vpsClient.end(true);         _state.vpsClient = null; }
-  if (_state.localClient)    { _state.localClient.end(true);       _state.localClient = null; }
-  if (_state.aedesNetServer) { _state.aedesNetServer.close();      _state.aedesNetServer = null; }
+  stopAllHttpPolling();
+  if (_state.vpsClient)      { _state.vpsClient.end(true);           _state.vpsClient = null; }
+  if (_state.localClient)    { _state.localClient.end(true);         _state.localClient = null; }
+  if (_state.aedesNetServer) { _state.aedesNetServer.close();        _state.aedesNetServer = null; }
   if (_state.aedesInstance)  { _state.aedesInstance.close(() => {}); _state.aedesInstance = null; }
 }
 
@@ -335,6 +466,50 @@ function sendCommand(deviceSn, command, data) {
   return { ok: false, error: 'Not connected' };
 }
 
+// ── HTTP adapter helpers (exposed for controller) ─────────────────────────────
+
+async function enrollFaceOnDevice(deviceSn, opts) {
+  const device = loadDevices().find(d => d.device_sn === deviceSn);
+  if (!device) return { success: false, message: 'Device not found' };
+  if (device.connection_mode !== 'http') return { success: false, message: 'Device is not in HTTP mode — enroll via MQTT command' };
+  return getAdapter(device).enrollFace(opts);
+}
+
+async function deleteEmployeeFromDevice(deviceSn, userId) {
+  const device = loadDevices().find(d => d.device_sn === deviceSn);
+  if (!device) return { success: false, message: 'Device not found' };
+  if (device.connection_mode !== 'http') return { success: false, message: 'Device is not in HTTP mode' };
+  return getAdapter(device).deleteEmployee(userId);
+}
+
+async function getDeviceEmployeeList(deviceSn) {
+  const device = loadDevices().find(d => d.device_sn === deviceSn);
+  if (!device) return { success: false, message: 'Device not found' };
+  if (device.connection_mode !== 'http') return { success: false, message: 'Device is not in HTTP mode' };
+  return getAdapter(device).getEmployeeList();
+}
+
+async function openDeviceDoor(deviceSn) {
+  const device = loadDevices().find(d => d.device_sn === deviceSn);
+  if (!device) return { success: false, message: 'Device not found' };
+  if (device.connection_mode !== 'http') return { success: false, message: 'Device is not in HTTP mode — send openDoor command via MQTT instead' };
+  return getAdapter(device).openDoor();
+}
+
+async function pingDevice(deviceSn) {
+  const device = loadDevices().find(d => d.device_sn === deviceSn);
+  if (!device) return { success: false, message: 'Device not found' };
+  if (device.connection_mode !== 'http') return { success: false, message: 'Device is not in HTTP mode' };
+  return { success: await getAdapter(device).ping() };
+}
+
+async function getDeviceInfo(deviceSn) {
+  const device = loadDevices().find(d => d.device_sn === deviceSn);
+  if (!device) return { success: false, message: 'Device not found' };
+  if (device.connection_mode !== 'http') return { success: false, message: 'Device is not in HTTP mode' };
+  return getAdapter(device).getDeviceVersion();
+}
+
 module.exports = {
   start,
   stop,
@@ -343,4 +518,13 @@ module.exports = {
   sendCommand,
   getPref,
   setPref,
+  // HTTP adapter methods
+  enrollFaceOnDevice,
+  deleteEmployeeFromDevice,
+  getDeviceEmployeeList,
+  openDeviceDoor,
+  pingDevice,
+  getDeviceInfo,
+  startHttpPolling,
+  stopHttpPolling,
 };
