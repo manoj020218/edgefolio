@@ -123,6 +123,17 @@ export const resolveDispute   = (disputeId, data) => http.patch(`/payroll/disput
 export const testMachineConnection = (data) => http.post('/machines/test', data, { timeout: 35000 })
 export const pullFromMachine       = (data) => http.post('/machines/pull', data, { timeout: 125000 })
 
+// ── Machine import — staging pipeline (FK-safe) ───────────────────────────────
+export const machineImportAlog    = (data) => http.post('/attendance/machine-import/alog',  data, { timeout: 60000 })
+export const machineImportJenix   = (data) => http.post('/attendance/machine-import/jenix', data, { timeout: 60000 })
+export const getMachineImportBatches  = ()         => http.get('/attendance/machine-import/batches')
+export const getMachineImportUnmapped = ()         => http.get('/attendance/machine-import/unmapped')
+export const getMachineImportMappings = ()         => http.get('/attendance/machine-import/mappings')
+export const saveMachineImportMappings   = (data)  => http.post('/attendance/machine-import/mappings', data)
+export const deleteMachineImportMappings = (data)  => http.delete('/attendance/machine-import/mappings', { data })
+export const commitMachineImport  = (data)         => http.post('/attendance/machine-import/commit', data || {})
+export const getMachineImportSummary = (batchId)   => http.get('/attendance/machine-import/summary', { params: batchId ? { batchId } : {} })
+
 // ── Sync ──────────────────────────────────────────────────────────────────────
 export const getSyncStatus = () => http.get('/sync/status')
 export const pushSync      = () => http.post('/sync/push')
