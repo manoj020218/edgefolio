@@ -179,6 +179,39 @@ function handleAccessRecord(deviceSn, data) {
 
 // ── HTTP polling (direct device API) ─────────────────────────────────────────
 
+/**
+ * Convert a naive datetime string from the device's local timezone to the
+ * configured local timezone.
+ *
+ * The U5 device (Zhongyan) ships with its clock set to China Standard Time
+ * (UTC+8). The EDGE PC runs in IST (UTC+5:30 = 330 min). Without conversion,
+ * every punch would appear 2h30m in the future.
+ *
+ * u5_device_utc_offset : UTC offset of the device clock in minutes (default 480 = UTC+8)
+ * u5_local_utc_offset  : UTC offset we want to store records in (default 330 = UTC+5:30 IST)
+ *
+ * Returns a "YYYY-MM-DD HH:MM:SS" string in the target timezone.
+ */
+function convertDeviceTime(checkinTime, deviceOffsetMin, localOffsetMin) {
+  if (!checkinTime) return checkinTime;
+  try {
+    // Parse device time string as if it were UTC, then shift by device offset
+    const normalized = checkinTime.trim().replace(' ', 'T') + 'Z';
+    const parsedMs   = Date.parse(normalized);
+    if (isNaN(parsedMs)) return checkinTime;
+    // parsedMs is UTC-as-if-device-was-UTC; subtract device offset to get real UTC
+    const utcMs      = parsedMs - deviceOffsetMin * 60000;
+    // Add local offset to get local wall-clock time
+    const localMs    = utcMs + localOffsetMin * 60000;
+    const d          = new Date(localMs);
+    const pad        = n => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+           `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  } catch {
+    return checkinTime;
+  }
+}
+
 function getAdapter(device) {
   const sn = device.device_sn;
   if (!_state.httpAdapters[sn]) {
@@ -215,12 +248,16 @@ async function pollHttpDevice(device) {
   const rows = result.data;
   if (!rows.length) return;
 
+  // Timezone conversion: device (UTC+8 China) → local (UTC+5:30 IST by default)
+  const deviceOffsetMin = Number(getPref('u5_device_utc_offset', '480'));
+  const localOffsetMin  = Number(getPref('u5_local_utc_offset',  '330'));
+
   const today    = new Date().toISOString().slice(0, 10);
   const batchId  = `U5-HTTP-${sn}-${today}`;
 
   const stagingRows = rows.map(row => {
-    const noteTime  = row.checkin_time || '';
-    const parts     = noteTime.includes(' ') ? noteTime.split(' ') : [noteTime, null];
+    const localTime = convertDeviceTime(row.checkin_time, deviceOffsetMin, localOffsetMin);
+    const parts     = (localTime || '').includes(' ') ? localTime.split(' ') : [localTime, null];
     return {
       machineEmpId: String(row.id_number || row.userId || '').trim(),
       machineName:  row.name || null,

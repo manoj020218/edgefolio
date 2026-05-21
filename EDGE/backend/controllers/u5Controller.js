@@ -109,6 +109,9 @@ const PREF_KEYS = [
   'u5_vps_port',
   'u5_vps_username',
   'u5_vps_token',
+  'u5_http_poll_interval_sec',
+  'u5_device_utc_offset',  // device clock UTC offset in minutes (480 = UTC+8 China, default)
+  'u5_local_utc_offset',   // target store timezone in minutes  (330 = UTC+5:30 IST, default)
 ];
 
 async function getPreferencesHandler(req, res, next) {

@@ -172,7 +172,7 @@ class U5Adapter {
   // To delete by id_number (emp_code): call getEmployeeList first to resolve userId.
   async deleteEmployee(userId) {
     try {
-      const data = await this._post('/deleteEmployee', { password: this._password, userId });
+      const data = await this._post('/deleteEmployee', { password: this._password, userid: [userId] });
       const ok = data.result === 0 || data.code === U5_CODE_OK;
       return ok
         ? { success: true }
