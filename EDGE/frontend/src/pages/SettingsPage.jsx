@@ -516,9 +516,31 @@ function DeductionForm({ item, onDone, onSaved }) {
   )
 }
 
+// ── Timezone offset options for U5 device clock + local timezone ─────────────
+const TZ_OPTIONS = [
+  { label: 'UTC+5:30  — India (IST)',              value: '330'  },
+  { label: 'UTC+8:00  — China / Singapore (CST)',  value: '480'  },
+  { label: 'UTC+0:00  — UTC / GMT',                value: '0'    },
+  { label: 'UTC+3:00  — Moscow (MSK)',              value: '180'  },
+  { label: 'UTC+3:30  — Iran (IRST)',               value: '210'  },
+  { label: 'UTC+4:00  — Dubai (GST)',               value: '240'  },
+  { label: 'UTC+4:30  — Kabul (AFT)',               value: '270'  },
+  { label: 'UTC+6:00  — Bangladesh (BST)',          value: '360'  },
+  { label: 'UTC+6:30  — Myanmar (MMT)',             value: '390'  },
+  { label: 'UTC+7:00  — Bangkok / Jakarta (WIB)',   value: '420'  },
+  { label: 'UTC+9:00  — Japan / Korea (JST)',       value: '540'  },
+  { label: 'UTC+9:30  — Adelaide (ACST)',           value: '570'  },
+  { label: 'UTC+10:00 — Sydney (AEST)',             value: '600'  },
+]
+
 // ─── U5 Face Recognition Machines tab ────────────────────────────────────────
 function U5MachinesTab() {
-  const blankDevice = { deviceName: '', deviceSn: '', connectionMode: 'embedded', mqttToken: 'edge', embeddedPort: 1883, vpsHost: '', vpsPort: 1883, vpsUsername: '', vpsPassword: '' }
+  const blankDevice = {
+    deviceName: '', deviceSn: '', connectionMode: 'embedded',
+    mqttToken: 'edge', embeddedPort: 1883,
+    vpsHost: '', vpsPort: 1883, vpsUsername: '', vpsPassword: '',
+    deviceIp: '', devicePort: 80, devicePassword: '',
+  }
 
   const [devices, setDevices]         = useState([])
   const [liveStatus, setLiveStatus]   = useState(null)
@@ -530,7 +552,9 @@ function U5MachinesTab() {
   const [deviceForm, setDeviceForm]   = useState(blankDevice)
   const [deviceSaving, setDeviceSaving] = useState(false)
   const [vpsForm, setVpsForm]         = useState({ u5_vps_host: '', u5_vps_port: '1883', u5_vps_username: '', u5_vps_password: '', u5_vps_token: 'edge' })
+  const [tzForm, setTzForm]           = useState({ u5_device_utc_offset: '480', u5_local_utc_offset: '330', u5_http_poll_interval_sec: '30' })
   const [prefSaving, setPrefSaving]   = useState(false)
+  const [tzSaving, setTzSaving]       = useState(false)
 
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -549,6 +573,11 @@ function U5MachinesTab() {
         u5_vps_password: '',
         u5_vps_token:    p.u5_vps_token    || f.u5_vps_token,
       }))
+      setTzForm(f => ({
+        u5_device_utc_offset:      p.u5_device_utc_offset      || f.u5_device_utc_offset,
+        u5_local_utc_offset:       p.u5_local_utc_offset        || f.u5_local_utc_offset,
+        u5_http_poll_interval_sec: p.u5_http_poll_interval_sec  || f.u5_http_poll_interval_sec,
+      }))
     } catch (e) { if (!quiet) setErr(e.message) }
     finally { setLoading(false) }
   }
@@ -564,6 +593,7 @@ function U5MachinesTab() {
   const handleSaveDevice = async () => {
     if (!deviceForm.deviceName.trim()) { setErr('Device name is required'); return }
     if (!deviceForm.deviceSn.trim())   { setErr('Device serial number is required'); return }
+    if (deviceForm.connectionMode === 'http' && !deviceForm.deviceIp.trim()) { setErr('Device IP is required for HTTP mode'); return }
     setDeviceSaving(true); setErr('')
     try {
       if (editId) await updateU5Device(editId, deviceForm)
@@ -582,9 +612,12 @@ function U5MachinesTab() {
 
   const startEdit = (d) => {
     setEditId(d.id)
-    setDeviceForm({ deviceName: d.deviceName, deviceSn: d.deviceSn, connectionMode: d.connectionMode,
+    setDeviceForm({
+      deviceName: d.deviceName, deviceSn: d.deviceSn, connectionMode: d.connectionMode,
       mqttToken: d.mqttToken || 'edge', embeddedPort: d.embeddedPort || 1883,
-      vpsHost: d.vpsHost || '', vpsPort: d.vpsPort || 1883, vpsUsername: d.vpsUsername || '', vpsPassword: '' })
+      vpsHost: d.vpsHost || '', vpsPort: d.vpsPort || 1883, vpsUsername: d.vpsUsername || '', vpsPassword: '',
+      deviceIp: d.deviceIp || '', devicePort: d.devicePort || 80, devicePassword: '',
+    })
     setShowAddForm(true)
   }
 
@@ -593,6 +626,13 @@ function U5MachinesTab() {
     try { await updateU5Preferences(vpsForm); load(true) }
     catch (e) { setErr(e.message) }
     finally { setPrefSaving(false) }
+  }
+
+  const handleSaveTzPrefs = async () => {
+    setTzSaving(true); setErr('')
+    try { await updateU5Preferences(tzForm); load(true) }
+    catch (e) { setErr(e.message) }
+    finally { setTzSaving(false) }
   }
 
   const handleFacePhotoToggle = async (val) => {
@@ -666,8 +706,12 @@ function U5MachinesTab() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Connection Mode</label>
-              <div className="flex gap-6">
-                {[['embedded', 'LAN — Embedded Broker (recommended)'], ['vps', 'VPS / Cloud MQTT']].map(([val, lbl]) => (
+              <div className="flex flex-wrap gap-6">
+                {[
+                  ['http',     'Direct HTTP (LAN polling)'],
+                  ['embedded', 'LAN — Embedded MQTT Broker'],
+                  ['vps',      'VPS / Cloud MQTT'],
+                ].map(([val, lbl]) => (
                   <label key={val} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                     <input type="radio" name={`connMode-${editId || 'new'}`} value={val}
                       checked={deviceForm.connectionMode === val}
@@ -677,8 +721,29 @@ function U5MachinesTab() {
                 ))}
               </div>
             </div>
-            <Input label="MQTT Token" placeholder="edge" value={deviceForm.mqttToken}
-              onChange={(e) => setDeviceForm(p => ({ ...p, mqttToken: e.target.value }))} />
+
+            {/* HTTP mode fields */}
+            {deviceForm.connectionMode === 'http' && (
+              <div className="bg-sky-900/10 border border-sky-700/40 rounded-lg p-3 space-y-3">
+                <p className="text-sky-300 text-xs font-semibold">HTTP Direct — edge polls the device every 30 s via its built-in HTTP API</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="md:col-span-2">
+                    <Input label="Device IP *" placeholder="192.168.1.224" value={deviceForm.deviceIp}
+                      onChange={(e) => setDeviceForm(p => ({ ...p, deviceIp: e.target.value }))} />
+                  </div>
+                  <Input label="HTTP Port" type="number" placeholder="80" value={deviceForm.devicePort}
+                    onChange={(e) => setDeviceForm(p => ({ ...p, devicePort: Number(e.target.value) }))} />
+                </div>
+                <Input label="Device Password" type="password" placeholder="123456 (default)" value={deviceForm.devicePassword}
+                  onChange={(e) => setDeviceForm(p => ({ ...p, devicePassword: e.target.value }))} />
+              </div>
+            )}
+
+            {/* MQTT token + embedded / VPS fields */}
+            {deviceForm.connectionMode !== 'http' && (
+              <Input label="MQTT Token" placeholder="edge" value={deviceForm.mqttToken}
+                onChange={(e) => setDeviceForm(p => ({ ...p, mqttToken: e.target.value }))} />
+            )}
             {deviceForm.connectionMode === 'embedded' && (
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Broker Port" type="number" placeholder="1883" value={deviceForm.embeddedPort}
@@ -713,6 +778,7 @@ function U5MachinesTab() {
                 <th className="text-left py-2 px-3 text-slate-400">Name</th>
                 <th className="text-left py-2 px-3 text-slate-400">Serial (SN)</th>
                 <th className="text-left py-2 px-3 text-slate-400">Mode</th>
+                <th className="text-left py-2 px-3 text-slate-400">IP / Host</th>
                 <th className="text-left py-2 px-3 text-slate-400">Status</th>
                 <th className="text-left py-2 px-3 text-slate-400">Last Seen</th>
                 <th className="text-right py-2 px-3 text-slate-400">Actions</th>
@@ -734,6 +800,9 @@ function U5MachinesTab() {
                     <td className="py-2 px-3 text-slate-200 font-medium">{d.deviceName}</td>
                     <td className="py-2 px-3 text-slate-400 font-mono text-xs">{d.deviceSn}</td>
                     <td className="py-2 px-3 text-slate-400 capitalize">{d.connectionMode}</td>
+                    <td className="py-2 px-3 text-slate-500 font-mono text-xs">
+                      {d.connectionMode === 'http' ? (d.deviceIp || '—') : (d.vpsHost || '—')}
+                    </td>
                     <td className="py-2 px-3">
                       <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${online ? 'bg-green-900/30 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-green-400' : 'bg-slate-600'}`} />
@@ -809,6 +878,62 @@ function U5MachinesTab() {
             </p>
           </div>
         </label>
+      </div>
+
+      {/* Timezone settings */}
+      <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-200 flex items-center gap-2">
+            Timezone Settings (HTTP mode)
+          </h3>
+          <p className="text-slate-500 text-xs mt-0.5">
+            U5 devices manufactured in China ship with their clock set to CST (UTC+8).
+            Set the device timezone so attendance times are stored in your local time.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Device Clock Timezone</label>
+            <select
+              value={tzForm.u5_device_utc_offset}
+              onChange={(e) => setTzForm(p => ({ ...p, u5_device_utc_offset: e.target.value }))}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm"
+            >
+              {TZ_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="text-slate-600 text-xs mt-1">Timezone the device's internal clock is set to</p>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Store Records In (Local Timezone)</label>
+            <select
+              value={tzForm.u5_local_utc_offset}
+              onChange={(e) => setTzForm(p => ({ ...p, u5_local_utc_offset: e.target.value }))}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm"
+            >
+              {TZ_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="text-slate-600 text-xs mt-1">Attendance records will be stored in this timezone</p>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Poll Interval (seconds)</label>
+            <input
+              type="number" min="10" max="300"
+              value={tzForm.u5_http_poll_interval_sec}
+              onChange={(e) => setTzForm(p => ({ ...p, u5_http_poll_interval_sec: e.target.value }))}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm"
+            />
+            <p className="text-slate-600 text-xs mt-1">How often to fetch new punches from HTTP devices</p>
+          </div>
+        </div>
+        {tzForm.u5_device_utc_offset !== tzForm.u5_local_utc_offset && (
+          <div className="text-xs text-sky-300 bg-sky-900/20 border border-sky-700/40 rounded px-3 py-2">
+            Offset applied: {((Number(tzForm.u5_local_utc_offset) - Number(tzForm.u5_device_utc_offset)) / 60).toFixed(1)} h
+            &nbsp;(device time → local time)
+          </div>
+        )}
+        <Button size="sm" variant="primary" isLoading={tzSaving} onClick={handleSaveTzPrefs}>
+          Save Timezone Settings
+        </Button>
       </div>
     </div>
   )
@@ -1282,8 +1407,8 @@ export const SettingsPage = () => {
                 <Cpu className="w-5 h-5 text-sky-400" /> U5 Face Recognition Machines
               </h2>
               <p className="text-slate-400 text-sm mt-1">
-                Connect U5-Zhongyan biometric machines via LAN (embedded MQTT broker) or your VPS cloud broker.
-                Attendance records arrive in real-time and are staged for import.
+                Connect U5-Zhongyan biometric machines via Direct HTTP (LAN polling), embedded MQTT broker, or VPS cloud broker.
+                Attendance records are fetched automatically and staged for import.
               </p>
             </div>
             <U5MachinesTab />
