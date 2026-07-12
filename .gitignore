@@ -61,3 +61,10 @@ coverage/
 
 #contact info
 ImportModal.jsx
+
+# Generated per-install JWT secret — must never be committed
+**/jwt-secret.key
+
+# License file and machine-id — per-install, never commit
+**/license.json
+**/machine-id.txt

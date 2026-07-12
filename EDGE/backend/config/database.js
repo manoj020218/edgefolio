@@ -1,24 +1,8 @@
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { randomUUID } = require('crypto');
 const Database = require('better-sqlite3');
 const { DB_PATH, STORAGE_DIR } = require('./app');
 const seedData = require('./seedData');
-
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `${salt}:${hash}`;
-}
-
-function ensureAdminUser(db) {
-  const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
-  if (count > 0) return;
-  db.prepare(
-    'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
-  ).run(randomUUID(), 'admin@edgefolio.com', hashPassword('password'), 'admin');
-}
 
 let dbInstance = null;
 
@@ -265,6 +249,65 @@ function runMigrations(db) {
     db.exec('ALTER TABLE u5_devices ADD COLUMN last_polled_at TEXT');
   }
 
+  // ── APK additions (v2.0.0) ────────────────────────────────────────────────
+  // employees: mobile login gate + FCM token for push notifications
+  if (!columnExists(db, 'employees', 'mobile_login_enabled')) {
+    db.exec('ALTER TABLE employees ADD COLUMN mobile_login_enabled INTEGER NOT NULL DEFAULT 1');
+  }
+  if (!columnExists(db, 'employees', 'fcm_token')) {
+    db.exec('ALTER TABLE employees ADD COLUMN fcm_token TEXT');
+  }
+  // face_enrollments: store computed 128-dim embedding (uploaded by Admin APK after TFLite inference)
+  if (!columnExists(db, 'face_enrollments', 'embedding_json')) {
+    db.exec('ALTER TABLE face_enrollments ADD COLUMN embedding_json TEXT');
+  }
+  // HR sets tour/WFH date ranges per employee — APK gates mobile attendance on this
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS work_assignments (
+      id TEXT PRIMARY KEY,
+      employee_id TEXT NOT NULL,
+      work_type TEXT NOT NULL CHECK(work_type IN ('tour','wfh')),
+      from_date TEXT NOT NULL,
+      to_date TEXT NOT NULL,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_wa_emp_date
+    ON work_assignments(employee_id, from_date, to_date)
+  `);
+  // Admin/Owner alert subscriptions: who gets FCM when watched employee checks in/out
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS employee_alert_subscriptions (
+      id TEXT PRIMARY KEY,
+      watcher_emp_id TEXT NOT NULL,
+      watched_emp_id TEXT NOT NULL,
+      alert_checkin  INTEGER NOT NULL DEFAULT 1,
+      alert_checkout INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(watcher_emp_id, watched_emp_id),
+      FOREIGN KEY(watcher_emp_id) REFERENCES employees(id) ON DELETE CASCADE,
+      FOREIGN KEY(watched_emp_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `);
+  // APK runtime config: min version, geofence radius, etc.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS apk_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  {
+    const ins = db.prepare("INSERT OR IGNORE INTO apk_config (key, value) VALUES (?, ?)");
+    ins.run('min_apk_version', '1.0.0');
+    ins.run('geofence_radius_m', '200');
+    ins.run('offline_buffer_days', '7');
+  }
+
   // custom field tables (v1.2.0)
   db.exec(`CREATE TABLE IF NOT EXISTS custom_field_definitions (
     field_id TEXT PRIMARY KEY,
@@ -440,7 +483,6 @@ function getDb() {
   } catch (e) {
     console.error('[EDGEFOLIO] seed failed (non-fatal):', e.message);
   }
-  ensureAdminUser(dbInstance);
   return dbInstance;
 }
 

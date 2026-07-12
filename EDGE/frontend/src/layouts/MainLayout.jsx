@@ -18,6 +18,7 @@ import {
   Menu,
 } from 'lucide-react'
 import { getDisputeCount } from '../services/api'
+import { LicenseBanner } from '../components/common/LicenseBanner'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -191,6 +192,9 @@ export function MainLayout({ children, user, onLogout }) {
             </span>
           </div>
         </header>
+
+        {/* License banner (expiring / grace / readonly) */}
+        <LicenseBanner />
 
         {/* Page content */}
         <main className="flex-1 min-h-0 overflow-y-auto p-6">

@@ -1,28 +1,29 @@
 const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../config/secrets');
 
-const LOCAL_USER = { role: 'admin', email: 'admin@edgefolio.com', mode: 'local' };
-
-function requireAuth(req, _res, next) {
+function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
 
-  if (token) {
-    try {
-      const secret = process.env.JWT_SECRET || 'edgefolio-local-dev-jwt-secret';
-      req.user = jwt.verify(token, secret);
-    } catch {
-      // Invalid/expired token — fall back to local offline user
-    }
+  if (!token) {
+    return res.status(401).json({ ok: false, error: 'Authentication required' });
   }
 
-  if (!req.user) {
-    req.user = LOCAL_USER;
+  try {
+    req.user = jwt.verify(token, getJwtSecret());
+    return next();
+  } catch {
+    return res.status(401).json({ ok: false, error: 'Invalid or expired session. Please sign in again.' });
   }
-
-  next();
 }
 
-module.exports = {
-  requireAuth,
-  optionalDemoAuth: requireAuth,
-};
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ ok: false, error: 'Insufficient permissions' });
+    }
+    return next();
+  };
+}
+
+module.exports = { requireAuth, requireRole };

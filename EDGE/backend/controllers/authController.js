@@ -3,8 +3,7 @@ const jwt = require('jsonwebtoken');
 const { randomUUID } = require('crypto');
 const { getDb } = require('../config/database');
 const { sendOk, createHttpError } = require('../utils/http');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'edgefolio-local-dev-jwt-secret';
+const { getJwtSecret } = require('../config/secrets');
 
 function verifyPassword(input, stored) {
   const [salt, hash] = stored.split(':');
@@ -28,7 +27,7 @@ function loginHandler(req, res, next) {
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '24h' },
     );
 
@@ -157,11 +156,74 @@ function changePasswordHandler(req, res, next) {
   }
 }
 
+// GET /auth/status — public; tells the frontend whether first-admin setup is needed
+function statusHandler(_req, res, next) {
+  try {
+    const db = getDb();
+    const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+    return sendOk(res, { setupRequired: count === 0 });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// POST /auth/setup — public; one-time first-admin creation
+function setupHandler(req, res, next) {
+  try {
+    const { email, password } = req.body || {};
+
+    // Basic validation
+    if (!email || !password) {
+      throw createHttpError(400, 'email and password are required');
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      throw createHttpError(400, 'Invalid email format');
+    }
+    if (String(password).length < 8) {
+      throw createHttpError(400, 'Password must be at least 8 characters');
+    }
+
+    const db = getDb();
+
+    // Race-safe: count + insert in one transaction
+    const result = db.transaction(() => {
+      const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+      if (count > 0) return null; // setup already done
+
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+      const passwordHash = `${salt}:${hash}`;
+      const id = randomUUID();
+
+      db.prepare(
+        'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
+      ).run(id, String(email).trim().toLowerCase(), passwordHash, 'admin');
+
+      return { id, email: String(email).trim().toLowerCase(), role: 'admin' };
+    })();
+
+    if (!result) {
+      throw createHttpError(409, 'Admin account already exists. Please sign in instead.');
+    }
+
+    const token = jwt.sign(
+      { userId: result.id, email: result.email, role: result.role },
+      getJwtSecret(),
+      { expiresIn: '24h' },
+    );
+
+    return sendOk(res, { token, user: { id: result.id, email: result.email, role: result.role } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   loginHandler,
   forgotPasswordHandler,
   listResetRequestsHandler,
   approveResetRequestHandler,
   changePasswordHandler,
-  JWT_SECRET,
+  statusHandler,
+  setupHandler,
 };

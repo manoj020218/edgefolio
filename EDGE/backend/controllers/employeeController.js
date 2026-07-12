@@ -19,6 +19,7 @@ const {
 const { ensureRequired } = require('../utils/validators');
 const { sendOk, createHttpError } = require('../utils/http');
 const { serializeEmployee } = require('../utils/serializers');
+const { getLicenseState, getActiveEmployeeCount } = require('../services/licenseService');
 
 // ── Employee CRUD ─────────────────────────────────────────────────────────────
 
@@ -35,6 +36,19 @@ function getEmployeeHandler(req, res, next) {
 
 function createEmployeeHandler(req, res, next) {
   try {
+    // Employee limit gate
+    const { claims } = getLicenseState();
+    if (claims?.plan?.maxEmployees) {
+      const activeCount = getActiveEmployeeCount();
+      const maxEmployees = Number(claims.plan.maxEmployees);
+      if (activeCount >= maxEmployees) {
+        return res.status(403).json({
+          ok: false,
+          code: 'LICENSE_EMPLOYEE_LIMIT',
+          error: `Employee limit (${maxEmployees}) reached. Upgrade your plan.`,
+        });
+      }
+    }
     ensureRequired(['name', 'department', 'salary'], req.body || {});
     const created = serializeEmployee(createEmployee(req.body));
     res.status(201);

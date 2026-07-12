@@ -19,6 +19,7 @@ import {
   getBankTemplates, createBankTemplate, updateBankTemplate, deleteBankTemplate,
   getU5Devices, createU5Device, updateU5Device, deleteU5Device,
   getU5Status, getU5Preferences, updateU5Preferences,
+  getLicenseStatus, refreshLicense,
 } from '../services/api'
 
 const hasElectron = () => typeof window !== 'undefined' && !!window.electronAPI
@@ -36,6 +37,7 @@ const TABS = [
   { id: 'emp-fields',    label: 'Employee Fields' },
   { id: 'data',           label: 'Data & Backup' },
   { id: 'sync',           label: 'Cloud Sync' },
+  { id: 'license',        label: 'License' },
 ]
 
 // ── Payment fields for bank template mapping ───────────────────────────────────
@@ -1566,6 +1568,11 @@ export const SettingsPage = () => {
           </Card>
         </div>
       )}
+
+      {/* ── License ── */}
+      {activeTab === 'license' && (
+        <LicenseTab />
+      )}
     </div>
   )
 }
@@ -1693,6 +1700,118 @@ function EmpFieldsTab() {
             </table>
           </div>
         )}
+      </div>
+    </Card>
+  )
+}
+
+// ─── License Tab ─────────────────────────────────────────────────────────────
+function LicenseTab() {
+  const [info, setInfo]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [err, setErr]         = useState('')
+  const [msg, setMsg]         = useState('')
+
+  const load = () => {
+    setLoading(true)
+    getLicenseStatus()
+      .then((res) => setInfo(res.data || null))
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleRefresh = async () => {
+    setRefreshing(true); setErr(''); setMsg('')
+    try {
+      await refreshLicense()
+      load()
+      setMsg('License refreshed successfully.')
+    } catch (e) {
+      setErr(e.message || 'Refresh failed — check your internet connection.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const STATE_COLORS = {
+    valid:     'bg-green-900/30 text-green-300 border-green-700',
+    expiring:  'bg-amber-900/30 text-amber-300 border-amber-700',
+    grace:     'bg-orange-900/30 text-orange-300 border-orange-700',
+    readonly:  'bg-red-900/30 text-red-300 border-red-700',
+    blocked:   'bg-red-900/40 text-red-200 border-red-600',
+    unlicensed:'bg-slate-700 text-slate-300 border-slate-600',
+  }
+
+  if (loading) return <div className="py-8 text-center text-slate-400">Loading license info...</div>
+
+  return (
+    <Card>
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-sky-400" /> License
+          </h2>
+          <p className="text-slate-400 text-sm mt-1">Your EDGEFOLIO license status and plan details.</p>
+        </div>
+
+        {err && <Alert variant="danger" message={err} onClose={() => setErr('')} />}
+        {msg && <Alert variant="success" message={msg} onClose={() => setMsg('')} />}
+
+        {info && (
+          <div className="space-y-4">
+            {/* State badge */}
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-semibold ${STATE_COLORS[info.state] || STATE_COLORS.unlicensed}`}>
+              <span className="w-2 h-2 rounded-full bg-current opacity-70" />
+              {(info.state || 'unknown').toUpperCase()}
+            </div>
+
+            {/* Details grid */}
+            <div className="bg-slate-900 border border-slate-700 rounded-lg divide-y divide-slate-800">
+              {info.licenseKey && (
+                <FieldRow label="License Key">
+                  <span className="font-mono text-slate-300 text-sm">{info.licenseKey}</span>
+                </FieldRow>
+              )}
+              {info.plan?.name && (
+                <FieldRow label="Plan">
+                  <span className="text-slate-200 text-sm">{info.plan.name}</span>
+                </FieldRow>
+              )}
+              {info.plan?.maxEmployees && (
+                <FieldRow label="Employee Limit">
+                  <span className="text-slate-200 text-sm">{info.plan.maxEmployees} active employees</span>
+                </FieldRow>
+              )}
+              {info.expiresAt && (
+                <FieldRow label="Expires">
+                  <span className="text-slate-200 text-sm">
+                    {new Date(info.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {info.daysLeft != null && (
+                      <span className={`ml-2 text-xs ${info.daysLeft <= 15 ? 'text-amber-400' : 'text-slate-500'}`}>
+                        ({info.daysLeft > 0 ? `${info.daysLeft} days left` : 'expired'})
+                      </span>
+                    )}
+                  </span>
+                </FieldRow>
+              )}
+            </div>
+
+            {(info.state === 'grace' || info.state === 'readonly' || info.state === 'expiring') && (
+              <div className="bg-slate-900 border border-amber-700/40 rounded-lg p-4 text-sm text-amber-300">
+                To renew your license, contact support on WhatsApp: +91 72402 26566
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="pt-2">
+          <Button variant="secondary" icon={RefreshCw} isLoading={refreshing} onClick={handleRefresh}>
+            {refreshing ? 'Checking...' : 'Refresh License'}
+          </Button>
+        </div>
       </div>
     </Card>
   )

@@ -3,8 +3,10 @@ const express = require('express');
 const { API_PREFIX } = require('./config/app');
 const { requireAuth } = require('./middleware/auth');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
+const { requireLicense } = require('./middleware/license');
 
 const authRoutes          = require('./routes/auth');
+const licenseRoutes       = require('./routes/license');
 const employeesRoutes     = require('./routes/employees');
 const attendanceRoutes    = require('./routes/attendance');
 const payrollRoutes       = require('./routes/payroll');
@@ -24,6 +26,7 @@ const earningsRoutes      = require('./routes/earnings');
 const machinesRoutes      = require('./routes/machines');
 const paymentsRoutes      = require('./routes/payments');
 const u5machinesRoutes    = require('./routes/u5machines');
+const apkRoutes           = require('./routes/apk');
 
 function createServer() {
   const app = express();
@@ -41,8 +44,19 @@ function createServer() {
   // Auth — no token required
   app.use(`${API_PREFIX}/auth`, authRoutes);
 
-  // All subsequent routes get JWT-based auth (falls back to local user if no token)
+  // License — no token required (activation screen runs pre-login)
+  app.use(`${API_PREFIX}/license`, licenseRoutes);
+
+  // APK public endpoints (config, login-check, offices, auth/login) must be reachable
+  // without a session token — mount BEFORE the global requireAuth wall.
+  // The apk router applies requireAuth internally to the routes that need it.
+  app.use(`${API_PREFIX}/apk`, apkRoutes);
+
+  // All subsequent routes require a valid JWT
   app.use(requireAuth);
+
+  // License enforcement gate (after auth, before business routes)
+  app.use(requireLicense);
 
   app.get(`${API_PREFIX}/health`, (_req, res) => {
     res.json({ ok: true, apiPrefix: API_PREFIX, timestamp: new Date().toISOString() });

@@ -16,6 +16,7 @@ const { startSyncScheduler } = require('./syncScheduler');
 const { startBackupScheduler } = require('./backupScheduler');
 const { startPayrollScheduler } = require('./payrollScheduler');
 const { startCleanupScheduler } = require('./cleanupScheduler');
+const { startLicenseHeartbeatScheduler } = require('./licenseHeartbeatScheduler');
 
 function startSchedulers() {
   if (!SCHEDULERS_ENABLED) {
@@ -45,6 +46,7 @@ function startSchedulers() {
       keepLocalBackups: BACKUP_KEEP_LOCAL_FILES,
       logRetentionDays: LOG_RETENTION_DAYS,
     }),
+    startLicenseHeartbeatScheduler(),
   ];
 
   logger.info('All schedulers started', {

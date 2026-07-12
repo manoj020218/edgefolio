@@ -20,13 +20,43 @@ http.interceptors.response.use(
     if (!err.response) {
       return Promise.reject(new Error('Cannot connect to EDGEFOLIO service. Ensure the app is running.'))
     }
-    const msg = err.response.data?.error || err.response.data?.message || err.message || 'Request failed'
+
+    // If we get a 401 on a non-auth endpoint, clear local session and signal the app
+    if (
+      err.response.status === 401 &&
+      !err.config?.url?.includes('/auth/')
+    ) {
+      localStorage.removeItem('ef_token')
+      localStorage.removeItem('ef_user')
+      window.dispatchEvent(new Event('ef:unauthorized'))
+    }
+
+    const responseData = err.response.data || {}
+    const msg = responseData.error || responseData.message || err.message || 'Request failed'
+
+    // Attach license error codes so pages can detect them
+    const licenseCode = responseData.code
+    if (licenseCode === 'LICENSE_READONLY' || licenseCode === 'LICENSE_EMPLOYEE_LIMIT' || licenseCode === 'LICENSE_REQUIRED') {
+      const enhanced = new Error(msg)
+      enhanced.code = licenseCode
+      enhanced.statusCode = err.response.status
+      return Promise.reject(enhanced)
+    }
+
     return Promise.reject(new Error(msg))
   },
 )
 
+// ── License ───────────────────────────────────────────────────────────────────
+export const getLicenseStatus  = ()       => http.get('/license/status')
+export const activateLicense   = (key)    => http.post('/license/activate', { licenseKey: key })
+export const signupTrial       = (form)   => http.post('/license/signup', form)
+export const refreshLicense    = ()       => http.post('/license/refresh')
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
-export const login = (email, password) => http.post('/auth/login', { email, password })
+export const login          = (email, password) => http.post('/auth/login', { email, password })
+export const getAuthStatus  = ()                => http.get('/auth/status')
+export const setupAdmin     = (email, password) => http.post('/auth/setup', { email, password })
 
 // ── Employees ─────────────────────────────────────────────────────────────────
 export const getEmployees        = (params)     => http.get('/employees', { params })
