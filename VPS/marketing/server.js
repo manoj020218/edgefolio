@@ -1,16 +1,27 @@
 const express = require('express')
 const path = require('path')
+const fs = require('fs')
 
 const app = express()
 const PORT = process.env.PORT || 3080
 
-// Serve static files from marketing directory
-app.use(express.static(__dirname, { maxAge: '1d', extensions: ['html'] }))
+// Static files (HTML, CSS, etc.) from marketing dir
+app.use(express.static(__dirname, { maxAge: '1h', extensions: ['html'] }))
 
-app.get('/about', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'about.html'))
+// Serve downloads directory
+app.use('/downloads', express.static(path.join(__dirname, 'downloads')))
+
+// Download route — serves local .exe if uploaded, else redirects to GitHub Releases
+app.get('/download', (_req, res) => {
+  const exePath = path.join(__dirname, 'downloads', 'EdgeFolio-Setup.exe')
+  if (fs.existsSync(exePath)) {
+    res.download(exePath, 'EdgeFolio-Setup.exe')
+  } else {
+    res.redirect(302, 'https://github.com/manoj020218/edgefolio/releases')
+  }
 })
 
+// Clean URL routes for legal pages
 app.get('/privacy-policy', (_req, res) => {
   res.sendFile(path.join(__dirname, 'privacy-policy.html'))
 })
@@ -19,20 +30,15 @@ app.get('/terms-and-conditions', (_req, res) => {
   res.sendFile(path.join(__dirname, 'terms-and-conditions.html'))
 })
 
-// Alternate common legal slugs
-app.get('/privacy', (_req, res) => {
-  res.redirect(301, '/privacy-policy')
-})
+// Short aliases
+app.get('/privacy', (_req, res) => res.redirect(301, '/privacy-policy'))
+app.get('/terms', (_req, res) => res.redirect(301, '/terms-and-conditions'))
 
-app.get('/terms', (_req, res) => {
-  res.redirect(301, '/terms-and-conditions')
-})
-
-// Serve index.html for all routes (SPA-style)
-app.get('*', (req, res) => {
+// Catch-all → index.html
+app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'))
 })
 
 app.listen(PORT, () => {
-  console.log(`EDGEFOLIO marketing page running at http://localhost:${PORT}`)
+  console.log(`EdgeFolio marketing running at http://localhost:${PORT}`)
 })
