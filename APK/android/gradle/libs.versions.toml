@@ -1,0 +1,109 @@
+[versions]
+agp                     = "8.4.2"
+kotlin                  = "1.9.24"
+ksp                     = "1.9.24-1.0.20"
+coreKtx                 = "1.13.1"
+lifecycle               = "2.8.3"
+activityCompose         = "1.9.0"
+composeBom              = "2024.06.00"
+navigationCompose       = "2.7.7"
+hilt                    = "2.51.1"
+hiltNavCompose          = "1.2.0"
+room                    = "2.6.1"
+sqlcipher               = "4.5.4"
+sqliteKtx               = "2.4.0"
+securityCrypto          = "1.1.0-alpha06"
+retrofit                = "2.11.0"
+okhttp                  = "4.12.0"
+gson                    = "2.10.1"
+cameraX                 = "1.3.3"
+mlkitFace               = "16.1.6"
+tflite                  = "2.14.0"
+tfliteTask              = "0.4.4"
+workManager             = "2.9.0"
+hiltWork                = "1.2.0"
+firebaseBom             = "33.1.2"
+timber                  = "5.0.1"
+coil                    = "2.6.0"
+splashscreen            = "1.0.1"
+junit4                  = "4.13.2"
+coroutinesTest          = "1.8.1"
+mockk                   = "1.13.12"
+
+[libraries]
+# Core
+androidx-core-ktx              = { group = "androidx.core",          name = "core-ktx",                    version.ref = "coreKtx" }
+androidx-lifecycle-runtime     = { group = "androidx.lifecycle",     name = "lifecycle-runtime-ktx",       version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel   = { group = "androidx.lifecycle",     name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-activity-compose      = { group = "androidx.activity",      name = "activity-compose",            version.ref = "activityCompose" }
+androidx-splashscreen          = { group = "androidx.core",          name = "core-splashscreen",           version.ref = "splashscreen" }
+
+# Compose BOM
+androidx-compose-bom           = { group = "androidx.compose",       name = "compose-bom",                 version.ref = "composeBom" }
+androidx-compose-ui            = { group = "androidx.compose.ui",    name = "ui" }
+androidx-compose-ui-graphics   = { group = "androidx.compose.ui",    name = "ui-graphics" }
+androidx-compose-ui-tooling    = { group = "androidx.compose.ui",    name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-material3     = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-icons-ext     = { group = "androidx.compose.material", name = "material-icons-extended" }
+androidx-navigation-compose    = { group = "androidx.navigation",    name = "navigation-compose",          version.ref = "navigationCompose" }
+
+# Hilt
+hilt-android                   = { group = "com.google.dagger",      name = "hilt-android",                version.ref = "hilt" }
+hilt-compiler                  = { group = "com.google.dagger",      name = "hilt-android-compiler",       version.ref = "hilt" }
+hilt-navigation-compose        = { group = "androidx.hilt",          name = "hilt-navigation-compose",     version.ref = "hiltNavCompose" }
+hilt-work                      = { group = "androidx.hilt",          name = "hilt-work",                   version.ref = "hiltWork" }
+hilt-work-compiler             = { group = "androidx.hilt",          name = "hilt-compiler",               version.ref = "hiltWork" }
+
+# Room + SQLCipher
+room-runtime                   = { group = "androidx.room",          name = "room-runtime",                version.ref = "room" }
+room-ktx                       = { group = "androidx.room",          name = "room-ktx",                    version.ref = "room" }
+room-compiler                  = { group = "androidx.room",          name = "room-compiler",               version.ref = "room" }
+sqlcipher                      = { group = "net.zetetic",            name = "android-database-sqlcipher",  version.ref = "sqlcipher" }
+sqlite-ktx                     = { group = "androidx.sqlite",        name = "sqlite-ktx",                  version.ref = "sqliteKtx" }
+
+# Security
+security-crypto                = { group = "androidx.security",      name = "security-crypto",             version.ref = "securityCrypto" }
+
+# Network
+retrofit                       = { group = "com.squareup.retrofit2", name = "retrofit",                    version.ref = "retrofit" }
+retrofit-gson                  = { group = "com.squareup.retrofit2", name = "converter-gson",              version.ref = "retrofit" }
+okhttp-bom                     = { group = "com.squareup.okhttp3",   name = "okhttp-bom",                  version.ref = "okhttp" }
+okhttp                         = { group = "com.squareup.okhttp3",   name = "okhttp" }
+okhttp-logging                 = { group = "com.squareup.okhttp3",   name = "logging-interceptor" }
+gson                           = { group = "com.google.code.gson",   name = "gson",                        version.ref = "gson" }
+
+# Camera + ML Kit + TFLite
+camerax-core                   = { group = "androidx.camera",        name = "camera-core",                 version.ref = "cameraX" }
+camerax-camera2                = { group = "androidx.camera",        name = "camera-camera2",              version.ref = "cameraX" }
+camerax-lifecycle              = { group = "androidx.camera",        name = "camera-lifecycle",            version.ref = "cameraX" }
+camerax-view                   = { group = "androidx.camera",        name = "camera-view",                 version.ref = "cameraX" }
+mlkit-face                     = { group = "com.google.mlkit",       name = "face-detection",              version.ref = "mlkitFace" }
+tflite                         = { group = "org.tensorflow",         name = "tensorflow-lite",             version.ref = "tflite" }
+tflite-support                 = { group = "org.tensorflow",         name = "tensorflow-lite-support",     version.ref = "tflite" }
+tflite-gpu                     = { group = "org.tensorflow",         name = "tensorflow-lite-gpu",         version.ref = "tflite" }
+
+# WorkManager
+work-runtime-ktx               = { group = "androidx.work",         name = "work-runtime-ktx",            version.ref = "workManager" }
+
+# Firebase
+firebase-bom                   = { group = "com.google.firebase",   name = "firebase-bom",                version.ref = "firebaseBom" }
+firebase-messaging-ktx         = { group = "com.google.firebase",   name = "firebase-messaging-ktx" }
+firebase-analytics-ktx         = { group = "com.google.firebase",   name = "firebase-analytics-ktx" }
+
+# Util
+timber                         = { group = "com.jakewharton.timber", name = "timber",                     version.ref = "timber" }
+coil-compose                   = { group = "io.coil-kt",            name = "coil-compose",                version.ref = "coil" }
+
+# Testing
+junit4                         = { group = "junit",                   name = "junit",                       version.ref = "junit4" }
+coroutines-test                = { group = "org.jetbrains.kotlinx",  name = "kotlinx-coroutines-test",     version.ref = "coroutinesTest" }
+mockk                          = { group = "io.mockk",               name = "mockk",                       version.ref = "mockk" }
+
+[plugins]
+android-application  = { id = "com.android.application",              version.ref = "agp" }
+kotlin-android       = { id = "org.jetbrains.kotlin.android",         version.ref = "kotlin" }
+kotlin-compose       = { id = "org.jetbrains.kotlin.plugin.compose",  version.ref = "kotlin" }
+hilt-android         = { id = "com.google.dagger.hilt.android",       version.ref = "hilt" }
+ksp                  = { id = "com.google.devtools.ksp",              version.ref = "ksp" }
+google-services      = { id = "com.google.gms.google-services",       version = "4.4.2" }

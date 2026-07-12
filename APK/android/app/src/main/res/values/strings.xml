@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EdgeFolio</string>
+
+    <!-- Login -->
+    <string name="label_company_id">Company ID</string>
+    <string name="label_employee_id">Employee ID</string>
+    <string name="label_password">Password</string>
+    <string name="label_remember_me">Remember me</string>
+    <string name="btn_login">Login</string>
+    <string name="link_forgot_password">Forgot Password?</string>
+
+    <!-- Errors -->
+    <string name="error_login_blocked">Mobile access is disabled. Contact your HR.</string>
+    <string name="error_edge_offline">Cannot reach office server. Check your Company ID or network.</string>
+    <string name="error_invalid_credentials">Invalid Employee ID or password.</string>
+    <string name="error_location_accuracy">GPS accuracy too low. Move to open area and retry.</string>
+
+    <!-- Attendance states -->
+    <string name="attendance_not_marked">Not marked yet</string>
+    <string name="attendance_marked_synced">Marked ✓</string>
+    <string name="attendance_marked_pending">Marked — Pending sync</string>
+    <string name="attendance_office_only">You are scheduled in-office today.\nPlease use the office attendance system.</string>
+    <string name="btn_mark_attendance">Mark Attendance</string>
+
+    <!-- EDGE status -->
+    <string name="edge_offline_banner">Office System is Down</string>
+    <string name="edge_back_online">Office System is back online</string>
+
+    <!-- Work types -->
+    <string name="work_type_office">In Office</string>
+    <string name="work_type_tour">On Tour</string>
+    <string name="work_type_wfh">Work From Home</string>
+
+    <!-- Notifications channel -->
+    <string name="fcm_channel_id">edgefolio_alerts</string>
+    <string name="fcm_channel_name">Attendance Alerts</string>
+</resources>

@@ -25,6 +25,7 @@
     "cors": "^2.8.5",
     "electron-updater": "^6.1.8",
     "express": "^4.21.2",
+    "firebase-admin": "^12.3.0",
     "jsonwebtoken": "^9.0.3",
     "mqtt": "^5.15.1",
     "qrcode": "^1.5.4",
@@ -35,6 +36,7 @@
     "cross-env": "^7.0.3",
     "electron": "^30.0.0",
     "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9",
     "wait-on": "^7.2.0"
   },
   "build": {
