@@ -20,6 +20,8 @@ function startBackend() {
       const { HOST, PORT } = require('../backend/config/app')
       const { getDb } = require('../backend/config/database')
       const { startSchedulers } = require('../backend/jobs')
+      const u5Service = require('../backend/services/u5MachineService')
+      const m68Service = require('../backend/services/m68Service')
 
       console.log(`[EDGEFOLIO] Storage path: ${process.env.EDGEFOLIO_STORAGE_PATH}`)
       getDb() // initialise SQLite DB + seed admin user
@@ -28,6 +30,8 @@ function startBackend() {
       backendServer = expressApp.listen(PORT, HOST, () => {
         console.log(`[EDGEFOLIO] Backend ready on ${HOST}:${PORT}`)
         schedulerManager = startSchedulers()
+        u5Service.start()
+        m68Service.start()
         resolve()
       })
 
@@ -125,6 +129,8 @@ app.on('will-quit', () => {
     schedulerManager.stopAll()
     schedulerManager = null
   }
+  try { require('../backend/services/u5MachineService').stop() } catch {}
+  try { require('../backend/services/m68Service').stop() } catch {}
   if (backendServer) {
     backendServer.close()
     backendServer = null
