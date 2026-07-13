@@ -103,7 +103,7 @@ Net Mode = `Internet`; Server Set → DNS `No`, Server IP = EDGEFOLIO PC's LAN I
 SerPortNo = `5005` (our listener EDGE_M68_PORT), Server Req = `Yes`.
 (Device's own Ethernet Port No stays 5005 — unrelated.)
 
-### STEP M68-1 — DB + parser + listener + real-time glog ingestion (core)
+### STEP M68-1 — DB + parser + listener + real-time glog ingestion (core) ✅ DONE 2026-07-13
 **Schema (config/database.js migration, pattern like u5_devices):**
 - `m68_devices`: `id, dev_id UNIQUE, name, location, enabled INTEGER DEFAULT 1, encrypt_mode TEXT DEFAULT 'none',
   last_seen_at TEXT, last_request_code TEXT, fw_info TEXT, created_at, updated_at`
@@ -131,7 +131,7 @@ SerPortNo = `5005` (our listener EDGE_M68_PORT), Server Req = `Yes`.
 unreliable — instead queue `SET_TIME` daily and on device registration; cheap and prevents the
 CST/IST style issues we hit with U5).
 
-### STEP M68-2 — API routes + frontend device management
+### STEP M68-2 — API routes + frontend device management ✅ DONE 2026-07-13
 - `routes/m68.js` (behind requireAuth + requireLicense, mounted in server.js like `/u5`):
   CRUD `/m68/devices`, `GET /m68/status` (per device: last_seen, pending cmds, staged/unmapped
   counts), `POST /m68/command` (queue SET_TIME / GET_LOG_DATA / GET_DEVICE_STATUS),
@@ -142,7 +142,7 @@ CST/IST style issues we hit with U5).
   Unmapped punches reuse the existing machine-import mapping UI (they appear there already via
   the staging pipeline — verify the source label shows 'm68').
 
-### STEP M68-3 — Backfill + user sync (Phase C, after core proven on real device)
+### STEP M68-3 — Backfill + user sync (Phase C, after core proven on real device) ✅ DONE 2026-07-13
 - `GET_LOG_DATA` bulk pull → multi-block `send_cmd_result` reassembly → same staging pipeline
   (dedupe: unique key dev_id+userId+timestamp, INSERT OR IGNORE — check how staging dedupes today).
 - `GET_USER_ID_LIST` / `GET_USER_INFO` → show device-side users in mapping UI.
@@ -173,3 +173,139 @@ CST/IST style issues we hit with U5).
 - **Multiple devices:** design is multi-device from day one (allowlist keyed by dev_id).
 - **Installer:** Windows Firewall inbound rule for the listener port must be added by the NSIS
   installer or the setup doc (note for the Electron packaging task).
+
+---
+
+# STEP M68-4 — VPS Device Cloud Relay (multi-location, multi-model)  📋 PLANNED 2026-07-13
+
+> **The big picture the owner asked for:** machines in many cities, one centralized EDGEFOLIO
+> running payroll for all of them. The VPS is a **relay + buffer ONLY** — it never runs payroll,
+> never stores salaries or biometrics, just parks device punches until the right EDGEFOLIO pulls
+> them. Offline-first is preserved: if the VPS is down, punches queue on the device (its own
+> buffer) and EDGEFOLIO keeps running on whatever it already has.
+
+## 4.1 Why a pure relay works here (the key insight)
+
+Both ends are **outbound HTTP clients**, so NOTHING needs port-forwarding, static IPs, or LAN setup:
+- The **machine** already dials out to a configured Server IP/DNS (confirmed on the M68: Server Set
+  → DNS = Yes accepts a web address). Point it at `devicehub.iotsoft.in`.
+- **EDGEFOLIO** already dials out (it does license heartbeats to iotsoft.in today). It adds a
+  "pull my devices' punches" call to the same outbound sync.
+- The VPS is the only public, always-on endpoint in the middle. It accepts pushes from machines and
+  serves pulls to EDGEFOLIO. Neither the shop nor the payroll PC needs any inbound network config.
+
+```
+  Shop A ─ M68 ┐
+  Shop B ─ U5  ┼──push──▶  devicehub.iotsoft.in (VPS relay)
+  Shop C ─ ZKT ┘             │  edge_devices  (dev_id → tenantId, model, enabled)
+                             │  edge_punches  (normalized, undelivered buffer)
+                             │  edge_device_users, edge_commands (queue per device)
+                             ▼
+              central EDGEFOLIO ──pull (tenant token)──▶ drains punches
+                             │  → machine_import_staging (source 'cloud:<model>')
+                             │  → existing mapping + auto-commit → payroll (LOCAL)
+```
+
+## 4.2 Multi-model from day one — the adapter pattern (this is the core design decision)
+
+Different machine models speak different protocols (M68 = FK BS binary; U5 = Zhongyan MQTT/HTTP;
+ZKTeco = ADMS/iclock form-posts). We do NOT want one tangled endpoint. Instead:
+
+- **Per-model ingest adapter** on the VPS: a small module that owns ONE model's wire protocol and
+  does exactly one job — turn that model's raw push into a **NormalizedPunch**:
+  `{ tenantId, model, devId, deviceUserId, at (UTC ISO), direction, verifyMode, raw }`.
+  - `adapters/m68.js` — reuse the ALREADY-WRITTEN `m68Protocol.js` verbatim (it's pure, no DB/no
+    Electron deps — lift it to the VPS as a shared package). Handles receive_cmd/glog/cmd_result.
+  - `adapters/zhongyan-u5.js`, `adapters/zkteco-adms.js` — added later, same interface.
+- **One normalized core** downstream of every adapter: dedupe, buffer in `edge_punches`, expose the
+  same pull API regardless of model. EDGEFOLIO never learns the wire protocol — it just receives
+  NormalizedPunches tagged with `model` and `devId`.
+- **Adding a new machine model = one new adapter file + a route mount. Zero downstream changes.**
+  (Mirrors the billing platform's "new product = one DB insert" principle in CLAUDE.md.)
+
+**Adapter interface (lock this now so all models comply):**
+```
+module.exports = {
+  model: 'm68',
+  // Express handler mounted at /devicehub/:model/* — owns that model's endpoint(s)
+  handleRequest(req, res, ctx),   // ctx = { resolveTenant(devId), buffer(punches[]),
+                                  //         popCommand(devId), completeCommand(...), saveUsers(...) }
+  // optional: how this model receives server→device commands (poll vs push)
+}
+```
+
+## 4.3 VPS pieces (in billing-server or a sibling `devicehub` service)
+
+Decide placement first: **new PM2 app `devicehub` on its own port**, nginx `devicehub.iotsoft.in`
+→ that port, **plain HTTP path exposed** (many devices can't do HTTPS/TLS-redirects — see risks).
+Keep it separate from `billing-platform` so device traffic can't affect billing. Mongo (reuse the
+cluster) collections:
+- `edge_devices`: `{ devId, model, tenantId (→ EdgeLicense.clientId), name, location, enabled,
+  encryptMode, lastSeenAt, fwInfo }`. **dev_id → tenant mapping is the heart of the whole thing.**
+- `edge_punches`: normalized buffer `{ tenantId, model, devId, deviceUserId, at, direction,
+  verifyMode, raw, deliveredAt (null until pulled) }` + unique index
+  `(tenantId, devId, deviceUserId, at)` for dedupe.
+- `edge_device_users`, `edge_commands` — same roles as the local M68 tables, tenant-scoped.
+
+**Public device endpoints** (no auth — device can't hold a token; security = dev_id allowlist +
+optional per-model AES): `POST /devicehub/:model` (+ any sub-paths the model needs). Unknown dev_id
+→ logged as "unclaimed device seen" (surfaces in admin so the client can claim it), punch parked
+under a holding area, not dropped.
+
+**Tenant (EDGEFOLIO) endpoints** (auth = the existing license/tenant token EDGEFOLIO already has):
+- `POST /devicehub/register` `{ devId, model }` → binds dev_id to this tenant (idempotent; 409 if
+  already claimed by another tenant → "contact support", same pattern as license machine-binding).
+- `GET /devicehub/punches?since=<cursor>` → returns this tenant's undelivered NormalizedPunches,
+  marks them delivered (or delete-on-ack). Cursor/ack so nothing is lost or double-counted.
+- `POST /devicehub/command` `{ devId, cmdCode }` → queue SET_TIME / GET_LOG_DATA / etc. for remote
+  machine management from the central EDGEFOLIO or the superadmin dashboard.
+- `GET /devicehub/devices` → tenant's devices + last-seen + counts.
+
+## 4.4 EDGEFOLIO (EDGE) changes
+
+- **Cloud device mode** toggle per device (LAN-direct vs cloud-relay). Cloud devices are registered
+  by typing dev_id in the M68 tab; EDGE calls `/devicehub/register` (reusing its outbound sync auth).
+- **Pull job**: extend the existing sync/heartbeat scheduler to call `GET /devicehub/punches`, feed
+  results into the SAME `machine_import_staging` pipeline with `source_type` = `cloud:m68` (etc.) →
+  existing mapping + auto-commit. **Zero new payroll code** — punches look like any other import.
+- License-aware: in `readonly` state, still pull + stage (never lose data), suspend auto-commit —
+  identical rule to the local M68 path.
+- The M68 tab shows cloud devices with a "☁ cloud" badge and last-seen from the relay.
+
+## 4.5 Business alignment (why this is worth building)
+
+- **Turns EDGEFOLIO into a multi-branch SaaS.** Head office runs payroll for machines in N cities.
+- **Device count = a billable plan dimension** (like maxEmployees). dev_id is registered against an
+  `EdgeLicense`, so the relay already knows the tenant and can enforce/report a device cap.
+- **Remote fleet management** from the superadmin dashboard (sync time, pull logs, see last-seen for
+  every machine of every client) — a support & upsell lever.
+- Reuses everything already built: `m68Protocol.js` (pure, portable), the license/tenant identity,
+  the billing dashboard shell, the staging/mapping pipeline.
+
+## 4.6 Build order & verification
+1. Lock the **adapter interface** + normalized punch schema (this doc).
+2. VPS `devicehub` skeleton: `edge_devices`/`edge_punches`, register + punches (pull/ack) endpoints,
+   tenant auth — tested with the existing `m68-device-sim.js` pointed at the VPS.
+3. Lift `m68Protocol.js` into a shared package; `adapters/m68.js` wraps it; wire
+   `POST /devicehub/m68`. Prove with the simulator over the internet (dedupe + ack correctness).
+4. EDGE cloud-mode toggle + pull job → staging. E2E: sim (as "remote machine") → VPS → EDGE pulls →
+   attendance row, with NO duplicates across repeated pulls.
+5. nginx `devicehub.iotsoft.in` (+ plain-HTTP listener for devices), PM2 app, superadmin fleet view.
+6. Real hardware: one M68 pointed at `devicehub.iotsoft.in` (DNS mode) → punch → central EDGEFOLIO.
+7. Later adapters: `zhongyan-u5.js`, `zkteco-adms.js` — each is a new file + route, no core changes.
+
+## 4.7 Risks / open items (M68-4)
+- **Plain HTTP over WAN.** Devices generally can't do HTTPS. Payload is user-id + timestamp (no
+  names/biometrics) so exposure is limited, but add the vendor `encrypt: yes` (AES) per-model where
+  supported, and rate-limit + dev_id allowlist. Never accept payroll-identifying data at the relay.
+- **dev_id spoofing.** dev_id is the only device identity in the FK protocol. Mitigate: claim-on-
+  first-use binding (dev_id locks to first tenant that registers it), admin visibility of unclaimed
+  devices, optional per-device shared secret/AES for models that support it.
+- **Clock/timezone.** Normalize every punch to UTC at the adapter; EDGE converts to its configured
+  tz on display/commit (we already hit CST→IST issues with U5 — centralize the fix here).
+- **Delivery semantics.** Pull must be at-least-once with idempotent dedupe (unique index +
+  ack cursor) so a dropped ack never double-counts attendance.
+- **Buffer retention.** Auto-purge `edge_punches` delivered > N days; cap undelivered age with an
+  alert so a long-offline EDGEFOLIO is visible to support.
+- **Command direction per model.** M68/U5 poll for commands; some ZKTeco variants expect push —
+  the adapter owns this difference; the tenant command API stays uniform.
