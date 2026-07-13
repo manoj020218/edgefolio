@@ -308,6 +308,60 @@ function runMigrations(db) {
     ins.run('offline_buffer_days', '7');
   }
 
+  // M68 (WitEasy FK BS-protocol) device tables (v1.7.0)
+  db.exec(`CREATE TABLE IF NOT EXISTS m68_devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dev_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL DEFAULT '',
+    location TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    encrypt_mode TEXT NOT NULL DEFAULT 'none',
+    last_seen_at TEXT,
+    last_request_code TEXT,
+    fw_info TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS m68_commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dev_id TEXT NOT NULL,
+    trans_id TEXT NOT NULL UNIQUE,
+    cmd_code TEXT NOT NULL,
+    cmd_param TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result_summary TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at TEXT,
+    completed_at TEXT
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_m68_commands_dev_status
+    ON m68_commands(dev_id, status)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS m68_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dev_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload_b64 TEXT,
+    received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // M68 device user list (v1.8.0) — populated by GET_USER_ID_LIST result
+  db.exec(`CREATE TABLE IF NOT EXISTS m68_device_users (
+    dev_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    user_name TEXT,
+    privilege INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    backup_number INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (dev_id, user_id)
+  )`);
+
+  // Dedupe index for m68 backfill: prevent duplicate punches (v1.8.0)
+  // Identity: source_type + machine_name (=dev_id) + machine_emp_id + punch_date + punch_time
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_m68_staging_dedup
+    ON machine_import_staging(source_type, machine_name, machine_emp_id, punch_date, punch_time)
+    WHERE source_type = 'm68'`);
+
   // custom field tables (v1.2.0)
   db.exec(`CREATE TABLE IF NOT EXISTS custom_field_definitions (
     field_id TEXT PRIMARY KEY,

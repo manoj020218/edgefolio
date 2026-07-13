@@ -19,6 +19,8 @@ import {
   getBankTemplates, createBankTemplate, updateBankTemplate, deleteBankTemplate,
   getU5Devices, createU5Device, updateU5Device, deleteU5Device,
   getU5Status, getU5Preferences, updateU5Preferences,
+  getM68Devices, createM68Device, updateM68Device, deleteM68Device,
+  getM68DeviceUsers, getM68Status, sendM68Command, getM68Events,
   getLicenseStatus, refreshLicense,
 } from '../services/api'
 
@@ -34,6 +36,7 @@ const TABS = [
   { id: 'deductions',     label: 'Deductions' },
   { id: 'bank-templates', label: 'Bank Templates' },
   { id: 'u5-machines',   label: 'U5 Machines' },
+  { id: 'm68-machines',  label: 'M68 (WitEasy)' },
   { id: 'emp-fields',    label: 'Employee Fields' },
   { id: 'data',           label: 'Data & Backup' },
   { id: 'sync',           label: 'Cloud Sync' },
@@ -941,6 +944,460 @@ function U5MachinesTab() {
   )
 }
 
+// ─── M68 (WitEasy FK BS-protocol) Machines tab ───────────────────────────────
+function M68MachinesTab() {
+  const blankForm = { devId: '', name: '', location: '' }
+
+  const [devices, setDevices]             = useState([])
+  const [status, setStatus]               = useState(null)
+  const [events, setEvents]               = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [err, setErr]                     = useState('')
+  const [toast, setToast]                 = useState('')
+  const [showAddForm, setShowAddForm]     = useState(false)
+  const [editId, setEditId]               = useState(null)
+  const [form, setForm]                   = useState(blankForm)
+  const [saving, setSaving]               = useState(false)
+  const [cmdBusy, setCmdBusy]             = useState({})
+  const [expandedUsers, setExpandedUsers] = useState({})  // devId → { loading, users, error }
+  const [usersBusy, setUsersBusy]         = useState({})
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
+
+  const load = async (quiet = false) => {
+    if (!quiet) setLoading(true)
+    try {
+      const [devRes, statusRes, evtRes] = await Promise.all([
+        getM68Devices(), getM68Status(), getM68Events(20),
+      ])
+      setDevices(devRes.data || [])
+      setStatus(statusRes.data || null)
+      setEvents(evtRes.data || [])
+    } catch (e) { if (!quiet) setErr(e.message) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => {
+    load()
+    const t = setInterval(() => {
+      getM68Status().then(r => setStatus(r.data || null)).catch(() => {})
+    }, 10000)
+    return () => clearInterval(t)
+  }, [])
+
+  const handleSave = async () => {
+    if (!form.devId.trim()) { setErr('Device ID is required'); return }
+    if (!form.name.trim())  { setErr('Device name is required'); return }
+    setSaving(true); setErr('')
+    try {
+      if (editId) {
+        await updateM68Device(editId, { name: form.name, location: form.location })
+      } else {
+        await createM68Device({ devId: form.devId.trim(), name: form.name.trim(), location: form.location.trim() || undefined })
+      }
+      setShowAddForm(false); setEditId(null); setForm(blankForm)
+      load(true)
+      showToast(editId ? 'Device updated.' : 'Device registered.')
+    } catch (e) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async (id, devId) => {
+    if (!window.confirm(`Remove device "${devId}"? Pending commands will be deleted.`)) return
+    try { await deleteM68Device(id); load(true); showToast('Device removed.') }
+    catch (e) { setErr(e.message) }
+  }
+
+  const startEdit = (d) => {
+    setEditId(d.id)
+    setForm({ devId: d.devId, name: d.name, location: d.location || '' })
+    setShowAddForm(true)
+  }
+
+  const prefillFromEvent = (devId) => {
+    setForm({ devId, name: '', location: '' })
+    setEditId(null)
+    setShowAddForm(true)
+    setErr('')
+  }
+
+  const sendCmd = async (devId, cmdCode, label) => {
+    setCmdBusy(p => ({ ...p, [`${devId}_${cmdCode}`]: true }))
+    setErr('')
+    try {
+      await sendM68Command({ devId, cmdCode })
+      showToast(`${label} queued for ${devId} — will be sent on next device poll.`)
+    } catch (e) { setErr(e.message) }
+    finally { setCmdBusy(p => ({ ...p, [`${devId}_${cmdCode}`]: false })) }
+  }
+
+  const loadDeviceUsers = async (deviceId, devId) => {
+    setExpandedUsers(p => ({ ...p, [devId]: { loading: true, users: [], error: '' } }))
+    try {
+      const r = await getM68DeviceUsers(deviceId)
+      setExpandedUsers(p => ({ ...p, [devId]: { loading: false, users: r.data?.users || [], error: '', lastSyncAt: r.data?.lastSyncAt, lastSyncSummary: r.data?.lastSyncSummary } }))
+    } catch (e) {
+      setExpandedUsers(p => ({ ...p, [devId]: { loading: false, users: [], error: e.message } }))
+    }
+  }
+
+  const toggleDeviceUsers = (deviceId, devId) => {
+    if (expandedUsers[devId]) {
+      setExpandedUsers(p => { const n = { ...p }; delete n[devId]; return n })
+    } else {
+      loadDeviceUsers(deviceId, devId)
+    }
+  }
+
+  const refreshUsers = async (devId, cmdCode) => {
+    setUsersBusy(p => ({ ...p, [devId]: true }))
+    setErr('')
+    try {
+      await sendM68Command({ devId, cmdCode: 'GET_USER_ID_LIST' })
+      showToast(`Refresh Users queued for ${devId} — will execute on next device poll.`)
+    } catch (e) { setErr(e.message) }
+    finally { setUsersBusy(p => ({ ...p, [devId]: false })) }
+  }
+
+  const listenerPort = status?.listener?.port || 5005
+  const listenerRunning = status?.listener?.running || false
+  const lanIps = status?.lanIps || []
+
+  if (loading) return <div className="py-8 text-center text-slate-400">Loading M68 settings…</div>
+
+  // Unregistered device events (kind === 'unregistered') not yet in the device list
+  const registeredIds = new Set(devices.map(d => d.devId))
+  const unregisteredSeen = events
+    .filter(e => e.kind === 'unregistered' && !registeredIds.has(e.devId))
+    .reduce((acc, e) => {
+      if (!acc.some(x => x.devId === e.devId)) acc.push(e)
+      return acc
+    }, [])
+
+  return (
+    <div className="space-y-5">
+      {err   && <Alert variant="danger"  message={err}   onClose={() => setErr('')} />}
+      {toast && <Alert variant="success" message={toast} onClose={() => setToast('')} />}
+
+      {/* Status overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={`bg-slate-900 border rounded-lg p-4 ${listenerRunning ? 'border-green-700/50' : 'border-slate-700'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <Server className="w-4 h-4 text-sky-400" />
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">M68 Listener</span>
+          </div>
+          <p className={`text-sm font-semibold ${listenerRunning ? 'text-green-400' : 'text-slate-500'}`}>
+            {listenerRunning ? `Running · port ${listenerPort}` : `Not running · port ${listenerPort}`}
+          </p>
+          {!listenerRunning && (
+            <p className="text-slate-600 text-xs mt-1">Check EDGE_M68_PORT env and restart app</p>
+          )}
+        </div>
+
+        <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Wifi className="w-4 h-4 text-sky-400" />
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">LAN IP (for device config)</span>
+          </div>
+          {lanIps.length > 0
+            ? lanIps.map(ip => <p key={ip} className="text-sky-300 text-sm font-mono font-semibold">{ip}</p>)
+            : <p className="text-slate-500 text-sm">Could not detect LAN IP</p>
+          }
+        </div>
+
+        <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Cpu className="w-4 h-4 text-sky-400" />
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Devices</span>
+          </div>
+          <p className="text-slate-100 text-sm font-semibold">{devices.length} registered</p>
+          <p className="text-green-400 text-xs">
+            {devices.filter(d => d.online).length} online now
+          </p>
+        </div>
+      </div>
+
+      {/* Device setup instructions */}
+      <div className="bg-sky-900/10 border border-sky-700/40 rounded-lg p-4 text-xs text-slate-300 space-y-1">
+        <p className="font-semibold text-sky-300 mb-2">M68 Device Setup (on machine screen)</p>
+        <p>1. <span className="font-medium text-slate-200">Network → Net Mode:</span> set to <span className="font-mono text-sky-200">Internet</span></p>
+        <p>2. <span className="font-medium text-slate-200">Network → Server Set → DNS:</span> <span className="font-mono text-sky-200">No</span></p>
+        <p>3. <span className="font-medium text-slate-200">Network → Server Set → Server IP:</span> <span className="font-mono text-sky-200">{lanIps[0] || '<this PC LAN IP>'}</span></p>
+        <p>4. <span className="font-medium text-slate-200">Network → Server Set → SerPortNo:</span> <span className="font-mono text-sky-200">{listenerPort}</span></p>
+        <p>5. <span className="font-medium text-slate-200">Network → Server Set → Server Req:</span> <span className="font-mono text-sky-200">Yes</span></p>
+        <p className="text-slate-500 mt-2">The device will poll every 5–20 s. Ensure Windows Firewall allows inbound TCP on port {listenerPort}.</p>
+      </div>
+
+      {/* Unregistered devices seen */}
+      {unregisteredSeen.length > 0 && (
+        <div className="bg-amber-900/10 border border-amber-700/40 rounded-lg p-4">
+          <p className="text-amber-300 text-sm font-semibold mb-2">Recently seen unregistered devices</p>
+          <div className="space-y-1">
+            {unregisteredSeen.map(e => (
+              <div key={e.devId} className="flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-mono">{e.devId}</span>
+                <button
+                  onClick={() => prefillFromEvent(e.devId)}
+                  className="text-sky-400 hover:text-sky-300 underline ml-4"
+                >
+                  Register this device
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Device list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-slate-200">Registered M68 Devices</h3>
+          <Button size="sm" icon={Plus} variant="primary"
+            onClick={() => { setForm(blankForm); setEditId(null); setShowAddForm(true) }}>
+            Add Device
+          </Button>
+        </div>
+
+        {showAddForm && (
+          <div className="bg-slate-900 border border-sky-700 rounded-lg p-4 space-y-3">
+            <p className="text-sm font-semibold text-sky-300">{editId ? 'Edit Device' : 'Add M68 Device'}</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Input
+                label="Device ID *"
+                placeholder="e.g. M68001 (from machine sticker)"
+                value={form.devId}
+                disabled={!!editId}
+                onChange={(e) => setForm(p => ({ ...p, devId: e.target.value }))}
+              />
+              <Input
+                label="Name *"
+                placeholder="e.g. Main Entrance"
+                value={form.name}
+                onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))}
+              />
+              <Input
+                label="Location"
+                placeholder="e.g. Ground Floor"
+                value={form.location}
+                onChange={(e) => setForm(p => ({ ...p, location: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" variant="secondary" onClick={() => { setShowAddForm(false); setEditId(null) }}>Cancel</Button>
+              <Button size="sm" variant="primary" isLoading={saving} onClick={handleSave}>
+                {editId ? 'Update' : 'Register'} Device
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 px-3 text-slate-400">Name</th>
+                <th className="text-left py-2 px-3 text-slate-400">Dev ID</th>
+                <th className="text-left py-2 px-3 text-slate-400">Location</th>
+                <th className="text-left py-2 px-3 text-slate-400">Status</th>
+                <th className="text-left py-2 px-3 text-slate-400">Last Seen</th>
+                <th className="text-left py-2 px-3 text-slate-400">Pending</th>
+                <th className="text-left py-2 px-3 text-slate-400">Unmapped</th>
+                <th className="text-right py-2 px-3 text-slate-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {devices.length === 0 && (
+                <tr>
+                  <td colSpan="8" className="py-10 text-center text-slate-500 text-sm">
+                    No M68 devices registered yet. Click "Add Device" to register your WitEasy machine.
+                  </td>
+                </tr>
+              )}
+              {devices.map(d => (
+                <React.Fragment key={d.id}>
+                <tr className="border-b border-slate-800 hover:bg-slate-800/30">
+                  <td className="py-2 px-3 text-slate-200 font-medium">{d.name}</td>
+                  <td className="py-2 px-3 text-slate-400 font-mono text-xs">{d.devId}</td>
+                  <td className="py-2 px-3 text-slate-500 text-xs">{d.location || '—'}</td>
+                  <td className="py-2 px-3">
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${d.online ? 'bg-green-900/30 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${d.online ? 'bg-green-400' : 'bg-slate-600'}`} />
+                      {d.online ? 'Online' : 'Offline'}
+                    </span>
+                  </td>
+                  <td className="py-2 px-3 text-slate-500 text-xs">
+                    {d.lastSeenAt?.slice(0, 16).replace('T', ' ') || '—'}
+                  </td>
+                  <td className="py-2 px-3 text-xs">
+                    <span className={d.pendingCommands > 0 ? 'text-amber-400' : 'text-slate-600'}>
+                      {d.pendingCommands} cmd{d.pendingCommands !== 1 ? 's' : ''}
+                    </span>
+                  </td>
+                  <td className="py-2 px-3 text-xs">
+                    <span className={d.unmappedPunches > 0 ? 'text-sky-400' : 'text-slate-600'}>
+                      {d.unmappedPunches} punch{d.unmappedPunches !== 1 ? 'es' : ''}
+                    </span>
+                  </td>
+                  <td className="py-2 px-3 text-right">
+                    <div className="flex justify-end gap-1 flex-wrap">
+                      <button
+                        disabled={cmdBusy[`${d.devId}_SET_TIME`]}
+                        onClick={() => sendCmd(d.devId, 'SET_TIME', 'Sync Time')}
+                        title="Sync device clock to server time"
+                        className="px-2 py-1 text-xs text-sky-300 hover:bg-sky-900/30 rounded border border-sky-800/40 disabled:opacity-40"
+                      >
+                        {cmdBusy[`${d.devId}_SET_TIME`] ? '…' : 'Sync Time'}
+                      </button>
+                      <button
+                        disabled={cmdBusy[`${d.devId}_GET_LOG_DATA`]}
+                        onClick={() => sendCmd(d.devId, 'GET_LOG_DATA', 'Pull Logs')}
+                        title="Pull all attendance logs from device (results staged after device delivers them)"
+                        className="px-2 py-1 text-xs text-sky-300 hover:bg-sky-900/30 rounded border border-sky-800/40 disabled:opacity-40"
+                      >
+                        {cmdBusy[`${d.devId}_GET_LOG_DATA`] ? '…' : 'Pull Logs'}
+                      </button>
+                      <button
+                        disabled={cmdBusy[`${d.devId}_GET_DEVICE_STATUS`]}
+                        onClick={() => sendCmd(d.devId, 'GET_DEVICE_STATUS', 'Device Status')}
+                        title="Query device status"
+                        className="px-2 py-1 text-xs text-sky-300 hover:bg-sky-900/30 rounded border border-sky-800/40 disabled:opacity-40"
+                      >
+                        {cmdBusy[`${d.devId}_GET_DEVICE_STATUS`] ? '…' : 'Device Status'}
+                      </button>
+                      <button
+                        disabled={usersBusy[d.devId]}
+                        onClick={() => refreshUsers(d.devId)}
+                        title="Queue GET_USER_ID_LIST to refresh enrolled users"
+                        className="px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-900/30 rounded border border-emerald-800/40 disabled:opacity-40"
+                      >
+                        {usersBusy[d.devId] ? '…' : 'Refresh Users'}
+                      </button>
+                      <button
+                        onClick={() => toggleDeviceUsers(d.id, d.devId)}
+                        title="View enrolled users on this device"
+                        className={`px-2 py-1 text-xs rounded border disabled:opacity-40 ${expandedUsers[d.devId] ? 'text-emerald-300 border-emerald-700 bg-emerald-900/20' : 'text-slate-400 border-slate-700 hover:bg-slate-800/50'}`}
+                      >
+                        {expandedUsers[d.devId] ? 'Hide Users' : `Users${d.deviceUserCount > 0 ? ` (${d.deviceUserCount})` : ''}`}
+                      </button>
+                      <button onClick={() => startEdit(d)} className="p-1.5 text-sky-400 hover:bg-sky-900/30 rounded">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(d.id, d.devId)} className="p-1.5 text-red-400 hover:bg-red-900/30 rounded">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {d.lastBackfill && (
+                      <div className="text-xs text-slate-500 mt-1 text-right">
+                        Last pull: <span className="text-slate-400">{d.lastBackfill.summary}</span>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+                {expandedUsers[d.devId] && (
+                  <tr>
+                    <td colSpan="8" className="px-3 pb-3 bg-slate-900/40">
+                      <div className="border border-slate-700 rounded-lg p-3 mt-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-emerald-300">Device Users — {d.devId}</span>
+                          {expandedUsers[d.devId]?.lastSyncAt && (
+                            <span className="text-xs text-slate-500">
+                              Last sync: {expandedUsers[d.devId].lastSyncAt?.slice(0, 16).replace('T', ' ')}
+                              {expandedUsers[d.devId].lastSyncSummary && (
+                                <span className="ml-2 text-slate-600">({expandedUsers[d.devId].lastSyncSummary})</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {expandedUsers[d.devId].loading && (
+                          <p className="text-xs text-slate-400 py-2">Loading users…</p>
+                        )}
+                        {expandedUsers[d.devId].error && (
+                          <p className="text-xs text-red-400 py-2">{expandedUsers[d.devId].error}</p>
+                        )}
+                        {!expandedUsers[d.devId].loading && !expandedUsers[d.devId].error && (
+                          expandedUsers[d.devId].users.length === 0
+                            ? <p className="text-xs text-slate-500 py-2">No users found. Click "Refresh Users" to pull the user list from the device.</p>
+                            : (
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-slate-700">
+                                    <th className="text-left py-1.5 px-2 text-slate-400">User ID</th>
+                                    <th className="text-left py-1.5 px-2 text-slate-400">Name</th>
+                                    <th className="text-left py-1.5 px-2 text-slate-400">Privilege</th>
+                                    <th className="text-left py-1.5 px-2 text-slate-400">Enabled</th>
+                                    <th className="text-left py-1.5 px-2 text-slate-400">Mapped Employee</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {expandedUsers[d.devId].users.map(u => (
+                                    <tr key={u.userId} className="border-b border-slate-800/50">
+                                      <td className="py-1 px-2 text-slate-300 font-mono">{u.userId}</td>
+                                      <td className="py-1 px-2 text-slate-400">{u.userName || <span className="text-slate-600 italic">—</span>}</td>
+                                      <td className="py-1 px-2 text-slate-500">{u.privilege === 0 ? 'Staff' : u.privilege === 1 ? 'Admin' : u.privilege}</td>
+                                      <td className="py-1 px-2">
+                                        <span className={`px-1.5 py-0.5 rounded text-xs ${u.enabled ? 'bg-green-900/30 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
+                                          {u.enabled ? 'Yes' : 'No'}
+                                        </span>
+                                      </td>
+                                      <td className="py-1 px-2">
+                                        {u.mappedEmployeeName
+                                          ? <span className="text-green-400">{u.mappedEmployeeName} <span className="text-slate-500">({u.mappedEmpCode})</span></span>
+                                          : <span className="px-1.5 py-0.5 rounded bg-amber-900/30 text-amber-400 text-xs">unmapped — use Import Mapping to link</span>
+                                        }
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Recent events */}
+      {events.length > 0 && (
+        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-slate-300 mb-2">Recent Device Events</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-1.5 px-2 text-slate-400">Time</th>
+                  <th className="text-left py-1.5 px-2 text-slate-400">Dev ID</th>
+                  <th className="text-left py-1.5 px-2 text-slate-400">Kind</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map(e => (
+                  <tr key={e.id} className="border-b border-slate-800/50">
+                    <td className="py-1 px-2 text-slate-500">{e.receivedAt?.slice(0, 16).replace('T', ' ')}</td>
+                    <td className="py-1 px-2 text-slate-300 font-mono">{e.devId}</td>
+                    <td className="py-1 px-2">
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                        e.kind === 'unregistered' ? 'bg-red-900/30 text-red-400' :
+                        e.kind === 'enroll'       ? 'bg-purple-900/30 text-purple-400' :
+                        'bg-slate-800 text-slate-400'
+                      }`}>{e.kind}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main SettingsPage ────────────────────────────────────────────────────────
 export const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState('company')
@@ -1414,6 +1871,25 @@ export const SettingsPage = () => {
               </p>
             </div>
             <U5MachinesTab />
+          </div>
+        </Card>
+      )}
+
+      {/* ── M68 (WitEasy) Machines ── */}
+      {activeTab === 'm68-machines' && (
+        <Card>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-sky-400" /> M68 (WitEasy) Face Machines
+              </h2>
+              <p className="text-slate-400 text-sm mt-1">
+                WitEasy M68 devices use the FK BS-protocol: the <span className="font-medium text-slate-200">device connects to us</span>.
+                Register each device by its Dev ID, configure the machine to point at this PC, and punches arrive in real-time.
+                Unmapped punches appear in the Machine Import screen for ID mapping.
+              </p>
+            </div>
+            <M68MachinesTab />
           </div>
         </Card>
       )}

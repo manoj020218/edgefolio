@@ -199,4 +199,14 @@ export const sendU5Command       = (data)       => http.post('/u5/command', data
 export const getU5Preferences    = ()           => http.get('/u5/preferences')
 export const updateU5Preferences = (data)       => http.put('/u5/preferences', data)
 
+// ── M68 (WitEasy FK BS-protocol) Machines ────────────────────────────────────
+export const getM68Devices       = ()           => http.get('/m68/devices')
+export const createM68Device     = (data)       => http.post('/m68/devices', data)
+export const updateM68Device     = (id, data)   => http.put(`/m68/devices/${id}`, data)
+export const deleteM68Device     = (id)         => http.delete(`/m68/devices/${id}`)
+export const getM68DeviceUsers   = (id)         => http.get(`/m68/devices/${id}/users`)
+export const getM68Status        = ()           => http.get('/m68/status')
+export const sendM68Command      = (data)       => http.post('/m68/command', data)
+export const getM68Events        = (limit = 50) => http.get('/m68/events', { params: { limit } })
+
 export default http
