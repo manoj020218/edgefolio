@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Start Your Free Trial — EdgeFolio Offline Payroll</title>
-  <meta name="title" content="Start Your Free Trial — EdgeFolio Offline Payroll" />
-  <meta name="description" content="Get a free 180-day EdgeFolio trial license instantly. Fill in your company details, get your license key, and download the offline payroll app for Windows." />
-  <meta name="keywords" content="EdgeFolio free trial, payroll software signup, offline payroll trial, EdgeFolio license key, payroll software India signup" />
+  <title>Get Started Free — EdgeFolio Offline Payroll</title>
+  <meta name="title" content="Get Started Free — EdgeFolio Offline Payroll" />
+  <meta name="description" content="Get your free EdgeFolio license key instantly — no trial, no employee limit, no charges. Fill in your company details and download the offline payroll app for Windows." />
+  <meta name="keywords" content="EdgeFolio free signup, free payroll software, offline payroll software India, EdgeFolio license key, payroll software India signup" />
   <meta name="author" content="IOTSoft" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://edgefolio.iotsoft.in/onboard" />
@@ -15,14 +15,14 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://edgefolio.iotsoft.in/onboard" />
   <meta property="og:site_name" content="EdgeFolio" />
-  <meta property="og:title" content="Start Your Free Trial — EdgeFolio Offline Payroll" />
-  <meta property="og:description" content="Get a free 180-day EdgeFolio trial license instantly. No credit card required." />
+  <meta property="og:title" content="Get Started Free — EdgeFolio Offline Payroll" />
+  <meta property="og:description" content="Get your free EdgeFolio license key instantly. No trial, no employee limit, no charges." />
   <meta property="og:image" content="https://edgefolio.iotsoft.in/og-image.png" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Start Your Free Trial — EdgeFolio Offline Payroll" />
-  <meta name="twitter:description" content="Get a free 180-day EdgeFolio trial license instantly. No credit card required." />
+  <meta name="twitter:title" content="Get Started Free — EdgeFolio Offline Payroll" />
+  <meta name="twitter:description" content="Get your free EdgeFolio license key instantly. No trial, no employee limit, no charges." />
   <meta name="twitter:image" content="https://edgefolio.iotsoft.in/og-image.png" />
 
   <!-- Favicon -->
@@ -316,7 +316,7 @@
   </a>
   <div class="nav-badge">
     <div class="pulse-dot"></div>
-    180-Day Free Trial
+    100% Free
   </div>
 </nav>
 
@@ -324,12 +324,13 @@
   <div class="container">
 
     <div class="page-header">
-      <span class="tag tag-cyan">✦ Free Trial</span>
-      <h1>Start your <span class="g-text">free 180-day</span> trial</h1>
-      <p>Fill in your details and get an instant license key — no credit card, no waiting for approval.</p>
+      <span class="tag tag-cyan">✦ Fully Free</span>
+      <h1>Get started with <span class="g-text">EdgeFolio, free</span></h1>
+      <p>Fill in your details and get an instant license key — no trial, no employee limit, no charges, ever.</p>
       <div class="trial-chips">
-        <span class="chip">✦ 180 days free</span>
-        <span class="chip">✦ Up to 25 employees</span>
+        <span class="chip">✦ Free forever</span>
+        <span class="chip">✦ Unlimited employees</span>
+        <span class="chip">✦ Any brand of device</span>
         <span class="chip">✦ Instant activation</span>
       </div>
     </div>
@@ -384,7 +385,7 @@
       <div class="error-banner" id="errorBanner"></div>
 
       <button type="submit" class="btn-primary" id="submitBtn">
-        ⬇&nbsp; Start Free Trial
+        ⬇&nbsp; Get My Free License Key
       </button>
       <p class="form-note">By continuing, you agree to our <a href="/terms" style="color:var(--blue2)">Terms</a> and <a href="/privacy" style="color:var(--blue2)">Privacy Policy</a>.</p>
     </form>
@@ -392,7 +393,7 @@
     <!-- ══════ SUCCESS SCREEN ══════ -->
     <div id="successScreen" class="card">
       <div class="success-icon">✓</div>
-      <div class="success-title">Your trial is ready!</div>
+      <div class="success-title">You're all set!</div>
       <div class="success-sub">Save your license key — you'll need it to activate EdgeFolio.</div>
 
       <div class="key-box">
@@ -405,12 +406,12 @@
 
       <div class="trial-meta">
         <div class="m">
-          <div class="v" id="maxEmployeesValue">—</div>
-          <div class="l">Max Employees</div>
+          <div class="v" style="color:var(--green2)">Unlimited</div>
+          <div class="l">Employees</div>
         </div>
         <div class="m">
-          <div class="v" id="expiresAtValue">—</div>
-          <div class="l">Trial Ends</div>
+          <div class="v" style="color:var(--green2)">Forever</div>
+          <div class="l">License Validity</div>
         </div>
       </div>
 
@@ -531,7 +532,7 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating your trial…';
+      submitBtn.textContent = 'Creating your license…';
 
       fetch('/api/onboard', {
         method: 'POST',
@@ -549,13 +550,10 @@
           if (res.status !== 201) {
             showError(res.body.error || 'Something went wrong. Please try again.');
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '⬇&nbsp; Start Free Trial';
+            submitBtn.innerHTML = '⬇&nbsp; Get My Free License Key';
             return;
           }
           document.getElementById('licenseKeyValue').textContent = res.body.licenseKey;
-          document.getElementById('maxEmployeesValue').textContent = res.body.maxEmployees;
-          var expDate = new Date(res.body.expiresAt);
-          document.getElementById('expiresAtValue').textContent = expDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
           form.style.display = 'none';
           successScreen.classList.add('show');
           successScreen.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -563,7 +561,7 @@
         .catch(function () {
           showError('Could not reach the server. Please check your connection and try again.');
           submitBtn.disabled = false;
-          submitBtn.innerHTML = '⬇&nbsp; Start Free Trial';
+          submitBtn.innerHTML = '⬇&nbsp; Get My Free License Key';
         });
     });
 

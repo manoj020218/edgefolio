@@ -73,10 +73,8 @@ const TrialTab = ({ onSuccess }) => {
     return (
       <div className="space-y-5">
         <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 text-center">
-          <p className="text-green-300 font-semibold mb-1">Trial activated!</p>
-          <p className="text-slate-400 text-xs">
-            Valid until {issued.expiresAt ? new Date(issued.expiresAt).toLocaleDateString('en-IN') : '180 days'}
-          </p>
+          <p className="text-green-300 font-semibold mb-1">You're activated!</p>
+          <p className="text-slate-400 text-xs">Free forever — no expiry, no employee limit.</p>
         </div>
 
         <div className="space-y-2">
@@ -158,10 +156,10 @@ const TrialTab = ({ onSuccess }) => {
       </div>
 
       <Button type="submit" isFullWidth isLoading={loading} icon={ArrowRight} iconPosition="right">
-        {loading ? 'Creating trial...' : 'Start 180-Day Free Trial'}
+        {loading ? 'Getting your license...' : 'Get Started — 100% Free'}
       </Button>
       <p className="text-slate-500 text-xs text-center">
-        No credit card required. 180 days, up to 25 employees.
+        Free forever. No credit card, no employee limit, no expiry.
       </p>
     </form>
   );
@@ -241,7 +239,7 @@ export const ActivationPage = ({ onActivated }) => {
     >
       {/* Tab switcher */}
       <div className="flex gap-2 bg-slate-900 rounded-lg p-1 mb-6">
-        <TabBtn id="trial"    activeTab={tab} onSelect={setTab} label="Start Free Trial" />
+        <TabBtn id="trial"    activeTab={tab} onSelect={setTab} label="Get Started Free" />
         <TabBtn id="activate" activeTab={tab} onSelect={setTab} label="Enter License Key" />
       </div>
 

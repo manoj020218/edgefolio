@@ -2256,19 +2256,23 @@ function LicenseTab() {
                   <span className="text-slate-200 text-sm">{info.plan.name}</span>
                 </FieldRow>
               )}
-              {info.plan?.maxEmployees && (
-                <FieldRow label="Employee Limit">
-                  <span className="text-slate-200 text-sm">{info.plan.maxEmployees} active employees</span>
-                </FieldRow>
-              )}
+              <FieldRow label="Employee Limit">
+                <span className="text-slate-200 text-sm">
+                  {info.plan?.maxEmployees ? `${info.plan.maxEmployees} active employees` : 'Unlimited'}
+                </span>
+              </FieldRow>
               {info.expiresAt && (
                 <FieldRow label="Expires">
                   <span className="text-slate-200 text-sm">
-                    {new Date(info.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    {info.daysLeft != null && (
-                      <span className={`ml-2 text-xs ${info.daysLeft <= 15 ? 'text-amber-400' : 'text-slate-500'}`}>
-                        ({info.daysLeft > 0 ? `${info.daysLeft} days left` : 'expired'})
-                      </span>
+                    {info.daysLeft != null && info.daysLeft > 3650 ? 'Never' : (
+                      <>
+                        {new Date(info.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        {info.daysLeft != null && (
+                          <span className={`ml-2 text-xs ${info.daysLeft <= 15 ? 'text-amber-400' : 'text-slate-500'}`}>
+                            ({info.daysLeft > 0 ? `${info.daysLeft} days left` : 'expired'})
+                          </span>
+                        )}
+                      </>
                     )}
                   </span>
                 </FieldRow>
