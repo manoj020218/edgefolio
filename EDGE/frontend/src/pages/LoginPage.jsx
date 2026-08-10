@@ -34,7 +34,7 @@ const CardShell = ({ title, subtitle, icon: Icon, children }) => (
       </div>
 
       <div className="mt-6 text-center text-sm text-slate-500">
-        <p>© 2026 EDGEFOLIO by Jenix. All rights reserved.</p>
+        <p>© 2026 EDGEFOLIO by IOTSoft. All rights reserved.</p>
       </div>
     </div>
   </div>

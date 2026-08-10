@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { CashbookPage } from './pages/CashbookPage'
 import { MainLayout } from './layouts/MainLayout'
 import { UpdateBanner } from './components/common/UpdateBanner'
+import { AnnouncementBanner } from './components/common/AnnouncementBanner'
 import { getLicenseStatus } from './services/api'
 
 // Boot order: license check → activation | (auth setup | login) | main app
@@ -107,6 +108,7 @@ function App() {
     return (
       <HashRouter>
         <UpdateBanner />
+        <AnnouncementBanner />
         <LoginPage onLoginSuccess={handleLoginSuccess} />
       </HashRouter>
     )
@@ -115,6 +117,7 @@ function App() {
   return (
     <HashRouter>
       <UpdateBanner />
+      <AnnouncementBanner />
       <MainLayout user={user} onLogout={handleLogout}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

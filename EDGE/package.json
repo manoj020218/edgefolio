@@ -4,6 +4,10 @@
   "description": "EDGEFOLIO — Offline-first Payroll & Attendance for Indian SMEs",
   "main": "electron/main.js",
   "private": true,
+  "author": {
+    "name": "IOTSoft",
+    "email": "iotsoft.in@gmail.com"
+  },
   "scripts": {
     "backend": "node backend/index.js",
     "init-db": "node scripts/init-database.js",
@@ -42,7 +46,7 @@
   "build": {
     "appId": "in.iotsoft.edgefolio",
     "productName": "EDGEFOLIO",
-    "copyright": "Copyright © 2026 Jenix",
+    "copyright": "Copyright © 2026 IOTSoft",
     "asar": true,
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*"

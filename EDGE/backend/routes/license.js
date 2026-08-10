@@ -7,9 +7,17 @@ const {
   signupTrial,
   heartbeat,
   getCachedMachineId,
+  getAnnouncement,
 } = require('../services/licenseService');
 
 const router = express.Router();
+
+// GET /license/announcement — public. Delivered via the daily license heartbeat; this is
+// the notification channel for "new version available" / urgent notices (the GitHub
+// Releases auto-updater is disabled — see electron/updater.js for why).
+router.get('/announcement', (_req, res) => {
+  return sendOk(res, { announcement: getAnnouncement() });
+});
 
 // GET /license/status — public (no auth required, called before login)
 router.get('/status', (_req, res) => {

@@ -52,6 +52,7 @@ export const getLicenseStatus  = ()       => http.get('/license/status')
 export const activateLicense   = (key)    => http.post('/license/activate', { licenseKey: key })
 export const signupTrial       = (form)   => http.post('/license/signup', form)
 export const refreshLicense    = ()       => http.post('/license/refresh')
+export const getAnnouncement   = ()       => http.get('/license/announcement')
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const login          = (email, password) => http.post('/auth/login', { email, password })

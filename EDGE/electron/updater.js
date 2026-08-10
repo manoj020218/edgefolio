@@ -13,9 +13,15 @@ function setupUpdater(win) {
   autoUpdater.autoDownload        = true   // download silently in background
   autoUpdater.autoInstallOnAppQuit = true   // install if user quits normally
 
-  // Check for updates silently on startup, then every 4 hours
-  try { autoUpdater.checkForUpdates() } catch { /* no-op */ }
-  setInterval(() => { try { autoUpdater.checkForUpdates() } catch { /* no-op */ } }, 4 * 60 * 60 * 1000)
+  // GitHub Releases checks are disabled: no release has ever actually been published to
+  // github.com/manoj020218/edgefolio/releases (confirmed empty), so electron-updater's
+  // GitHubProvider always fails to resolve a "latest" version and throws. Re-enable this
+  // once a real publish pipeline (electron-builder --publish, with latest.yml + installer
+  // assets attached to an actual non-prerelease GitHub Release) exists. Update
+  // notifications are handled instead by the license-heartbeat-driven announcement banner
+  // (see licenseService.js / AnnouncementBanner.jsx).
+  // try { autoUpdater.checkForUpdates() } catch { /* no-op */ }
+  // setInterval(() => { try { autoUpdater.checkForUpdates() } catch { /* no-op */ } }, 4 * 60 * 60 * 1000)
 
   // ── Events → renderer ────────────────────────────────────────────────────
 

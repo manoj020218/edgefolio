@@ -36,7 +36,12 @@ export function UpdateBanner() {
     api.onUpdateError((msg) => {
       // ENOENT = portable build has no app-update.yml — not a user-visible error
       if (typeof msg === 'string' && (msg.includes('ENOENT') || msg.includes('ERR_FILE_NOT_FOUND'))) return
-      setState({ type: 'error', message: msg })
+      // electron-updater sometimes embeds the entire failed HTTP response (headers,
+      // cookies, raw feed body) into err.message — never render that verbatim.
+      const friendly = typeof msg === 'string' && msg.length <= 150
+        ? msg
+        : 'Could not check for updates right now. Your app still works normally — this will retry automatically.'
+      setState({ type: 'error', message: friendly })
     })
 
     return () => {

@@ -10,6 +10,7 @@ const { LICENSE_PUBLIC_KEY } = require('../config/licensePublicKey');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const LICENSE_FILE   = path.join(STORAGE_BASE, 'license.json');
+const ANNOUNCEMENT_FILE = path.join(STORAGE_BASE, 'announcement.json');
 const MACHINE_ID_FILE = path.join(STORAGE_DIR, 'machine-id.txt');
 const API_BASE = process.env.EDGE_LICENSE_API || 'https://iotsoft.in/api/edgefolio';
 const APP_VERSION = require('../../package.json').version || '1.0.0';
@@ -143,6 +144,26 @@ function saveLicense(licenseJwt) {
   invalidateCache();
 }
 
+// Announcement delivered via the heartbeat response — not signed/verified like the
+// license (it's informational only, never gates anything), so a plain JSON cache is fine.
+function saveAnnouncement(announcement) {
+  fs.mkdirSync(STORAGE_BASE, { recursive: true });
+  if (announcement) {
+    fs.writeFileSync(ANNOUNCEMENT_FILE, JSON.stringify(announcement, null, 2));
+  } else if (fs.existsSync(ANNOUNCEMENT_FILE)) {
+    fs.unlinkSync(ANNOUNCEMENT_FILE);
+  }
+}
+
+function getAnnouncement() {
+  try {
+    if (!fs.existsSync(ANNOUNCEMENT_FILE)) return null;
+    return JSON.parse(fs.readFileSync(ANNOUNCEMENT_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 // ── Network helpers (never throw — always return { ok, ... } or { ok:false, error }) ──
 async function apiPost(path_, body) {
   try {
@@ -226,6 +247,11 @@ async function heartbeat() {
   if (result.ok && result.license) {
     saveLicense(result.license);
   }
+  // announcement is always present (object or explicit null) on a successful heartbeat —
+  // save it either way so a cleared announcement actually clears locally too.
+  if (result.ok && 'announcement' in result) {
+    saveAnnouncement(result.announcement);
+  }
 
   return result;
 }
@@ -249,4 +275,5 @@ module.exports = {
   getCachedMachineId,
   getActiveEmployeeCount,
   invalidateCache,
+  getAnnouncement,
 };
