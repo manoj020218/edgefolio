@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /downloads/
+Disallow: /download
+
+Sitemap: https://edgefolio.iotsoft.in/sitemap.xml
