@@ -2,5 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /downloads/
 Disallow: /download
+Disallow: /api/
 
 Sitemap: https://edgefolio.iotsoft.in/sitemap.xml
