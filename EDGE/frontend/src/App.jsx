@@ -16,15 +16,19 @@ import { AnnouncementBanner } from './components/common/AnnouncementBanner'
 import { getLicenseStatus } from './services/api'
 
 // Boot order: license check → activation | (auth setup | login) | main app
-// licenseState: 'checking' | 'unlicensed' | 'blocked' | 'ok'
+// licenseState: 'checking' | 'unlicensed' | 'blocked' | 'ok' | 'backend-unreachable'
 function App() {
   const [licenseState, setLicenseState] = useState('checking')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Step 1: Check license on boot (public endpoint, no token needed)
-  useEffect(() => {
+  // Step 1: Check license on boot (public endpoint, no token needed). The local backend
+  // starts before the window loads, but a transient hiccup (e.g. antivirus briefly
+  // locking freshly-written files right after install) can still make the very first
+  // request fail — retry a few times before concluding the backend is genuinely down,
+  // rather than silently falling through to a login screen that can't actually work.
+  const checkLicense = (attempt = 1) => {
     getLicenseStatus()
       .then((res) => {
         const state = res.data?.state
@@ -35,10 +39,14 @@ function App() {
         }
       })
       .catch(() => {
-        // Backend offline — allow login flow to continue; enforcement will re-check
-        setLicenseState('ok')
+        if (attempt < 5) {
+          setTimeout(() => checkLicense(attempt + 1), 1500)
+        } else {
+          setLicenseState('backend-unreachable')
+        }
       })
-  }, [])
+  }
+  useEffect(() => { checkLicense() }, [])
 
   // Step 2: Restore session from localStorage (runs in parallel with license check)
   useEffect(() => {
@@ -90,6 +98,28 @@ function App() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-slate-400 text-sm">Loading EDGEFOLIO...</div>
+      </div>
+    )
+  }
+
+  // Backend genuinely unreachable after retries — show a real error, not a broken login form
+  if (licenseState === 'backend-unreachable') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-bold text-slate-100 mb-2">Could not start EDGEFOLIO</h1>
+          <p className="text-slate-400 text-sm mb-6">
+            The local server didn't respond. This can happen if antivirus software is scanning
+            the app right after install — please try closing and reopening EDGEFOLIO. If this
+            keeps happening, contact support on WhatsApp: +91 72402 26566.
+          </p>
+          <button
+            onClick={() => { setLicenseState('checking'); checkLicense() }}
+            className="px-4 py-2 bg-sky-500 text-white rounded-lg text-sm font-medium hover:bg-sky-600"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     )
   }

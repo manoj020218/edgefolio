@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { LOG_DIR } = require('../config/app');
 
 function ensureLogDir() {

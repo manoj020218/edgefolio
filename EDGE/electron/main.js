@@ -45,6 +45,7 @@ function startBackend() {
       })
     } catch (err) {
       console.error('[EDGEFOLIO] Could not start backend:', err.message)
+      console.error(err.stack)
       resolve()
     }
   })
