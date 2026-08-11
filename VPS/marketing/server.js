@@ -106,13 +106,13 @@ app.post('/api/onboard/google-verify', async (req, res) => {
 // Serve downloads directory
 app.use('/downloads', express.static(path.join(__dirname, 'downloads')))
 
-// Download route — serves the local installer if uploaded, else redirects to GitHub Releases
+// Download route — serves the installer
 app.get('/download', (_req, res) => {
   const exePath = path.join(__dirname, 'downloads', 'EdgeFolio-Setup.exe')
   if (fs.existsSync(exePath)) {
     res.download(exePath, 'EdgeFolio-Setup.exe')
   } else {
-    res.redirect(302, 'https://github.com/manoj020218/edgefolio/releases')
+    res.status(503).send('Download temporarily unavailable. Please contact support on WhatsApp: +91 72402 26566')
   }
 })
 
@@ -122,7 +122,7 @@ app.get('/download/portable', (_req, res) => {
   if (fs.existsSync(exePath)) {
     res.download(exePath, 'EdgeFolio-Portable.exe')
   } else {
-    res.redirect(302, 'https://github.com/manoj020218/edgefolio/releases')
+    res.status(503).send('Download temporarily unavailable. Please contact support on WhatsApp: +91 72402 26566')
   }
 })
 
