@@ -1,0 +1,844 @@
+# Jenix FieldForce — Backend First
+
+You are working on a production-grade employee field-management system.
+
+## Technology
+
+* Backend: Node.js + TypeScript
+* Database: MongoDB + Mongoose
+* Future frontend: React + TypeScript + Capacitor
+* Future Android native functionality: small reusable Kotlin Capacitor plugins
+* Existing native video-call plugin already exists — DO NOT recreate it.
+* Every source file MUST remain under 200 lines.
+* Prefer small focused modules over large files.
+* Do not over-engineer.
+* Do not redesign unrelated existing code.
+
+## IMPORTANT EXECUTION RULE
+
+Your current objective is **BACKEND ONLY**.
+
+Do NOT start:
+
+* React UI
+* frontend design
+* Kotlin implementation
+* Capacitor plugin implementation
+* WebRTC/video plugin
+* Android native code
+
+You may define backend API contracts needed by those future components.
+
+Complete the backend before moving to any frontend work.
+
+---
+
+# Product Objective
+
+Company provides Android phones to sales employees.
+
+The system must eventually support:
+
+1. Employee login
+2. Company/admin hierarchy
+3. RBAC
+4. Employee/device assignment
+5. employee attendance
+6. live/background location ingestion
+7. route history
+8. stop detection support
+9. customer visits
+10. employee SIM call metadata
+11. incoming/outgoing/missed calls
+12. call start/end/duration
+13. call-recording metadata/file association when supported by device
+14. employee/device heartbeat
+15. battery status
+16. GPS enabled/disabled status
+17. network status
+18. app/device version
+19. offline data synchronization
+20. admin-to-employee and employee-to-admin video-call signalling metadata
+21. FCM push-token registration
+22. managed-device state
+23. audit logs
+
+Do not implement actual cellular audio recording in the backend.
+
+Backend only stores recording metadata/file references received from supported devices.
+
+---
+
+# Multi-Tenant Structure
+
+System must support multiple companies.
+
+Hierarchy:
+
+SUPER_ADMIN
+? COMPANY_ADMIN
+? REGIONAL_MANAGER
+? SALES_MANAGER
+? TEAM_LEADER
+? EMPLOYEE
+
+Every business record must be scoped to `companyId`.
+
+Users from one company must never access another company's records.
+
+Implement centralized authorization middleware.
+
+Do not duplicate RBAC logic inside controllers.
+
+---
+
+# Backend Modules
+
+Create small modules for:
+
+```text
+auth
+companies
+users
+employees
+devices
+attendance
+locations
+visits
+calls
+device-health
+notifications
+video-signalling
+audit
+```
+
+Use clean folders such as:
+
+```text
+src/modules/<module>/
+  model.ts
+  service.ts
+  controller.ts
+  routes.ts
+  validation.ts
+```
+
+Only create files actually required.
+
+Keep every file under 200 lines.
+
+---
+
+# 1. Authentication
+
+Implement:
+
+* login
+* access token
+* refresh token
+* logout
+* password hashing
+* active/disabled user status
+
+Use secure JWT handling.
+
+Do not store plain passwords.
+
+---
+
+# 2. Company + Users
+
+Company fields should include approximately:
+
+```text
+name
+code
+status
+timezone
+createdAt
+updatedAt
+```
+
+User:
+
+```text
+companyId
+name
+mobile
+email
+passwordHash
+role
+managerId
+status
+createdAt
+updatedAt
+```
+
+`managerId` allows reporting hierarchy.
+
+Validate company isolation.
+
+---
+
+# 3. Employee
+
+Employee profile:
+
+```text
+userId
+companyId
+employeeCode
+designation
+department
+managerId
+joiningDate
+status
+```
+
+Do not duplicate authentication information unnecessarily.
+
+---
+
+# 4. Device Management
+
+One company phone can be assigned to an employee.
+
+Store:
+
+```text
+deviceId
+companyId
+employeeId
+platform
+manufacturer
+model
+androidVersion
+appVersion
+deviceName
+fcmToken
+lastSeenAt
+status
+managed
+createdAt
+updatedAt
+```
+
+Provide APIs for:
+
+* register device
+* assign device
+* unassign device
+* update FCM token
+* get device status
+
+---
+
+# 5. Location Ingestion
+
+Future Kotlin Capacitor plugin will send location batches.
+
+Design backend for batch ingestion.
+
+Example payload:
+
+```json
+{
+  "deviceId": "abc123",
+  "points": [
+    {
+      "timestamp": "ISO_DATE",
+      "latitude": 26.9,
+      "longitude": 75.8,
+      "accuracy": 12,
+      "speed": 4.2,
+      "heading": 120,
+      "battery": 72,
+      "mockLocation": false
+    }
+  ]
+}
+```
+
+Requirements:
+
+* authenticate device/user
+* validate coordinates
+* validate timestamps
+* reject absurd/future timestamps
+* support offline batch upload
+* prevent accidental duplicates
+* efficient MongoDB bulk insert
+* index by companyId + employeeId + timestamp
+
+Location records must NOT be embedded inside employee documents.
+
+Use a separate collection suitable for high-volume history.
+
+Provide APIs for:
+
+* batch ingest
+* employee latest location
+* employee route between start/end timestamps
+* company latest employee locations
+
+Do not calculate complex route analytics yet.
+
+---
+
+# 6. Attendance
+
+Support:
+
+```text
+check-in
+check-out
+timestamp
+location
+deviceId
+notes
+```
+
+Prevent multiple open attendance sessions for the same employee.
+
+Provide:
+
+* check-in
+* check-out
+* today's attendance
+* employee attendance history
+
+---
+
+# 7. Customer Visits
+
+Store:
+
+```text
+companyId
+employeeId
+customerName
+customerId optional
+checkInAt
+checkOutAt
+location
+notes
+status
+```
+
+Photo/file support may be represented by file metadata only.
+
+Do not build customer CRM yet.
+
+---
+
+# 8. Call Metadata
+
+Future `@jenix/dialer` Kotlin Capacitor plugin will send call events.
+
+Store:
+
+```text
+companyId
+employeeId
+deviceId
+externalCallId
+phoneNumber
+direction
+status
+startedAt
+answeredAt
+endedAt
+durationSeconds
+contactName optional
+location optional
+recordingId optional
+```
+
+Direction:
+
+```text
+incoming
+outgoing
+```
+
+Status:
+
+```text
+answered
+missed
+rejected
+cancelled
+failed
+```
+
+Support idempotent upsert using `externalCallId`.
+
+Provide APIs for:
+
+* ingest/update call
+* employee call history
+* date-filtered call history
+* simple daily call summary
+
+Daily summary:
+
+```text
+incoming count
+outgoing count
+missed count
+answered count
+total talk time
+```
+
+Do NOT attempt Android call recording here.
+
+---
+
+# 9. Recording Metadata
+
+Only metadata.
+
+Store:
+
+```text
+recordingId
+companyId
+employeeId
+callId
+storageKey
+mimeType
+size
+duration
+createdAt
+```
+
+Actual storage integration can use an abstraction.
+
+Create interface such as:
+
+```text
+StorageProvider
+```
+
+Do not tightly couple business logic to one cloud provider.
+
+For first backend version, metadata implementation is sufficient.
+
+---
+
+# 10. Device Health
+
+Future Kotlin plugins will periodically send heartbeat.
+
+Payload may contain:
+
+```text
+deviceId
+timestamp
+batteryPercent
+charging
+gpsEnabled
+networkType
+internetAvailable
+appVersion
+androidVersion
+trackingServiceRunning
+lastLocationAt
+```
+
+Store current device health efficiently.
+
+Do NOT create one permanent MongoDB record every few seconds.
+
+Maintain current/latest state.
+
+Optional historical events should only be created for meaningful status changes.
+
+Provide:
+
+* heartbeat endpoint
+* employee/device current health
+* offline determination from `lastSeenAt`
+
+---
+
+# 11. FCM / Notification Backend
+
+Create notification abstraction for future FCM use.
+
+Support server-side command/event types such as:
+
+```text
+VIDEO_CALL
+SYNC_NOW
+CONFIG_UPDATED
+ADMIN_MESSAGE
+DEVICE_STATUS_REQUEST
+```
+
+Do not implement dangerous silent surveillance commands.
+
+Do not build frontend notification UI.
+
+---
+
+# 12. Video Signalling Metadata
+
+Existing native video plugin will be used later.
+
+Backend only needs minimal signalling/session support.
+
+Store session:
+
+```text
+sessionId
+companyId
+callerUserId
+calleeUserId
+createdAt
+answeredAt
+endedAt
+status
+```
+
+Do not implement another video SDK.
+
+Do not implement video recording.
+
+---
+
+# 13. Audit Logging
+
+Audit important admin actions:
+
+```text
+login
+employee create/update
+device assignment
+role change
+device management action
+record access where appropriate
+```
+
+Store:
+
+```text
+companyId
+actorUserId
+action
+entityType
+entityId
+metadata
+timestamp
+```
+
+Avoid logging passwords, tokens or sensitive secrets.
+
+---
+
+# API Design
+
+Use versioned APIs:
+
+```text
+/api/v1/...
+```
+
+Use consistent JSON:
+
+Success:
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+Error:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Readable message"
+  }
+}
+```
+
+Centralize error handling.
+
+Do not scatter response formatting throughout the project.
+
+---
+
+# Validation
+
+Use one validation library consistently.
+
+Validate:
+
+* Mongo IDs
+* roles
+* phone numbers where applicable
+* coordinates
+* dates
+* pagination
+* batch sizes
+
+Set safe maximum batch limits.
+
+Do not accept unlimited arrays.
+
+---
+
+# Security
+
+Implement:
+
+* authentication middleware
+* RBAC middleware
+* company isolation
+* request validation
+* rate limiting for auth endpoints
+* secure HTTP headers
+* controlled CORS
+* password hashing
+* refresh-token security
+* no secrets committed
+* `.env.example`
+
+Device ingestion endpoints must not trust `companyId` or `employeeId` supplied by the phone when these can be derived securely from authentication/device assignment.
+
+---
+
+# Database Indexes
+
+Add useful indexes intentionally.
+
+At minimum consider:
+
+```text
+users: companyId + mobile/email
+employees: companyId + employeeCode
+devices: deviceId unique
+locations: companyId + employeeId + timestamp
+calls: companyId + employeeId + startedAt
+calls: deviceId + externalCallId unique/idempotent
+attendance: companyId + employeeId + checkInAt
+visits: companyId + employeeId + checkInAt
+audit: companyId + timestamp
+```
+
+Do not create unnecessary indexes.
+
+---
+
+# Tests
+
+Write focused tests for important backend behavior.
+
+At minimum test:
+
+1. authentication
+2. tenant isolation
+3. RBAC
+4. location batch ingestion
+5. duplicate location handling
+6. attendance open-session protection
+7. call idempotent upsert
+8. device heartbeat
+9. device assignment
+10. unauthorized cross-company access
+
+Do not chase 100% coverage.
+
+Test critical behavior.
+
+---
+
+# Documentation
+
+Create concise:
+
+```text
+README.md
+BACKEND_HANDOFF.md
+```
+
+README:
+
+* setup
+* environment variables
+* run
+* test
+* API overview
+
+BACKEND_HANDOFF.md:
+
+* completed modules
+* unfinished items
+* architecture decisions
+* migrations/indexes
+* important commands
+* known issues
+* next exact development step
+
+Keep documentation concise.
+
+---
+
+# CODEX WORKING RULES
+
+These rules are mandatory.
+
+### 1. Finish instead of expanding scope
+
+Do not continuously add architecture.
+
+Do not create speculative modules.
+
+Do not start frontend.
+
+Do not start Kotlin plugins.
+
+Finish the backend described above.
+
+### 2. Inspect before rewriting
+
+If repository already contains:
+
+* auth
+* RBAC
+* Mongo connection
+* common API utilities
+* existing Jenix platform components
+
+reuse them where sensible.
+
+Do not duplicate working infrastructure.
+
+### 3. File-size rule
+
+Every handwritten source file:
+
+**maximum 200 lines.**
+
+If approaching the limit, split by responsibility.
+
+Do not minify code to bypass the limit.
+
+### 4. Keep responses token-efficient
+
+Do not repeatedly explain code you just wrote.
+
+Use short progress summaries.
+
+Do not paste entire files into chat unless necessary.
+
+Work directly in repository.
+
+### 5. Never stop merely with recommendations
+
+When a clear next implementation step exists, implement it.
+
+Do not end a session with:
+
+> "Next we could implement..."
+
+if that work belongs to the current backend objective.
+
+Continue until backend requirements are completed or a genuine external blocker exists.
+
+### 6. Do not wait for user confirmation between normal steps
+
+Proceed autonomously through the backend work.
+
+Ask only if a missing external credential or destructive ambiguity genuinely blocks progress.
+
+### 7. Validate continuously
+
+After each module/group:
+
+```text
+typecheck
+lint
+relevant tests
+```
+
+Fix failures before moving forward.
+
+### 8. Preserve handoff
+
+Before ending any session update:
+
+```text
+BACKEND_HANDOFF.md
+```
+
+with exact current status.
+
+---
+
+# IMPLEMENTATION ORDER
+
+Follow this order.
+
+```text
+1. Inspect existing repository
+2. Backend foundation/config
+3. Mongo connection
+4. Auth
+5. RBAC + tenant isolation
+6. Companies/users/employees
+7. Devices
+8. Locations
+9. Attendance
+10. Visits
+11. Calls
+12. Recording metadata
+13. Device health
+14. Notifications abstraction
+15. Video session metadata
+16. Audit logging
+17. Tests
+18. README
+19. BACKEND_HANDOFF.md
+20. Full backend validation
+```
+
+Do not change this into a frontend task.
+
+---
+
+# Definition of DONE
+
+Backend phase is complete only when:
+
+* backend starts successfully
+* MongoDB integration works
+* auth works
+* RBAC works
+* tenant/company isolation works
+* device registration/assignment works
+* location batch ingestion works
+* route/latest-location APIs work
+* attendance works
+* visits work
+* call metadata ingestion/history works
+* device health/heartbeat works
+* recording metadata model/API exists
+* notification abstraction exists
+* video session metadata exists
+* audit logging exists
+* critical tests pass
+* no handwritten source file exceeds 200 lines
+* README is updated
+* BACKEND_HANDOFF.md accurately describes final backend state
+
+When this definition is satisfied, STOP.
+
+Do **not** begin frontend automatically.
+
+The next phase will be given separately.

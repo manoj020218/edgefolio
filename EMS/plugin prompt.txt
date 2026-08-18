@@ -1,0 +1,819 @@
+# Jenix FieldForce — Kotlin Capacitor Plugin Phase
+
+The backend phase is COMPLETE.
+
+Your job now is ONLY to build the reusable Android native layer as small Kotlin Capacitor plugins.
+
+## Hard Scope
+
+DO:
+
+* Kotlin native Android
+* reusable Capacitor plugins
+* TypeScript plugin interfaces
+* native background services/workers/receivers
+* plugin tests
+* plugin documentation
+* integration contracts with the existing backend
+
+DO NOT:
+
+* build React UI
+* redesign frontend
+* rewrite backend
+* recreate video calling
+* implement cellular call-audio recording
+* add unrelated features
+
+An existing native video-call plugin already exists. Reuse/integrate with its events later; DO NOT replace it.
+
+---
+
+# First Step — Inspect, Don't Invent
+
+Before writing code:
+
+1. Inspect repository structure.
+2. Read `BACKEND_HANDOFF.md`.
+3. Inspect existing backend routes/types.
+4. Inspect existing Capacitor version.
+5. Inspect existing Android target/min SDK.
+6. Inspect existing video-call plugin.
+7. Reuse existing conventions.
+
+Do NOT upgrade Capacitor, Gradle, AGP, Kotlin, Firebase or Android SDK unless actually required.
+
+Use the current project's compatible versions.
+
+Do not modify backend API contracts merely to make plugin implementation easier.
+
+---
+
+# Architecture
+
+Create small reusable packages, not one giant plugin:
+
+```text
+@jenix/cap-core
+@jenix/cap-location
+@jenix/cap-device-health
+@jenix/cap-lifecycle
+@jenix/cap-push
+@jenix/cap-dialer
+@jenix/cap-device-policy
+```
+
+Each must be independently testable.
+
+All common functionality should live in `cap-core`, not be copied between plugins.
+
+Dependency direction:
+
+```text
+cap-core
+   ?
+   +-- cap-location
+   +-- cap-device-health
+   +-- cap-lifecycle
+   +-- cap-push
+   +-- cap-dialer
+   +-- cap-device-policy
+```
+
+No circular dependencies.
+
+---
+
+# Mandatory Coding Rules
+
+Every handwritten source file MUST remain under 200 lines.
+
+Do not bypass this by minifying code.
+
+Split by responsibility.
+
+Generated files and package lockfiles are exempt.
+
+Prefer:
+
+* Kotlin
+* coroutines where appropriate
+* AndroidX
+* WorkManager where appropriate
+* Room/DataStore only where justified
+* official Android APIs
+* Capacitor standard plugin APIs
+
+Avoid unnecessary dependencies.
+
+No hidden/private Android APIs.
+
+No accessibility-service hacks.
+
+No battery-optimization bypass hacks.
+
+No root requirement.
+
+---
+
+# 1. `@jenix/cap-core`
+
+Build this FIRST.
+
+Purpose: common native infrastructure.
+
+Responsibilities:
+
+```text
+plugin configuration
+backend base URL
+secure auth/device credentials
+device ID
+common HTTP client
+JSON serialization
+common error format
+network availability
+native logging
+queued-event abstraction
+shared plugin state
+```
+
+Expose minimal TypeScript API such as:
+
+```ts
+configure(...)
+getDeviceId()
+getNativeStatus()
+clearSession()
+```
+
+Never log:
+
+```text
+password
+access token
+refresh token
+FCM secret
+recording data
+```
+
+Use existing backend authentication exactly as implemented.
+
+If backend authentication cannot safely support native background requests, do NOT redesign backend automatically.
+
+Queue data locally and document the exact limitation in handoff.
+
+Completion gate:
+
+```text
+build
+lint/typecheck
+unit tests
+Capacitor plugin sync validation
+```
+
+Finish/fix before starting next plugin.
+
+---
+
+# 2. `@jenix/cap-device-health`
+
+Responsibilities:
+
+```text
+battery percentage
+charging state
+GPS enabled state
+network type
+internet availability
+Android version
+manufacturer
+model
+app version
+device identifier
+last heartbeat
+```
+
+Expose approximately:
+
+```ts
+getStatus()
+startHeartbeat()
+stopHeartbeat()
+sendHeartbeatNow()
+```
+
+Use the backend's existing device-health endpoint.
+
+Heartbeat must not depend on the React WebView remaining alive.
+
+Avoid excessive background wakeups.
+
+Use the backend's existing heartbeat interval/config if available.
+
+Emit status-change events to Capacitor when the app is active.
+
+Test backend payload serialization.
+
+Complete and validate before next plugin.
+
+---
+
+# 3. `@jenix/cap-location`
+
+This is the most important plugin.
+
+Responsibilities:
+
+```text
+foreground location tracking
+background location
+configurable tracking interval
+accuracy
+speed
+heading
+timestamp
+mock-location indication when available
+local offline queue
+batch upload
+retry after network recovery
+latest location
+tracking status
+```
+
+Expose approximately:
+
+```ts
+startTracking(options)
+stopTracking()
+getCurrentLocation()
+getTrackingStatus()
+getPendingCount()
+syncNow()
+```
+
+The React WebView MUST NOT need to remain alive for tracking.
+
+Architecture:
+
+```text
+React
+   ? once
+startTracking()
+   ?
+Kotlin Location Foreground Service
+   ?
+Location Provider
+   ?
+Local Queue
+   ?
+Backend batch endpoint
+```
+
+Use the backend's completed location batch contract exactly.
+
+Validate:
+
+```text
+latitude
+longitude
+timestamp
+accuracy
+batch size
+```
+
+Do not embed location history inside preferences.
+
+Use durable local storage suitable for queued points.
+
+Prevent duplicate upload where practical.
+
+Respect Android foreground-service and location permission rules for the project's target SDK.
+
+Use the proper `location` foreground-service type.
+
+Do not attempt to hide the required foreground-service notification.
+
+Do NOT implement artificial anti-user techniques to prevent Android stopping the service.
+
+Provide clear status/error codes instead.
+
+---
+
+# 4. `@jenix/cap-lifecycle`
+
+Keep this plugin SMALL.
+
+Responsibilities:
+
+```text
+BOOT_COMPLETED handling
+MY_PACKAGE_REPLACED handling
+app update recovery
+network restored signal
+native service recovery coordination
+```
+
+Expose:
+
+```ts
+getLastBootState()
+getRecoveryStatus()
+```
+
+Do not duplicate the actual location service.
+
+`cap-location` owns location.
+
+`cap-device-health` owns heartbeat.
+
+`cap-lifecycle` only coordinates recovery.
+
+Important:
+
+Modern Android has restrictions on launching foreground services from background/boot receivers.
+
+Follow the current target SDK rules.
+
+Where direct service start is prohibited, use the Android-supported recovery mechanism such as WorkManager instead of hacks.
+
+Never create reboot loops.
+
+---
+
+# 5. `@jenix/cap-push`
+
+Use existing Firebase/FCM infrastructure if already present.
+
+Do not install a second conflicting Firebase messaging implementation.
+
+Responsibilities:
+
+```text
+FCM token
+token refresh
+background message reception
+native notification handling
+command routing
+Capacitor events
+```
+
+Support backend command types already implemented, including:
+
+```text
+VIDEO_CALL
+SYNC_NOW
+CONFIG_UPDATED
+ADMIN_MESSAGE
+DEVICE_STATUS_REQUEST
+```
+
+Behavior examples:
+
+```text
+SYNC_NOW
+? trigger pending native sync
+
+DEVICE_STATUS_REQUEST
+? trigger device-health heartbeat
+
+CONFIG_UPDATED
+? notify appropriate native plugin
+
+VIDEO_CALL
+? forward to existing video-call integration
+```
+
+DO NOT implement video calling here.
+
+DO NOT silently enable camera or microphone.
+
+Expose:
+
+```ts
+getToken()
+refreshRegistration()
+getPushStatus()
+```
+
+and meaningful Capacitor events.
+
+---
+
+# 6. `@jenix/cap-dialer`
+
+Implement only Android-supported telephony functionality.
+
+Responsibilities:
+
+```text
+check default dialer role
+request default dialer role
+initiate normal phone call
+native call-state handling
+InCallService integration where required
+incoming/outgoing metadata
+answered/missed/rejected/failed state
+start/end/duration
+call-log synchronization where permitted
+dual-SIM metadata when Android exposes it reliably
+offline event queue
+backend call upsert
+```
+
+Expose approximately:
+
+```ts
+isDefaultDialer()
+requestDefaultDialer()
+dial(number)
+getCallState()
+getRecentCalls(options)
+syncCalls()
+```
+
+Use:
+
+```text
+RoleManager
+ROLE_DIALER
+Telecom APIs
+InCallService
+CallLog APIs
+```
+
+where appropriate for the project's Android versions.
+
+Do not use deprecated/private APIs when supported modern alternatives exist.
+
+Generate/use an `externalCallId` compatible with backend idempotent upsert.
+
+### Critical restriction
+
+DO NOT implement cellular call-audio recording.
+
+DO NOT:
+
+* use microphone hacks
+* use speakerphone recording tricks
+* use accessibility
+* use MediaProjection tricks
+* use root
+* use hidden APIs
+
+This plugin handles **call metadata**, not guaranteed SIM call audio.
+
+The future frontend will provide the actual dialer/in-call UX.
+
+Implement the native service/bridge required for that later UI.
+
+---
+
+# 7. `@jenix/cap-device-policy`
+
+Keep management logic isolated.
+
+Responsibilities:
+
+```text
+detect managed-device state
+isDeviceOwner
+isProfileOwner
+policy capability status
+app-management status
+expose supported DevicePolicyManager operations
+```
+
+Expose approximately:
+
+```ts
+getManagementStatus()
+getCapabilities()
+isDeviceOwner()
+isProfileOwner()
+```
+
+Only execute DevicePolicyManager actions when Android confirms the application has the required management authority.
+
+Do not fake Device Owner status.
+
+Do not attempt privilege escalation.
+
+Do not implement an "admin password inside APK" uninstall mechanism.
+
+If deployment uses Android Management API / Android Device Policy, do not duplicate server-managed enterprise policies in this plugin.
+
+This plugin should report/integrate with the management model actually present in the repository.
+
+If the app itself is legitimately configured as DPC/device owner, isolate those capabilities clearly.
+
+---
+
+# Cross-Plugin Rules
+
+One native responsibility must have ONE owner.
+
+Examples:
+
+```text
+LocationForegroundService
+? cap-location only
+
+InCallService
+? cap-dialer only
+
+FirebaseMessagingService
+? cap-push only
+
+Heartbeat
+? cap-device-health only
+```
+
+Other plugins communicate through small interfaces/shared core state.
+
+Never create competing services for the same responsibility.
+
+---
+
+# Native Background Sync
+
+Where backend synchronization must continue without React:
+
+```text
+Native event
+   ?
+durable local queue
+   ?
+native uploader/worker
+   ?
+existing backend API
+   ?
+success
+   ?
+remove queued record
+```
+
+Use bounded retry/backoff.
+
+Never create an infinite aggressive retry loop.
+
+Do not lose queued data merely because:
+
+```text
+WebView closes
+app UI is swiped away
+network disappears
+phone restarts
+```
+
+within what Android legitimately permits.
+
+---
+
+# TypeScript Contract
+
+Each plugin must have a small typed public API.
+
+No React components.
+
+Example pattern:
+
+```ts
+export interface JenixLocationPlugin {
+  startTracking(options: TrackingOptions): Promise<void>;
+  stopTracking(): Promise<void>;
+  getTrackingStatus(): Promise<TrackingStatus>;
+  syncNow(): Promise<SyncResult>;
+}
+```
+
+Keep native implementation details out of React.
+
+Use consistent errors such as:
+
+```text
+PERMISSION_DENIED
+NOT_CONFIGURED
+NOT_SUPPORTED
+ROLE_REQUIRED
+SERVICE_NOT_RUNNING
+NETWORK_UNAVAILABLE
+BACKEND_REJECTED
+```
+
+---
+
+# Permission Handling
+
+Each plugin must clearly expose:
+
+```text
+required permissions
+current permission state
+requestable permissions
+unsupported/denied state
+```
+
+Never assume a permission was granted.
+
+Do not repeatedly spam permission dialogs.
+
+The future React frontend will control explanatory UX.
+
+---
+
+# Testing
+
+Do not chase 100% coverage.
+
+Test important logic.
+
+At minimum cover:
+
+```text
+plugin API contract
+configuration
+payload serialization
+location queue
+duplicate/retry behavior
+heartbeat generation
+lifecycle recovery decision
+FCM command routing
+dialer state mapping
+call backend upsert payload
+management capability detection
+```
+
+Where emulator/unit testing cannot validate a real Android behavior, create a concise manual device test entry instead of fabricating a passing automated test.
+
+---
+
+# Device Test Harness
+
+A minimal plugin test/example app is allowed ONLY for native validation.
+
+It must not become the FieldForce frontend.
+
+It may contain simple developer buttons/status such as:
+
+```text
+Configure
+Start GPS
+Stop GPS
+Send Heartbeat
+Show Queue
+Request Dialer Role
+Test Call State
+Show Device Management Status
+```
+
+No production UI design.
+
+---
+
+# Completion Order
+
+STRICTLY follow:
+
+```text
+1. inspect repository/backend handoff
+2. cap-core
+3. cap-device-health
+4. cap-location
+5. cap-lifecycle
+6. cap-push
+7. cap-dialer
+8. cap-device-policy
+9. cross-plugin integration validation
+10. physical-device test checklist
+11. documentation
+12. final full build/test
+```
+
+Do not work on multiple unfinished plugins simultaneously.
+
+For EACH plugin:
+
+```text
+implement
+? compile
+? test
+? fix
+? document
+? mark complete
+? next plugin
+```
+
+---
+
+# Token-Efficiency Rules
+
+Work directly in files.
+
+Do not paste large code files into chat.
+
+Do not repeatedly explain completed work.
+
+Progress response should normally be only:
+
+```text
+Completed:
+Testing:
+Next:
+Blocker:
+```
+
+Omit `Blocker` when none exists.
+
+Do not generate long architecture essays.
+
+Do not repeatedly summarize requirements.
+
+Do not ask for confirmation between plugins.
+
+If a normal implementation decision is needed, make the smallest sensible production-grade decision and continue.
+
+---
+
+# File Limit
+
+At the end run an automated check proving that no handwritten source file exceeds:
+
+```text
+200 lines
+```
+
+Split any violation properly.
+
+Do not compress formatting to cheat the rule.
+
+---
+
+# Handoff
+
+Maintain:
+
+```text
+NATIVE_PLUGINS_HANDOFF.md
+```
+
+Update it after each completed plugin.
+
+Keep it concise.
+
+Record:
+
+```text
+plugin
+status
+public API
+native services/receivers/workers
+permissions
+backend endpoints used
+tests
+manual-device tests
+known limitations
+next exact step
+```
+
+Do not rewrite the whole handoff every time if only one section changed.
+
+---
+
+# Definition of DONE
+
+Native plugin phase is DONE only when:
+
+```text
+all seven packages compile
+Capacitor recognizes all plugins
+TypeScript APIs compile
+backend contracts match existing backend
+background location is implemented
+offline location queue works
+heartbeat works
+lifecycle recovery is implemented
+FCM command routing works
+dialer role/call metadata bridge is implemented
+device-policy capability bridge works
+existing video plugin remains untouched
+critical tests pass
+no handwritten source file >200 lines
+handoff is current
+```
+
+Run the final project/plugin builds and tests.
+
+Fix failures.
+
+When DONE:
+
+STOP.
+
+Do NOT begin React frontend.
+
+Do NOT redesign UI.
+
+Do NOT add more features.
+
+The next prompt will cover frontend integration and UI/UX.
