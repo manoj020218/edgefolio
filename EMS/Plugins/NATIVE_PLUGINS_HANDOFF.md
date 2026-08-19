@@ -1,6 +1,21 @@
 # Native Plugins Handoff
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
+
+## 2026-08-19 Checkpoint
+
+- git checkpoint already pushed: `5bb513c` on `origin/master`
+- validated locally:
+  - `cap-core` config helper assertions passed
+  - `cap-location` option-normalization assertions passed
+  - physical Android device visible to `adb`: `2251eb032a78`
+- attempted but still blocked:
+  - workspace `npm run build` stops immediately because `rimraf` is not available in `Plugins/node_modules/.bin`
+  - workspace `npm install` in `EMS/Plugins` did not complete during the session, so `@capacitor/core`, `@capacitor/android`, `vitest`, and other workspace binaries are still not fully available there
+  - full workspace `npm run build`, `npm run test`, and `npm run check:lines` are not yet complete
+  - actual Capacitor host app / Android wrapper project was not found in this repository, so plugin wiring and real end-to-end device tests have not started yet
+- important note for continuation:
+  - commit and push after each successful validation step to avoid losing progress if the session crashes
 
 ## cap-core
 
@@ -81,7 +96,8 @@ Last updated: 2026-08-18
 
 ## Next Exact Step
 
-1. Install workspace dependencies in `EMS/Plugins`.
-2. Run `npm run build`, `npm run test`, and `npm run check:lines`.
-3. Wire the packages into the actual Capacitor Android host app.
-4. Validate the physical-device scenarios listed above.
+1. Finish installing workspace dependencies in `EMS/Plugins` until `node_modules/.bin/rimraf` exists and the Capacitor packages are available there.
+2. Run `npm run build`, `npm run test`, and `npm run check:lines` inside `EMS/Plugins`.
+3. Locate the real Capacitor Android host app / wrapper project path and wire these plugin packages into it.
+4. Use the connected device `2251eb032a78` to validate the physical-device scenarios listed above.
+5. Commit and push after each successful test or fix checkpoint.
