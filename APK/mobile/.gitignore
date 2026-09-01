@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.local
+*.tsbuildinfo
+capacitor.config.js
+capacitor.config.d.ts
+vite.config.js
+vite.config.d.ts
+
+# android/ is intentionally NOT ignored — Capacitor native platform folders are
+# meant to be committed (they carry manual customization: permissions, Firebase
+# config, plugin registration). Generated later via `npx cap add android`.

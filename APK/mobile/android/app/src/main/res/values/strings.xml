@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EdgeFolio</string>
+    <string name="title_activity_main">EdgeFolio</string>
+    <string name="package_name">in.iotsoft.edgefolio</string>
+    <string name="custom_url_scheme">in.iotsoft.edgefolio</string>
+</resources>

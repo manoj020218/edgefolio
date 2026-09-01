@@ -1,6 +1,34 @@
 # Native Plugins Handoff
 
-Last updated: 2026-08-19
+Last updated: 2026-09-01
+
+## 2026-09-01 Checkpoint
+
+- Previously-blocked steps are **unblocked** — this was an environment/registry-access
+  issue that session, not a real problem with the code:
+  - `npm install` in `EMS/Plugins` now completes cleanly (113 packages, 0 vulnerabilities).
+  - `npm run build` (workspaces) succeeds for **all 7 plugins** including `cap-dialer`
+    and `cap-device-policy` — every package now has a real `dist/`.
+  - `npm run test` (workspaces) — all test files pass across all 7 plugins.
+- **A real Capacitor host app now exists and consumes 5 of these plugins**, resolving
+  the "actual Capacitor host app / Android wrapper project was not found" blocker below:
+  `APK/mobile/` in the EdgeFolio repo (React+TS+Capacitor rebuild of EdgeFolio's field-
+  attendance APK, a *different* product from FieldForce — see that repo's
+  `README_FIRST.md` §4 for the product boundary). It depends on `@jenix/cap-core`,
+  `@jenix/cap-device-health`, `@jenix/cap-location`, `@jenix/cap-lifecycle`,
+  `@jenix/cap-push` via local `file:` paths back into this folder — **not copies**, so
+  changes here are picked up there automatically (npm's `file:` protocol linked, not
+  copied, on this machine). `cap-dialer` and `cap-device-policy` are deliberately **not**
+  used there — those stay FieldForce-only (call capture / MDM, wrong privacy footprint
+  for a payroll app).
+  - `npx cap add android` in `APK/mobile` auto-detected and registered all 5 plugins
+    correctly (`Found 5 Capacitor plugins for android`) — plugin manifest/wiring is
+    confirmed correct.
+  - Not yet done: an actual `./gradlew assembleDebug` / on-device run — this dev
+    environment has no Android SDK configured. Do that next on a machine with Android
+    Studio installed.
+- Still not started: real end-to-end device tests (background location while locked/
+  killed, heartbeat, push commands, etc.) — needs the above Gradle build first.
 
 ## 2026-08-19 Checkpoint
 
