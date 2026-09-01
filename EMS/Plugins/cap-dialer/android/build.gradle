@@ -44,6 +44,11 @@ repositories {
 
 dependencies {
     implementation project(':capacitor-android')
+    // CallSyncWorker.kt imports com.jenix.cap.core.* — was missing, same bug as
+    // cap-device-health/cap-location/cap-push (see NATIVE_PLUGINS_HANDOFF.md).
+    // Fixed by inspection only — cap-dialer isn't in APK/mobile's dependency graph
+    // (FieldForce-only), so this specific fix wasn't compiled/verified here.
+    implementation project(':jenix-cap-core')
     implementation "androidx.core:core-ktx:1.12.0"
     implementation "androidx.work:work-runtime-ktx:2.9.1"
     implementation "androidx.security:security-crypto:1.1.0-alpha06"

@@ -55,6 +55,9 @@ dependencies {
 
     implementation "com.google.mlkit:face-detection:16.1.6"
 
+    // Only the core interpreter is used (FaceEmbeddingEngine.kt does its own
+    // Bitmap->ByteBuffer conversion) — tensorflow-lite-support was in APK/android's
+    // catalog too but is unused there as well, and its real versioning (0.4.x) doesn't
+    // match the 2.14.0 pin anyway; that pin only exists for the core artifact below.
     implementation "org.tensorflow:tensorflow-lite:2.14.0"
-    implementation "org.tensorflow:tensorflow-lite-support:2.14.0"
 }

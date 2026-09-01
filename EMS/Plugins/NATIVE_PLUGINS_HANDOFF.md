@@ -2,6 +2,32 @@
 
 Last updated: 2026-09-01
 
+## 2026-09-01 Checkpoint #2 — first real Gradle compile, 2 real bugs found
+
+`APK/mobile` (EdgeFolio's Capacitor rebuild) got to `./gradlew assembleDebug` for the
+first time ever across both this workspace and that app — this is the "actual
+Capacitor host app... plugin wiring and real end-to-end device tests have not started
+yet" gap called out in the checkpoint below, now partially closed. Two real,
+previously-undetectable bugs surfaced (undetectable because no host app existed to
+compile these plugins together until now — exactly as predicted):
+
+1. **`cap-device-health`, `cap-location`, `cap-push`, `cap-dialer` all import
+   `com.jenix.cap.core.*` but never declared a Gradle dependency on `cap-core`'s
+   Android module.** Fixed: added `implementation project(':jenix-cap-core')` to each
+   plugin's `android/build.gradle`. Verified by actual compile for the first 3
+   (all are in `APK/mobile`'s dependency graph); `cap-dialer` fixed by inspection only
+   — same import pattern, same missing line — but not compiled/verified since it isn't
+   used there (FieldForce-only, correctly excluded from EdgeFolio's APK).
+2. Unrelated to this workspace: `APK/android`'s (native EdgeFolio app) Gradle catalog
+   pins `tensorflow-lite-support` to `2.14.0`, a version that doesn't exist upstream —
+   that artifact uses its own `0.4.x` scheme. Only matters if something in this
+   workspace ever adds that dependency; noted here since it's the same
+   copy-pasted-versions mistake pattern.
+
+`BUILD SUCCESSFUL` after both fixes — 315 tasks, `app-debug.apk` produced (~58MB).
+Not yet done: install/run on a physical device (an emulator/device was not available
+in this environment either — build-only verification so far).
+
 ## 2026-09-01 Checkpoint
 
 - Previously-blocked steps are **unblocked** — this was an environment/registry-access
