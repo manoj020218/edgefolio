@@ -10,7 +10,8 @@
     "cap-lifecycle",
     "cap-push",
     "cap-dialer",
-    "cap-device-policy"
+    "cap-device-policy",
+    "cap-thermal-printer"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
