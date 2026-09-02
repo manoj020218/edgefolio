@@ -4,7 +4,7 @@ export interface FaceLivenessOptions {
 }
 
 export interface FaceCaptureResult {
-  /** 128-dim MobileFaceNet embedding, L2-normalised. */
+  /** 192-dim MobileFaceNet embedding, L2-normalised. */
   embedding: number[];
 }
 

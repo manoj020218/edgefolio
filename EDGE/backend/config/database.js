@@ -257,7 +257,7 @@ function runMigrations(db) {
   if (!columnExists(db, 'employees', 'fcm_token')) {
     db.exec('ALTER TABLE employees ADD COLUMN fcm_token TEXT');
   }
-  // face_enrollments: store computed 128-dim embedding (uploaded by Admin APK after TFLite inference)
+  // face_enrollments: store computed 192-dim embedding (uploaded by Admin APK after TFLite inference)
   if (!columnExists(db, 'face_enrollments', 'embedding_json')) {
     db.exec('ALTER TABLE face_enrollments ADD COLUMN embedding_json TEXT');
   }

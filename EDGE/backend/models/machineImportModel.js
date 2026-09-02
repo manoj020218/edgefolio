@@ -156,8 +156,15 @@ function commitMappedRecords(batchId = null) {
     if (!punchGroups[key]) {
       punchGroups[key] = { employeeId: p.mapped_employee_id, date: p.punch_date, ins: [], outs: [], ids: [] };
     }
-    if (p.direction === 'in'  && p.punch_time) punchGroups[key].ins.push(p.punch_time);
-    if (p.direction === 'out' && p.punch_time) punchGroups[key].outs.push(p.punch_time);
+    // Some terminals (e.g. this device's ALOG export — see alogService.js) don't
+    // report a real per-punch direction at all; every row's "direction" ends up
+    // null. In that case every punch is a candidate for both first-in and
+    // last-out — checkIn = earliest punch of the day, checkOut = latest — which
+    // is the standard punch-clock convention and matches what min(ins)/max(outs)
+    // below already compute. Devices that DO report direction keep their exact
+    // in/out split, unaffected.
+    if (p.punch_time && (p.direction === 'in'  || p.direction == null)) punchGroups[key].ins.push(p.punch_time);
+    if (p.punch_time && (p.direction === 'out' || p.direction == null)) punchGroups[key].outs.push(p.punch_time);
     punchGroups[key].ids.push(p.id);
   }
 

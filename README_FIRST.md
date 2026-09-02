@@ -540,3 +540,90 @@ document upload UI, `is_field_employee` HR-admin toggle UI. Employee-side featur
 set is otherwise functionally complete and now verified on a real device. Next:
 HR-side leave/request approval screens (per client's explicit sequencing —
 employee side, then HR-admin, then Accounts, then Owner).
+
+### 2026-09-02, later still — face model sourced (wrong spec fixed); real ALOG parser bug fixed and shipped
+
+**Face-liveness model:** the `mobilefacenet.tflite` this repo's docs pointed at
+(`[1,112,112,3] -> [1,128]`, INT8) does not exist anywhere findable — verified by
+actually downloading and inspecting the real, widely-mirrored public
+"MobileFaceNet.tflite" (sirius-ai lineage, e.g.
+syaringan357/Android-MobileFaceNet-MTCNN-FaceAntiSpoofing) with a flatbuffer
+parser: it's `[2,112,112,3] -> [2,192]` float32 (a pairwise export, batch=2
+required by the graph). Rather than keep hunting for a file matching stale specs,
+adapted the real code to the real model: `FaceEmbeddingEngine.kt` now duplicates
+the same image into both batch slots and reads row 0 of a 192-dim output;
+`apkController.js`'s `saveEmbeddingHandler` validation and `database.js`'s column
+comment updated from 128→192 to match. Also fixed a real bug found along the way:
+`android/app/.gitignore`'s `mobilefacenet.tflite` pattern had a duplicate `app/`
+prefix (that file already lives inside `app/.gitignore`) and never actually
+matched — fixed. `tsc -b`, `vite build`, `gradlew assembleDebug` all pass;
+installed on-device, launches clean, plugin registers with no crash.
+
+**Found while wiring this up, not yet built:** there is no face-enrollment path
+at all — no HR-admin capture UI, and the `/faces/:id/enroll` endpoint referenced
+in `saveEmbeddingHandler`'s own 404 message doesn't exist in `routes/apk.js`. So
+even with the model fixed, no employee has a reference embedding and none can be
+created yet. Client's direction on this (verbatim intent, not yet built):
+enrollment should happen via the **employee's own phone** (self-capture), not HR
+taking photos — raw face data should stay on-device, only the derived embedding
+ever leaves it (already true of the existing on-device TFLite pipeline). HR
+should be able to check enrollment status from **EDGE desktop**, not trigger
+capture itself. Investigated the desktop side before parking this: EDGE already
+has a **separate, pre-existing** face system for the office biometric machine —
+`GET/POST /api/v1/faces/:id/status|enroll` (`faceController.js`), which stores
+3 angle photos (front/left/right) on disk and computes `status` from those flags
+— sharing the same `face_enrollments` table but different columns
+(`angle_front/right/left` vs. `embedding_json`). Any self-enroll endpoint must
+not blindly overwrite the shared `status` column using desktop's
+angle-count-based semantics, or the desktop status button will show misleading
+results. Not designed or built yet — paused mid-investigation for the ALOG bug
+below; resume by designing the self-enroll endpoint + status semantics before
+writing code.
+
+**Real ALOG attendance-import bug, fixed and shipped to the affected user.** A
+client sent a real device export (`AGL_001.TXT`, 653 punches, 21 employees) that
+EDGE couldn't import at all. Three real bugs in `alogService.js`, all found by
+actually running the parser against the real file, not guessing:
+1. **Fatal:** the date regex only accepted `YYYY-MM-DD`; this device exports
+   `YYYY/MM/DD`. Every line failed to match → 0 records → "No valid punch records
+   found in ALOG file". This was the reported symptom.
+2. Employee name was silently read from the wrong column — this device's export
+   has two blank filler columns (after EnNo, after Name) that the parser's
+   fixed-position destructuring didn't account for, so `name` always came out
+   blank and `mode`/`inOut` were reading GMNo's value instead.
+3. This device doesn't report per-punch direction at all (`Type`/`Action`
+   columns are constant across all 653 rows, not an in/out signal) — the old
+   code still guessed a direction from the wrong column, which would have
+   classified every punch as "in" and produced zero checkouts even after fixing
+   the date.
+
+Fixed properly, not patched around this one file: `alogService.js` now maps
+columns **by header name** instead of fixed position (robust to any column
+layout/order, which is what "designed for any make/model machine" actually
+requires — client's explicit framing), accepts both `-` and `/` date
+separators, and leaves `direction: null` honestly when a device doesn't report
+one. Fixed `machineImportModel.js`'s `commitMappedRecords` grouping to treat a
+null direction as "candidate for both first-in and last-out" (min/max of all
+punches that day) instead of silently dropping punches with no direction —
+verified this doesn't change behavior for devices that DO report real direction
+(Jenix-format imports use `record_type: 'daily'`, never hit this path at all).
+
+Verified against the real file end-to-end: 653/653 records parsed, correct
+names, dates normalised to ISO, and a real multi-punch case (employee 14, 8
+punches on 2026-08-14) correctly grouped to checkIn=12:04/checkOut=18:38. Real
+file kept locally as a regression fixture
+(`EDGE/backend/services/__fixtures__/alog-k43-sample.txt`, gitignored — it's a
+real client's employee names/timestamps, not committed) with a small check
+script (`EDGE/scripts/verify-alog-parser.js`) that reruns the parser against it.
+
+**Shipped:** rebuilt (`npm run build:exe`) and silently reinstalled
+(`EDGEFOLIO Setup 1.0.0.exe /S`) over the local `C:\Program Files\EDGEFOLIO`
+install, confirmed clean restart (all 6 schedulers, MQTT broker, `/health`
+200). **Auto-update is not live** — `electron/updater.js` has the full
+`electron-updater`/GitHub-Releases wiring built, but `checkForUpdates()` is
+commented out because no GitHub Release has ever been published (version has
+sat at `1.0.0` since the start). Getting a fix to any *other* installed copy
+right now means the same manual rebuild+reinstall — there is no live update
+channel yet. Standing up a real release pipeline is separate, deliberately
+deferred work (needs a GitHub token and a real versioning discipline going
+forward) — flagged to the client, not started.

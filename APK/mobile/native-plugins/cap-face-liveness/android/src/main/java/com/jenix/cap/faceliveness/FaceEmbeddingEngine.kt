@@ -15,14 +15,20 @@ import kotlin.math.sqrt
 // (Hilt DI removed — this plugin isn't Hilt-wired like the native app; plain constructor instead).
 //
 // Model file must be placed at android/app/src/main/assets/mobilefacenet.tflite
-// in the HOST app (APK/mobile/android/app), same as APK/android's — see that
-// project's FACE_MODEL_README.txt for where to get it. Not committed to git
-// (binary size).
-// Input:  [1, 112, 112, 3] float32 normalised to [-1, 1]
-// Output: [1, 128] float32 L2-normalised embedding
+// in the HOST app (APK/mobile/android/app) — see FACE_MODEL_README.txt for where
+// to get it. Not committed to git (binary size).
+//
+// The publicly-available "MobileFaceNet.tflite" (sirius-ai lineage, widely mirrored,
+// e.g. syaringan357/Android-MobileFaceNet-MTCNN-FaceAntiSpoofing) is a *pairwise*
+// export: input [2, 112, 112, 3], output "embeddings" [2, 192] float32 — verified
+// directly against the actual file (2026-09-02), not assumed from docs, which is
+// how the original [1,112,112,3]->[1,128] assumption here turned out to be wrong.
+// We only ever need one embedding at a time, so both batch slots are filled with
+// the same image and only row 0 of the output is used.
 private const val MODEL_FILE    = "mobilefacenet.tflite"
 private const val INPUT_SIZE    = 112
-private const val EMBEDDING_DIM = 128
+private const val BATCH_SIZE    = 2
+private const val EMBEDDING_DIM = 192
 
 class FaceEmbeddingEngine(private val context: Context) {
 
@@ -45,7 +51,7 @@ class FaceEmbeddingEngine(private val context: Context) {
         return try {
             val scaled = Bitmap.createScaledBitmap(faceBitmap, INPUT_SIZE, INPUT_SIZE, true)
             val buf    = bitmapToBuffer(scaled)
-            val out    = Array(1) { FloatArray(EMBEDDING_DIM) }
+            val out    = Array(BATCH_SIZE) { FloatArray(EMBEDDING_DIM) }
             model.run(buf, out)
             l2Normalize(out[0])
         } catch (e: Exception) {
@@ -54,15 +60,20 @@ class FaceEmbeddingEngine(private val context: Context) {
         }
     }
 
+    // Fills both batch slots with the same image — the model requires batch=2,
+    // we only care about one face at a time.
     private fun bitmapToBuffer(bmp: Bitmap): ByteBuffer {
-        val buf    = ByteBuffer.allocateDirect(INPUT_SIZE * INPUT_SIZE * 3 * 4).order(ByteOrder.nativeOrder())
+        val buf    = ByteBuffer.allocateDirect(BATCH_SIZE * INPUT_SIZE * INPUT_SIZE * 3 * 4).order(ByteOrder.nativeOrder())
         val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
         bmp.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
-        for (px in pixels) {
-            buf.putFloat(((px shr 16 and 0xFF) / 128f) - 1f)
-            buf.putFloat(((px shr  8 and 0xFF) / 128f) - 1f)
-            buf.putFloat(((px        and 0xFF) / 128f) - 1f)
+        repeat(BATCH_SIZE) {
+            for (px in pixels) {
+                buf.putFloat(((px shr 16 and 0xFF) / 128f) - 1f)
+                buf.putFloat(((px shr  8 and 0xFF) / 128f) - 1f)
+                buf.putFloat(((px        and 0xFF) / 128f) - 1f)
+            }
         }
+        buf.rewind()
         return buf
     }
 

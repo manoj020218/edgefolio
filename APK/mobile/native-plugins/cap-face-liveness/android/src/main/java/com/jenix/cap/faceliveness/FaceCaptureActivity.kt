@@ -22,7 +22,7 @@ import java.util.concurrent.Executors
  * launching this, but it's re-checked here defensively.
  *
  * Result extras:
- *   RESULT_OK       -> "embedding" (JSON array string, 128 floats)
+ *   RESULT_OK       -> "embedding" (JSON array string, 192 floats)
  *   RESULT_CANCELED -> "reason" (LIVENESS_TIMEOUT | EMBEDDING_FAILED | MODEL_MISSING |
  *                                PERMISSION_DENIED | CANCELLED)
  *

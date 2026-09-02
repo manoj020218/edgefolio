@@ -1,5 +1,5 @@
 // Mirrors APK/android's FaceEmbeddingEngine.cosine/matches (kept in TS since it's
-// a trivial dot-product on two already-normalised 128-dim vectors — no need to
+// a trivial dot-product on two already-normalised 192-dim vectors — no need to
 // cross the JS↔native bridge for this).
 export const FACE_MATCH_THRESHOLD = 0.6;
 

@@ -555,8 +555,10 @@ function getEmbeddingHandler(req, res, next) {
 function saveEmbeddingHandler(req, res, next) {
   try {
     const { embedding } = req.body || {};
-    if (!Array.isArray(embedding) || embedding.length !== 128) {
-      throw createHttpError(400, 'embedding must be a 128-element float array');
+    // 192, not the more common 128 — the actual MobileFaceNet.tflite we ship is a
+    // pairwise-export model ([2,112,112,3] -> [2,192]); see FaceEmbeddingEngine.kt.
+    if (!Array.isArray(embedding) || embedding.length !== 192) {
+      throw createHttpError(400, 'embedding must be a 192-element float array');
     }
 
     const db = getDb();

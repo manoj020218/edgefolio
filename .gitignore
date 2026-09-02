@@ -45,6 +45,10 @@ npm-debug.log*
 *.sqlite
 *.sqlite3
 
+# Real customer attendance-machine export samples used for local parser
+# verification — contain real employee names/timestamps, kept out of git.
+EDGE/backend/services/__fixtures__/
+
 # Backup files
 *.pbbackup
 

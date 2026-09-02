@@ -1,3 +1,3 @@
 /build/*
 !/build/.npmkeep
-app/src/main/assets/mobilefacenet.tflite
+src/main/assets/mobilefacenet.tflite
