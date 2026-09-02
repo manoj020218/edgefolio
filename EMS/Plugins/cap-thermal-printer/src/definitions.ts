@@ -1,4 +1,4 @@
-export type PrinterTransport = 'ble' | 'usb';
+export type PrinterTransportType = 'ble' | 'usb';
 export type PrinterAlignment = 'left' | 'center' | 'right';
 export type PrinterConnectionState = 'disconnected' | 'connecting' | 'connected' | 'disconnecting';
 export type PrinterErrorCode =
@@ -18,7 +18,7 @@ export type PrinterErrorCode =
 export interface PrinterDevice {
   id: string;
   name?: string;
-  transport: PrinterTransport;
+  transport: PrinterTransportType;
   connected?: boolean;
   rssi?: number;
   vendorId?: number;
@@ -28,7 +28,7 @@ export interface PrinterDevice {
 }
 
 export interface ScanOptions {
-  transport?: PrinterTransport;
+  transport?: PrinterTransportType;
   namePrefix?: string;
   serviceUuid?: string;
   allowUnnamed?: boolean;
@@ -36,7 +36,7 @@ export interface ScanOptions {
 }
 
 export interface GetDevicesOptions {
-  transport?: PrinterTransport;
+  transport?: PrinterTransportType;
 }
 
 export interface BleConnectionOptions {
@@ -59,7 +59,7 @@ export type PrinterConnectionOptions = BleConnectionOptions | UsbConnectionOptio
 
 export interface PrinterStatus {
   connected: boolean;
-  transport?: PrinterTransport;
+  transport?: PrinterTransportType;
   device?: PrinterDevice;
   connectionState?: PrinterConnectionState;
 }
