@@ -20,11 +20,6 @@ data class BleConnectionSnapshot(
     val device: BlePrinterDevice?,
 )
 
-data class BleRawWritePayload(
-    val bytes: ByteArray,
-    val chunkSize: Int?,
-)
-
 fun readBleConnectConfig(call: PluginCall): BleConnectConfig? {
     val transport = call.getString("transport")
     if (transport != null && transport != "ble") {
@@ -50,34 +45,6 @@ fun readBleConnectConfig(call: PluginCall): BleConnectConfig? {
         writeCharacteristicUuid = writeCharacteristicUuid.value,
         timeoutMs = (call.getInt("timeoutMs") ?: BLE_CONNECT_TIMEOUT_MS).coerceIn(3000, 30000),
     )
-}
-
-fun readBleWritePayload(call: PluginCall): BleRawWritePayload? {
-    val values = call.getArray("data")
-    if (values == null) {
-        call.reject("data must be a byte array.", "INVALID_ARGUMENT")
-        return null
-    }
-    val bytes = ByteArray(values.length())
-    for (index in 0 until values.length()) {
-        val value = values.opt(index)
-        if (value !is Number) {
-            call.reject("data must contain only integer byte values.", "INVALID_ARGUMENT")
-            return null
-        }
-        val intValue = value.toInt()
-        if (!value.toDouble().isFinite() || value.toDouble() != intValue.toDouble() || intValue !in 0..255) {
-            call.reject("data must contain only integer byte values between 0 and 255.", "INVALID_ARGUMENT")
-            return null
-        }
-        bytes[index] = intValue.toByte()
-    }
-    val chunkSize = call.getInt("chunkSize")
-    if (chunkSize != null && chunkSize < 1) {
-        call.reject("chunkSize must be at least 1.", "INVALID_ARGUMENT")
-        return null
-    }
-    return BleRawWritePayload(bytes = bytes, chunkSize = chunkSize)
 }
 
 fun buildBleStatusPayload(snapshot: BleConnectionSnapshot) = JSObject().apply {

@@ -1,6 +1,7 @@
 package com.jenix.cap.thermalprinter
 
 import android.Manifest
+import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import com.getcapacitor.JSObject
@@ -22,6 +23,7 @@ import com.getcapacitor.annotation.PermissionCallback
 class ThermalPrinterPlugin : Plugin() {
     private lateinit var bleScanner: BlePrinterScanner
     private lateinit var bleConnection: BlePrinterConnection
+    private lateinit var usbConnection: UsbPrinterConnection
     private lateinit var usbMonitor: UsbPrinterMonitor
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scanTimeoutRunnable = Runnable { finishScan("timeout") }
@@ -31,7 +33,6 @@ class ThermalPrinterPlugin : Plugin() {
     private var activeScanCallId: String? = null
     private var pendingUsbPermissionCallId: String? = null
     private var pendingUsbPermissionDeviceId: String? = null
-    private var preparedUsbDeviceId: String? = null
 
     override fun load() {
         bleScanner = BlePrinterScanner(context)
@@ -40,16 +41,23 @@ class ThermalPrinterPlugin : Plugin() {
             override fun onDisconnected(snapshot: BleConnectionSnapshot) = emitListenerEvent("disconnected", buildBleStatusPayload(snapshot))
             override fun onConnectionError(message: String, code: String) = emitListenerEvent("connectionError", buildConnectionErrorPayload(message, code, "ble"))
         })
+        usbConnection = UsbPrinterConnection(
+            context.getSystemService(UsbManager::class.java),
+            object : UsbConnectionListener {
+                override fun onConnected(snapshot: UsbConnectionSnapshot) = emitListenerEvent("connected", buildUsbStatusPayload(snapshot))
+                override fun onDisconnected(snapshot: UsbConnectionSnapshot) = emitListenerEvent("disconnected", buildUsbStatusPayload(snapshot))
+                override fun onConnectionError(message: String, code: String) =
+                    emitListenerEvent("connectionError", buildConnectionErrorPayload(message, code, "usb"))
+            },
+        )
         usbMonitor = UsbPrinterMonitor(context, object : UsbPrinterListener {
             override fun onUsbAttached(device: UsbPrinterDevice) = emitListenerEvent("usbAttached", device.toJs())
 
             override fun onUsbDetached(device: UsbPrinterDevice) {
-                if (preparedUsbDeviceId == device.id) {
-                    preparedUsbDeviceId = null
-                }
                 if (pendingUsbPermissionDeviceId == device.id) {
                     failPendingUsbPermission("USB device was detached before permission completed.", "DEVICE_NOT_FOUND", emitEvent = true)
                 }
+                usbConnection.handleDetached(device.id)
                 emitListenerEvent("usbDetached", device.toJs())
             }
 
@@ -61,7 +69,7 @@ class ThermalPrinterPlugin : Plugin() {
                     failPendingUsbPermission("USB permission denied for the selected device.", "USB_PERMISSION_DENIED", emitEvent = true)
                     return
                 }
-                completePendingUsbPermission(device)
+                continuePendingUsbConnect(device)
             }
         })
         usbMonitor.start()
@@ -74,8 +82,8 @@ class ThermalPrinterPlugin : Plugin() {
         releaseActiveScanCall()
         releasePendingUsbPermissionCall()
         bleConnection.shutdown()
+        usbConnection.shutdown()
         usbMonitor.stop()
-        preparedUsbDeviceId = null
     }
 
     @PluginMethod
@@ -116,14 +124,17 @@ class ThermalPrinterPlugin : Plugin() {
 
     @PluginMethod
     fun disconnect(call: PluginCall) {
-        preparedUsbDeviceId = null
         cancelPendingUsbPermissionRequest("USB permission request cancelled.", "CONNECTION_FAILED")
+        if (usbConnection.status().connectionState != "disconnected") {
+            usbConnection.disconnect { call.resolve(buildDisconnectedStatusPayload()) }
+            return
+        }
         bleConnection.disconnect { call.resolve(buildDisconnectedStatusPayload()) }
     }
 
     @PluginMethod
     fun isConnected(call: PluginCall) {
-        call.resolve(JSObject().apply { put("connected", bleConnection.isConnected()) })
+        call.resolve(JSObject().apply { put("connected", bleConnection.isConnected() || usbConnection.isConnected()) })
     }
 
     @PluginMethod
@@ -133,20 +144,28 @@ class ThermalPrinterPlugin : Plugin() {
 
     @PluginMethod
     fun write(call: PluginCall) {
-        if (!bleConnection.isConnected()) {
-            call.reject("No printer is connected.", "NOT_CONNECTED")
-            return
+        val payload = readWritePayload(call) ?: return
+        when {
+            bleConnection.isConnected() -> {
+                if (!hasConnectPermissions()) {
+                    call.reject("Bluetooth permission denied.", "PERMISSION_DENIED")
+                    return
+                }
+                bleConnection.write(
+                    payload,
+                    onSuccess = { written -> call.resolve(JSObject().apply { put("written", written) }) },
+                    onError = { message, code -> call.reject(message, code) },
+                )
+            }
+            usbConnection.isConnected() -> {
+                usbConnection.write(
+                    payload,
+                    onSuccess = { written -> call.resolve(JSObject().apply { put("written", written) }) },
+                    onError = { message, code -> call.reject(message, code) },
+                )
+            }
+            else -> call.reject("No printer is connected.", "NOT_CONNECTED")
         }
-        if (!hasConnectPermissions()) {
-            call.reject("Bluetooth permission denied.", "PERMISSION_DENIED")
-            return
-        }
-        val payload = readBleWritePayload(call) ?: return
-        bleConnection.write(
-            payload,
-            onSuccess = { written -> call.resolve(JSObject().apply { put("written", written) }) },
-            onError = { message, code -> call.reject(message, code) },
-        )
     }
 
     @PluginMethod
@@ -217,7 +236,11 @@ class ThermalPrinterPlugin : Plugin() {
 
     private fun connectBle(call: PluginCall) {
         cancelPendingUsbPermissionRequest("USB permission request cancelled.", "CONNECTION_FAILED")
-        preparedUsbDeviceId = null
+        val usbStatus = usbConnection.status()
+        if (usbStatus.connectionState != "disconnected") {
+            call.reject("Disconnect the current printer before connecting another.", "CONNECTION_FAILED")
+            return
+        }
         val config = readBleConnectConfig(call) ?: return
         if (!hasConnectPermissions()) {
             requestPermissionForAliases(bleConnectPermissionAliases(), call, "connectPermissionCallback")
@@ -237,7 +260,10 @@ class ThermalPrinterPlugin : Plugin() {
             return
         }
         finishScan("manual")
-        preparedUsbDeviceId = null
+        if (pendingUsbPermissionCallId != null) {
+            call.reject("A USB permission request is already in progress.", "CONNECTION_FAILED")
+            return
+        }
         val config = readUsbConnectConfig(call) ?: return
         val selection = selectUsbDevice(usbMonitor.getDevices(), config)
         if (selection.device == null) {
@@ -246,12 +272,7 @@ class ThermalPrinterPlugin : Plugin() {
         }
         val device = selection.device
         if (device.permissionGranted) {
-            preparedUsbDeviceId = device.id
-            call.resolve(buildUsbStatusPayload(device))
-            return
-        }
-        if (pendingUsbPermissionCallId != null) {
-            call.reject("A USB permission request is already in progress.", "CONNECTION_FAILED")
+            startUsbConnect(call, device)
             return
         }
         call.setKeepAlive(true)
@@ -331,15 +352,12 @@ class ThermalPrinterPlugin : Plugin() {
         mainHandler.post { notifyListeners(eventName, payload) }
     }
 
-    private fun completePendingUsbPermission(device: UsbPrinterDevice) {
+    private fun continuePendingUsbConnect(device: UsbPrinterDevice) {
         val savedCall = pendingUsbPermissionCall() ?: run {
             clearPendingUsbPermissionState()
             return
         }
-        preparedUsbDeviceId = device.id
-        clearPendingUsbPermissionState()
-        savedCall.setKeepAlive(false)
-        savedCall.resolve(buildUsbStatusPayload(device))
+        startUsbConnect(savedCall, device, clearPendingState = true)
     }
 
     private fun hasScanPermissions(): Boolean {
@@ -363,17 +381,39 @@ class ThermalPrinterPlugin : Plugin() {
         if (bleStatus.connectionState != "disconnected") {
             return buildBleStatusPayload(bleStatus)
         }
+        val usbStatus = usbConnection.status()
+        if (usbStatus.connectionState != "disconnected") {
+            return buildUsbStatusPayload(usbStatus)
+        }
         val pendingUsbDevice = pendingUsbPermissionDeviceId?.let { usbMonitor.getDevice(it) }
         if (pendingUsbPermissionCallId != null) {
             return buildUsbStatusPayload(pendingUsbDevice, "connecting")
         }
-        val preparedUsbDeviceId = preparedUsbDeviceId ?: return buildDisconnectedStatusPayload()
-        val preparedDevice = usbMonitor.getDevice(preparedUsbDeviceId)
-        if (preparedDevice != null) {
-            return buildUsbStatusPayload(preparedDevice)
-        }
-        this.preparedUsbDeviceId = null
         return buildDisconnectedStatusPayload()
+    }
+
+    private fun startUsbConnect(
+        call: PluginCall,
+        device: UsbPrinterDevice,
+        clearPendingState: Boolean = false,
+    ) {
+        usbConnection.connect(
+            selectedDevice = device,
+            onSuccess = { snapshot ->
+                if (clearPendingState) {
+                    clearPendingUsbPermissionState()
+                }
+                call.setKeepAlive(false)
+                call.resolve(buildUsbStatusPayload(snapshot))
+            },
+            onError = { message, code ->
+                if (clearPendingState) {
+                    clearPendingUsbPermissionState()
+                }
+                call.setKeepAlive(false)
+                call.reject(message, code)
+            },
+        )
     }
 
     private fun rejectAndReleaseScan(call: PluginCall, message: String, code: String) {

@@ -24,14 +24,3 @@ class BleWriteRequest(
         onError(message, code)
     }
 }
-
-fun splitBlePayload(bytes: ByteArray, chunkSize: Int): List<ByteArray> {
-    val chunks = ArrayList<ByteArray>()
-    var index = 0
-    while (index < bytes.size) {
-        val end = minOf(bytes.size, index + chunkSize)
-        chunks.add(bytes.copyOfRange(index, end))
-        index = end
-    }
-    return chunks
-}

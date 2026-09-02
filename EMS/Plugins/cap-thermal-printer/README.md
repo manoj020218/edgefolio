@@ -9,8 +9,8 @@ Current support:
 - BLE scan with deduplicated discovery events
 - BLE connect/disconnect with optional service and characteristic UUID hints
 - USB enumeration with attach/detach events
-- USB permission handoff via `connect({ transport: 'usb', ... })`
-- Raw byte writes with MTU-aware chunking and queued delivery
+- USB connect/disconnect with Android permission handoff
+- Raw byte writes over BLE and USB with transport-specific chunking
 - Basic ESC/POS helpers for text, feed, cut, and cash drawer
 - Connection state and error events
 
@@ -51,10 +51,6 @@ await ThermalPrinter.write({
 
 Higher-level ESC/POS helpers such as `printText`, `feed`, `cut`, QR, and barcode
 can be layered on top of `write()`.
-
-USB raw connection and bulk writes land in the next phase. The current USB path
-enumerates printer candidates, tracks attach/detach events, and requests Android
-USB permission for a selected device.
 
 ESC/POS helper example:
 

@@ -18,8 +18,12 @@ BLE:
 USB:
 
 - Attach a USB printer and confirm enumeration returns vendor/product IDs.
-- Accept the USB permission prompt and confirm the device becomes selectable.
+- Accept the USB permission prompt and confirm the device connects successfully.
 - Reject the USB permission prompt and confirm a stable permission error is returned.
+- Connect by `deviceId` when multiple USB printers are attached.
+- Send a short raw receipt and confirm bulk OUT printing succeeds.
+- Disconnect manually and confirm `disconnected` plus `isConnected() === false`.
+- Unplug the printer while connected and confirm `usbDetached` plus disconnect/error events.
 
 Shared:
 

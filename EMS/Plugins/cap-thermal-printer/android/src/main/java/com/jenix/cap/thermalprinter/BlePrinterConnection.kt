@@ -121,7 +121,7 @@ class BlePrinterConnection(
     }
 
     @SuppressLint("MissingPermission")
-    fun write(payload: BleRawWritePayload, onSuccess: (Int) -> Unit, onError: (String, String) -> Unit) {
+    fun write(payload: PrinterWritePayload, onSuccess: (Int) -> Unit, onError: (String, String) -> Unit) {
         if (!isConnected()) {
             onError("No BLE printer is connected.", "NOT_CONNECTED")
             return

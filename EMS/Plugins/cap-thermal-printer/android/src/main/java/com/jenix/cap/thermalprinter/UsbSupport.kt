@@ -1,7 +1,6 @@
 package com.jenix.cap.thermalprinter
 
 import com.getcapacitor.JSArray
-import com.getcapacitor.JSObject
 import com.getcapacitor.PluginCall
 
 private const val USB_PERMISSION_TIMEOUT_MS = 15000
@@ -98,14 +97,4 @@ fun selectUsbDevice(
 
 fun toUsbDeviceListPayload(devices: List<UsbPrinterDevice>) = JSArray().apply {
     devices.forEach { put(it.toJs()) }
-}
-
-fun buildUsbStatusPayload(
-    device: UsbPrinterDevice? = null,
-    connectionState: String = "disconnected",
-) = JSObject().apply {
-    put("connected", false)
-    put("transport", "usb")
-    put("connectionState", connectionState)
-    device?.let { put("device", it.toJs()) }
 }

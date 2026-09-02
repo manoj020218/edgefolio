@@ -6,8 +6,8 @@ class BleWriteSession {
     private val queue = ArrayDeque<BleWriteRequest>()
     private var active: BleWriteRequest? = null
 
-    fun enqueue(payload: BleRawWritePayload, mtu: Int, onSuccess: (Int) -> Unit, onError: (String, String) -> Unit) {
-        queue.add(BleWriteRequest(splitBlePayload(payload.bytes, resolveBleChunkSize(mtu, payload.chunkSize)), payload.bytes.size, onSuccess, onError))
+    fun enqueue(payload: PrinterWritePayload, mtu: Int, onSuccess: (Int) -> Unit, onError: (String, String) -> Unit) {
+        queue.add(BleWriteRequest(splitBytePayload(payload.bytes, resolveBleChunkSize(mtu, payload.chunkSize)), payload.bytes.size, onSuccess, onError))
     }
 
     fun hasActive(): Boolean = active != null
