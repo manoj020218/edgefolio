@@ -10,6 +10,7 @@ BLE:
 - Connect with explicit `serviceUuid` and `writeCharacteristicUuid` when known.
 - Send a short raw receipt (`ESC @`, text, feed) and confirm the printer outputs it.
 - Send a long raw receipt that exceeds one BLE packet and confirm chunked printing succeeds.
+- Send `printText`, `feed`, `cut`, and `openCashDrawer` commands and confirm the helper APIs map to printer behavior.
 - Disconnect manually and confirm `disconnected` plus `isConnected() === false`.
 - Power off or move the printer out of range while connected and confirm disconnect/error events.
 - Deny permission and confirm the plugin returns `PERMISSION_DENIED`.

@@ -8,6 +8,7 @@ Completed phase:
 - Phase 1: core models, transport contract, byte helpers, and shared errors
 - Phase 2: Android BLE scan, permissions, deduplicated discovery, and scan events
 - Phase 3: Android BLE connect, writable characteristic discovery, queued raw writes, and connection status
+- Phase 4: TypeScript ESC/POS helpers for text, feed, cut, cash drawer, and receipt composition
 
 Important architecture decisions:
 
@@ -24,12 +25,13 @@ Important architecture decisions:
 - Keep scan state and active BLE connection state separate so later USB work can share the public API without reusing scan caches as connection state.
 - Prefer caller-supplied BLE service and characteristic UUIDs when available, otherwise discover the first writable characteristic and prefer `WRITE_NO_RESPONSE`.
 - Queue raw BLE writes natively and derive chunk size from negotiated MTU with a conservative 20-byte minimum fallback.
+- Keep high-level ESC/POS composition in TypeScript by exporting helpers/builders and implementing convenience methods as wrappers over native `write()`.
+- Support only ASCII text encoding in the initial ESC/POS layer so unsupported glyphs degrade predictably instead of sending printer-specific code pages prematurely.
 
 Implementation plan:
 
-1. Phase 4: add basic ESC/POS builders on top of the raw write path.
-2. Phase 5: add USB discovery, permission handling, and attach/detach events.
-3. Phase 6+: add USB raw printing, profiles, demo usage, and final documentation in order.
+1. Phase 5: add USB discovery, permission handling, and attach/detach events.
+2. Phase 6+: add USB raw printing, profiles, demo usage, and final documentation in order.
 
 Files added or changed:
 
@@ -43,6 +45,11 @@ Files added or changed:
 - `cap-thermal-printer/src/bytes.ts`
 - `cap-thermal-printer/src/errors.ts`
 - `cap-thermal-printer/src/index.ts`
+- `cap-thermal-printer/src/escpos/builder.ts`
+- `cap-thermal-printer/src/escpos/commands.ts`
+- `cap-thermal-printer/src/escpos/index.ts`
+- `cap-thermal-printer/src/escpos/builder.test.ts`
+- `cap-thermal-printer/src/escpos/commands.test.ts`
 - `cap-thermal-printer/src/transport.ts`
 - `cap-thermal-printer/src/web.ts`
 - `cap-thermal-printer/src/bytes.test.ts`
@@ -69,4 +76,4 @@ Current build status:
 
 Next phase:
 
-- Phase 4: basic ESC/POS builders on top of the raw write path.
+- Phase 5: Android USB discovery, permission handling, and attach/detach events.

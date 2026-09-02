@@ -8,6 +8,7 @@ Current support:
 - BLE scan with deduplicated discovery events
 - BLE connect/disconnect with optional service and characteristic UUID hints
 - Raw byte writes with MTU-aware chunking and queued delivery
+- Basic ESC/POS helpers for text, feed, cut, and cash drawer
 - Connection state and error events
 
 Planned transport support:
@@ -50,4 +51,29 @@ await ThermalPrinter.write({
 ```
 
 Higher-level ESC/POS helpers such as `printText`, `feed`, `cut`, QR, and barcode
-are scheduled for the next phases and currently return unsupported-operation errors.
+can be layered on top of `write()`.
+
+ESC/POS helper example:
+
+```ts
+import { EscPosBuilder, ThermalPrinter } from '@jenix/cap-thermal-printer';
+
+const receipt = new EscPosBuilder()
+  .initialize()
+  .align('center')
+  .bold()
+  .text('JENIX INDIA PVT LTD')
+  .newline()
+  .bold(false)
+  .separator()
+  .align('left')
+  .text('Thermal Printer Test\n')
+  .feed(2)
+  .cut()
+  .build();
+
+await ThermalPrinter.write({ data: receipt });
+await ThermalPrinter.printText({ text: 'Quick text path\n', alignment: 'center' });
+```
+
+`printQRCode`, `printBarcode`, and `printImage` remain reserved for later phases.
