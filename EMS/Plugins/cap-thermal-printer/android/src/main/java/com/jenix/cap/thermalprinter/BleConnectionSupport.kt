@@ -87,10 +87,14 @@ fun buildBleStatusPayload(snapshot: BleConnectionSnapshot) = JSObject().apply {
     snapshot.device?.let { put("device", it.toJs()) }
 }
 
-fun buildConnectionErrorPayload(message: String, code: String) = JSObject().apply {
+fun buildConnectionErrorPayload(
+    message: String,
+    code: String,
+    transport: String,
+) = JSObject().apply {
     put("message", message)
     put("code", code)
-    put("transport", "ble")
+    put("transport", transport)
 }
 
 fun bleConnectPermissionAliases(): Array<String> {

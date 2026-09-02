@@ -9,6 +9,7 @@ Completed phase:
 - Phase 2: Android BLE scan, permissions, deduplicated discovery, and scan events
 - Phase 3: Android BLE connect, writable characteristic discovery, queued raw writes, and connection status
 - Phase 4: TypeScript ESC/POS helpers for text, feed, cut, cash drawer, and receipt composition
+- Phase 5: Android USB discovery, permission handoff, and attach/detach events
 
 Important architecture decisions:
 
@@ -27,11 +28,14 @@ Important architecture decisions:
 - Queue raw BLE writes natively and derive chunk size from negotiated MTU with a conservative 20-byte minimum fallback.
 - Keep high-level ESC/POS composition in TypeScript by exporting helpers/builders and implementing convenience methods as wrappers over native `write()`.
 - Support only ASCII text encoding in the initial ESC/POS layer so unsupported glyphs degrade predictably instead of sending printer-specific code pages prematurely.
+- Treat USB devices as printer candidates when they expose either a printer-class interface or any bulk OUT endpoint, so discovery stays generic across ESC/POS hardware.
+- Reuse `connect({ transport: 'usb' })` as the Android USB permission entry point in Phase 5, then open and claim the device in Phase 6 after permission has already been granted.
+- Register one runtime USB monitor for permission, attach, and detach broadcasts, and serialize pending USB permission requests to avoid overlapping connect races.
 
 Implementation plan:
 
-1. Phase 5: add USB discovery, permission handling, and attach/detach events.
-2. Phase 6+: add USB raw printing, profiles, demo usage, and final documentation in order.
+1. Phase 6: add USB device open, interface claim, bulk OUT endpoint resolution, and raw writes.
+2. Phase 7+: add QR/barcode support, profiles, demo usage, and final documentation in order.
 
 Files added or changed:
 
@@ -65,7 +69,11 @@ Files added or changed:
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleScanSupport.kt`
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleWriteRequest.kt`
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleWriteSession.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/PrinterPluginSupport.kt`
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/ThermalPrinterPlugin.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/UsbPrinterDevice.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/UsbPrinterMonitor.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/UsbSupport.kt`
 
 Current build status:
 
@@ -76,4 +84,4 @@ Current build status:
 
 Next phase:
 
-- Phase 5: Android USB discovery, permission handling, and attach/detach events.
+- Phase 6: Android USB device open, bulk OUT endpoint discovery, and raw printing.

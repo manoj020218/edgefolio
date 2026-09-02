@@ -23,6 +23,7 @@ export interface PrinterDevice {
   name?: string;
   transport: PrinterTransportType;
   connected?: boolean;
+  permissionGranted?: boolean;
   rssi?: number;
   vendorId?: number;
   productId?: number;
@@ -130,6 +131,8 @@ export interface ThermalPrinterPlugin {
   addListener(eventName: 'connected', listenerFunc: (status: PrinterStatus) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'disconnected', listenerFunc: (status: PrinterStatus) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'connectionError', listenerFunc: (event: ConnectionErrorEvent) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'usbAttached', listenerFunc: (device: PrinterDevice) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'usbDetached', listenerFunc: (device: PrinterDevice) => void): Promise<PluginListenerHandle>;
   scan(options?: ScanOptions): Promise<{ devices: PrinterDevice[] }>;
   stopScan(): Promise<{ scanning: false }>;
   getDevices(options?: GetDevicesOptions): Promise<{ devices: PrinterDevice[] }>;

@@ -5,15 +5,14 @@ Reusable Android thermal printer bridge for Jenix applications.
 Current support:
 
 - `ble`
+- `usb`
 - BLE scan with deduplicated discovery events
 - BLE connect/disconnect with optional service and characteristic UUID hints
+- USB enumeration with attach/detach events
+- USB permission handoff via `connect({ transport: 'usb', ... })`
 - Raw byte writes with MTU-aware chunking and queued delivery
 - Basic ESC/POS helpers for text, feed, cut, and cash drawer
 - Connection state and error events
-
-Planned transport support:
-
-- `usb`
 
 Planned public API:
 
@@ -52,6 +51,10 @@ await ThermalPrinter.write({
 
 Higher-level ESC/POS helpers such as `printText`, `feed`, `cut`, QR, and barcode
 can be layered on top of `write()`.
+
+USB raw connection and bulk writes land in the next phase. The current USB path
+enumerates printer candidates, tracks attach/detach events, and requests Android
+USB permission for a selected device.
 
 ESC/POS helper example:
 
