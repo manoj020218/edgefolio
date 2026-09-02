@@ -1,6 +1,9 @@
+import type { PluginListenerHandle } from '@capacitor/core';
+
 export type PrinterTransportType = 'ble' | 'usb';
 export type PrinterAlignment = 'left' | 'center' | 'right';
 export type PrinterConnectionState = 'disconnected' | 'connecting' | 'connected' | 'disconnecting';
+export type ScanStopReason = 'manual' | 'timeout' | 'restarted' | 'failed';
 export type PrinterErrorCode =
   | 'PERMISSION_DENIED'
   | 'DEVICE_NOT_FOUND'
@@ -64,6 +67,12 @@ export interface PrinterStatus {
   connectionState?: PrinterConnectionState;
 }
 
+export interface ScanStoppedEvent {
+  reason: ScanStopReason;
+  devices: PrinterDevice[];
+  errorCode?: number;
+}
+
 export interface WriteOptions {
   data: number[];
   chunkSize?: number;
@@ -110,6 +119,8 @@ export interface CashDrawerOptions {
 }
 
 export interface ThermalPrinterPlugin {
+  addListener(eventName: 'deviceFound', listenerFunc: (device: PrinterDevice) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'scanStopped', listenerFunc: (event: ScanStoppedEvent) => void): Promise<PluginListenerHandle>;
   scan(options?: ScanOptions): Promise<{ devices: PrinterDevice[] }>;
   stopScan(): Promise<{ scanning: false }>;
   getDevices(options?: GetDevicesOptions): Promise<{ devices: PrinterDevice[] }>;
