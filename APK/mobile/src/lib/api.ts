@@ -32,29 +32,39 @@ export async function setToken(token: string | null): Promise<void> {
   else await Preferences.remove({ key: TOKEN_KEY });
 }
 
-const client = axios.create();
+function makeClient(routePrefix: string) {
+  const instance = axios.create();
 
-client.interceptors.request.use(async (cfg) => {
-  const base = await getBaseUrl();
-  if (!base) throw new Error('EdgeFolio server address not configured yet');
-  cfg.baseURL = `${base}/apk`;
+  instance.interceptors.request.use(async (cfg) => {
+    const base = await getBaseUrl();
+    if (!base) throw new Error('EdgeFolio server address not configured yet');
+    cfg.baseURL = `${base}${routePrefix}`;
 
-  const token = await getToken();
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
+    const token = await getToken();
+    if (token) cfg.headers.Authorization = `Bearer ${token}`;
 
-  return cfg;
-});
+    return cfg;
+  });
 
-// EDGE returns non-2xx (401/403/422/500) for every error case, so axios rejects
-// before the `res.data.ok` checks below ever run — normalize here instead.
-client.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const data = err?.response?.data as ApiEnvelope<unknown> | undefined;
-    if (data && typeof data === 'object' && 'ok' in data) throw toApiError(data);
-    throw err;
-  },
-);
+  // EDGE returns non-2xx (401/403/422/500) for every error case, so axios rejects
+  // before the `res.data.ok` checks below ever run — normalize here instead.
+  instance.interceptors.response.use(
+    (res) => res,
+    (err) => {
+      const data = err?.response?.data as ApiEnvelope<unknown> | undefined;
+      if (data && typeof data === 'object' && 'ok' in data) throw toApiError(data);
+      throw err;
+    },
+  );
+
+  return instance;
+}
+
+// Most endpoints live under /apk (EDGE/backend/routes/apk.js). A handful — login,
+// password change/reset — live under /auth (EDGE/backend/routes/auth.js) instead,
+// since they're shared with the desktop EDGE admin app, not APK-specific.
+const client = makeClient('/apk');
+const authClient = makeClient('/auth');
 
 export interface ApiEnvelope<T> {
   ok: boolean;
@@ -93,6 +103,20 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
 
 export async function apiDelete<T>(path: string): Promise<T> {
   const res = await client.delete<ApiEnvelope<T>>(path);
+  if (!res.data.ok) throw toApiError(res.data);
+  return res.data.data as T;
+}
+
+// Same shape as apiGet/apiPost, against EDGE/backend/routes/auth.js instead of apk.js
+// (forgot-password, change-password, reset-request admin approval).
+export async function authApiGet<T>(path: string, params?: Record<string, unknown>): Promise<T> {
+  const res = await authClient.get<ApiEnvelope<T>>(path, { params });
+  if (!res.data.ok) throw toApiError(res.data);
+  return res.data.data as T;
+}
+
+export async function authApiPost<T>(path: string, body?: unknown): Promise<T> {
+  const res = await authClient.post<ApiEnvelope<T>>(path, body);
   if (!res.data.ok) throw toApiError(res.data);
   return res.data.data as T;
 }

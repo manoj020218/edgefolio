@@ -23,6 +23,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (empCode: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
+  markPasswordChanged: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -62,7 +63,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>;
+  // Called after POST /auth/change-password succeeds — server state is already
+  // updated, this just clears the locally-cached flag so the forced-change gate
+  // in App.tsx doesn't keep re-triggering.
+  function markPasswordChanged(): void {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, passwordMustChange: false };
+      localStorage.setItem(USER_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout, markPasswordChanged }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

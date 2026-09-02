@@ -37,13 +37,22 @@ function loginHandler(req, res, next) {
   }
 }
 
+// Accepts empId as the employee's internal id (legacy/desktop callers), OR — since
+// a mobile employee only ever knows their Employee ID or email, never the internal
+// id — as an emp_code or email, matched the same way apkController's login does.
 function forgotPasswordHandler(req, res, next) {
   try {
     const { empId, companyId } = req.body || {};
     if (!empId) throw createHttpError(400, 'empId is required');
 
+    const identifier = String(empId).trim();
     const db = getDb();
-    const employee = db.prepare('SELECT * FROM employees WHERE id = ? COLLATE NOCASE').get(String(empId).trim());
+    const employee = db
+      .prepare(
+        `SELECT * FROM employees
+         WHERE id = ? COLLATE NOCASE OR emp_code = ? COLLATE NOCASE OR email = ? COLLATE NOCASE`,
+      )
+      .get(identifier, identifier, identifier);
     if (!employee) throw createHttpError(404, 'Employee not found');
 
     const id = randomUUID();

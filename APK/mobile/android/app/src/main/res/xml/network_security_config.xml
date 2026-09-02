@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EDGE is a plain-HTTP local server on the office LAN (a PC's IP, entered by the
+  user in ServerSetupPage.tsx) — there's no TLS cert for a private IP, so this
+  can't be scoped to specific domains. Without this, Android 9+ (targetSdk 35
+  here) silently blocks all cleartext traffic by default, which is what was
+  actually causing "could not reach that address" — the request never left the
+  device.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

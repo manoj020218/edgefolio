@@ -91,7 +91,7 @@ company-issued phones — its own multi-tenant SaaS, nothing to do with payroll)
 | **VPS "devicehub" cloud relay** (multi-location, machine→cloud direct) | Designed in `M68_PLAN.md` §STEP M68-4 | 📋 **Designed, not built** | Full adapter-pattern design already thought through: per-machine-model adapter normalizes punches, `edge_devices`/`edge_punches` Mongo collections, dev_id→tenant binding, pull-based sync (EDGE pulls, nothing needs inbound ports). This is the right design — implement against it, don't redesign. |
 | **Billing/licensing platform** | External repo: `D:\IOT Device\Billing at IOT soft` | ✅ Real, live | Shared across 16+ IOTSoft products. Deployed by hand (`pscp`), not git-pulled on the VPS. `EdgeLicense` model, free-forever fields already patched (§2.2 of `HANDOFF.md`). |
 | **APK (native, reference only)** | `APK/android/` | ⚠️ Built, wrong tech, not release-ready, **left untouched** | Fully native Kotlin + Jetpack Compose. Works, but client wants React+TS/Capacitor — being superseded by `APK/mobile/` (next row), not deleted. Its face-liveness logic (`LivenessDetectorTest.kt`) is still the reference for the not-yet-built `cap-face-liveness` plugin. |
-| **APK (rebuild — React+TS/Capacitor)** | `APK/mobile/` | ✅ **Running on a real device** | Started 2026-09-01. Vite+React+TS+Tailwind (tokens mirrored from `DESIGN_SYSTEM_GUIDE.md`), wired to the real `EDGE/backend/routes/apk.js` contract. `npm install`, `tsc -b`, `vite build` all pass; `npx cap sync android` auto-registers all **8** reused/new plugins. `./gradlew assembleDebug` succeeds, produced `app-debug.apk` (~58MB). **Installed via `adb` on a physical phone (`2251eb032a78`) and launched — client visually confirmed the server-setup screen renders correctly on first run.** Screens done: server-address setup, login, home/today-status, full attendance-marking flow (liveness+face capture → match → GPS → submit), and the full HR-admin/owner suite (live feed, employees, work assignments, alert subscriptions, analytics, broadcast) under `src/pages/admin/`, role-gated to match the backend's own permission split. **Not done:** attendance history, announcements feed, face-enrollment capture UI, profile/settings, FCM wiring, offline batch-sync. **Not yet tested on-device:** login (needs a real EDGE server on the same LAN), the attendance/liveness flow (needs `mobilefacenet.tflite`, see next row), HR-admin/owner screens, the reused native plugins' actual runtime behavior. |
+| **APK (rebuild — React+TS/Capacitor)** | `APK/mobile/` | ✅ **Login verified end-to-end on a real device against real EDGE** | Started 2026-09-01. Vite+React+TS+Tailwind, wired to the real `EDGE/backend/routes/apk.js` contract. `npm install`, `tsc -b`, `vite build`, `./gradlew assembleDebug` all pass; `npx cap sync android` auto-registers all 8 reused/new plugins. Screens done: server-address setup, login (Employee ID or email), forgot-password + HR-admin approval + forced password-change gate, home/today-status, full attendance-marking flow (liveness+face capture → match → GPS → submit), full HR-admin/owner suite (live feed, employees, work assignments, alert subscriptions, analytics, broadcast, password resets). **2026-09-02: real device → real EDGE → JWT → `passwordMustChange` gate confirmed working**, after fixing 4 real bugs along the way (see §8 2026-09-02 entry: EDGE's `127.0.0.1`-only binding, Capacitor's Mixed Content policy blocking plain HTTP, a wrong health-check URL, and — the big one — no employee ever had a way to get app credentials at all). Two of those fixes only exist in source, not yet in the rebuilt packaged EDGE app. **Not done:** attendance history, announcements feed, face-enrollment capture UI, profile/settings, FCM wiring, offline batch-sync. **Not yet tested on-device:** the attendance/liveness flow (needs `mobilefacenet.tflite`, see next row), HR-admin/owner screens, the reused native plugins' actual runtime behavior. |
 | **`@jenix/cap-face-liveness` (new plugin)** | `APK/mobile/native-plugins/cap-face-liveness/` | ✅ Compiles clean as part of the app build | New Capacitor plugin, built 2026-09-01, **EdgeFolio-only — deliberately not placed in `EMS/Plugins`** (that workspace is FieldForce-only; see §4). Native Kotlin (`LivenessDetector.kt`, `CameraXManager.kt`, `FaceEmbeddingEngine.kt`) ported near-verbatim from `APK/android`'s already-validated originals — same 2-blinks/5°-head-turn liveness thresholds, same MobileFaceNet TFLite contract. TS side (`similarity.ts`) builds and passes tests. Native side now Gradle-verified: fixed a bad dependency pin (`tensorflow-lite-support:2.14.0` doesn't exist upstream — removed, it was unused dead weight anyway, `FaceEmbeddingEngine.kt` only needs the core `tensorflow-lite` interpreter). Still needs `mobilefacenet.tflite` at `APK/mobile/android/app/src/main/assets/` before face capture actually works at runtime (build succeeds without it; `capture()` will just reject with `MODEL_MISSING`). Simplification vs. native: no face-bounding-box overlay, hint text only — see the plugin's own `README.md`. |
 | **EMS backend (Mongo/TS)** | `EMS/src/` | ⚠️ Built for a different product, but architecturally the VPS's future | `Jenix FieldForce` — sales-rep GPS/call/device monitoring, **not payroll**. Its own `BACKEND_HANDOFF.md` says explicitly: *"if another developer owns the deployed VPS Mongo layer, they should merge or port these modules into `VPS/src`."* So EMS is not a rival to VPS — it was built as a candidate implementation for VPS's empty backend, just scoped to the wrong product's domain (calls/visits/dialer instead of payroll/attendance monitoring). `EMS/` (backend) itself still untested this session — only `EMS/Plugins` (below) was retried. |
 | **EMS native Capacitor plugins** | `EMS/Plugins/cap-*` | ✅ Build + test pass; now actually consumed | **Correction, 2026-09-01:** the "blocked npm install" in `NATIVE_PLUGINS_HANDOFF.md` was an environment issue, not a code problem — `npm install` + `npm run build` + `npm run test` all pass cleanly now for all 7 plugins. `cap-core`, `cap-device-health`, `cap-location`, `cap-lifecycle`, `cap-push` are now real dependencies of `APK/mobile/` (linked via `file:`, not copied). `cap-dialer`, `cap-device-policy` deliberately **not** reused — FieldForce-only (call capture/MDM, wrong privacy footprint for payroll). See `EMS/Plugins/NATIVE_PLUGINS_HANDOFF.md` 2026-09-01 entry for detail. |
@@ -321,3 +321,59 @@ Not yet tested on-device: login (needs a real EDGE server reachable on the same 
 point the IP/port screen at), the attendance/liveness flow (also needs
 `mobilefacenet.tflite`, still not sourced), HR-admin/owner screens, any of the reused
 native plugins' actual runtime behavior (location, push, device-health, lifecycle).
+
+### 2026-09-02 — full login flow verified end-to-end on a real device; 3 real bugs found
+
+Client tried logging in against a real running EDGE instance. Nothing worked at first —
+three genuinely separate bugs, found and fixed one at a time by actually debugging each
+(not guessed): **read this before touching connectivity/login again**, all three are
+easy to reintroduce.
+
+1. **EDGE only ever listened on `127.0.0.1`** (`EDGE/backend/config/app.js` `HOST`
+   default) — a phone on the LAN could never reach it, full stop, regardless of
+   firewall or network. Changed the default to `0.0.0.0`. The already-running
+   **packaged** EDGE app doesn't pick this up until rebuilt+reinstalled — for
+   immediate testing it was restarted with a `HOST=0.0.0.0` env var override
+   instead (temporary; reverts on a normal restart until the app is rebuilt).
+   Windows Firewall was already fine (an `EDGEFOLIO` inbound-allow rule for all
+   TCP/UDP already existed) — that was never the blocker.
+2. **Chromium Mixed Content, not Android's OS-level cleartext block.** Capacitor
+   serves the app's own UI over a virtual `https://localhost` origin by default;
+   the WebView then refuses any plain `http://` fetch as insecure content on an
+   "HTTPS page" — confirmed via `adb logcat`, exact message: `Mixed Content: ...
+   must be served over HTTPS`. This is a **different** mechanism from the
+   `network_security_config.xml` cleartext exception added earlier in this
+   session (that one's still correct/needed for native-level blocking, just
+   wasn't the actual cause here). Fixed with `server: { androidScheme: 'http' }`
+   in `capacitor.config.ts` — matches the origin scheme to the target scheme so
+   Mixed Content no longer applies. **This is the fix that actually mattered.**
+3. **`ServerSetupPage.tsx` itself had a bug**, found and fixed earlier same day:
+   its health check hit `/api/v1/health` (behind `requireAuth`, always 401s) —
+   the real public health check is plain `/health`. Fixed to call the correct
+   root-level endpoint.
+4. **No employee had a working password, and there was no way to create one.**
+   Traced through the whole backend: the *only* place that ever creates a
+   `users` login row was `authController.js`'s one-time first-run desktop-admin
+   `setupHandler` — nothing ever provisioned per-employee app credentials, so
+   every seeded/imported employee was permanently locked out of the APK, forever,
+   by design gap (not a regression). Fixed `patchEmployeeHandler` in
+   `apkController.js`: enabling mobile login for an employee with no `users` row
+   now auto-creates one with a generated temp password (same pattern as the
+   password-reset flow), returned once in the response for HR-admin to relay —
+   wired into `EmployeesPage.tsx`'s existing toggle. For immediate testing (this
+   fix also isn't live in the packaged app yet), created EMP001's account by
+   hand via a Python script writing directly to the live SQLite DB — verified
+   byte-for-byte against Node's own `crypto.scryptSync` output before touching
+   anything real, so the temp password it set (`TMP#EMP001`) works exactly like
+   one the real code path would generate.
+
+Login confirmed working end-to-end: real device → real EDGE backend → JWT issued →
+`passwordMustChange` gate triggered correctly.
+
+**Outstanding: two real fixes exist only in the source repo, not in the running
+packaged EDGE app** — the `HOST=0.0.0.0` default and the account-auto-creation on
+mobile-login-enable. Both currently rely on the manual workarounds above (env var
+override, hand-written DB row) that won't survive a normal EDGE restart. Rebuilding
+and reinstalling the packaged app (`npm run build:exe` per `HANDOFF.md`) makes both
+permanent — not yet done, pending the client's go-ahead since it touches the live
+installer.

@@ -29,7 +29,7 @@ function getConfigHandler(_req, res) {
 // ─── Login ───────────────────────────────────────────────────────────────────
 
 // Pre-login check — APK calls this before showing the password field
-// GET /apk/login-check?empCode=EMP003
+// GET /apk/login-check?empCode=EMP003  (also accepts an email address in the same param)
 function loginCheckHandler(req, res, next) {
   try {
     const empCode = String(req.query.empCode || '').trim();
@@ -37,8 +37,11 @@ function loginCheckHandler(req, res, next) {
 
     const db = getDb();
     const emp = db
-      .prepare('SELECT id, mobile_login_enabled, app_role FROM employees WHERE emp_code = ? COLLATE NOCASE')
-      .get(empCode);
+      .prepare(
+        `SELECT id, mobile_login_enabled, app_role FROM employees
+         WHERE emp_code = ? COLLATE NOCASE OR email = ? COLLATE NOCASE`,
+      )
+      .get(empCode, empCode);
 
     if (!emp) return sendOk(res, { allowed: false, reason: 'EMPLOYEE_NOT_FOUND' });
     if (!emp.mobile_login_enabled) return sendOk(res, { allowed: false, reason: 'LOGIN_BLOCKED' });
@@ -49,7 +52,7 @@ function loginCheckHandler(req, res, next) {
   }
 }
 
-// APK-specific login: empCode + password → JWT with role from employees.app_role
+// APK-specific login: empCode (or email, same field) + password → JWT with role from employees.app_role
 // POST /apk/auth/login
 function apkLoginHandler(req, res, next) {
   try {
@@ -57,6 +60,7 @@ function apkLoginHandler(req, res, next) {
     if (!empCode || !password) throw createHttpError(400, 'empCode and password are required');
 
     const db = getDb();
+    const identifier = String(empCode).trim();
     // Join employees → users on email to get password hash
     const row = db
       .prepare(
@@ -65,9 +69,9 @@ function apkLoginHandler(req, res, next) {
                 u.email, u.password_hash, u.temp_password_hash, u.password_must_change
          FROM employees e
          JOIN users u ON LOWER(u.email) = LOWER(e.email)
-         WHERE e.emp_code = ? COLLATE NOCASE`,
+         WHERE e.emp_code = ? COLLATE NOCASE OR e.email = ? COLLATE NOCASE`,
       )
-      .get(String(empCode).trim());
+      .get(identifier, identifier);
 
     if (!row) throw createHttpError(401, 'Invalid Employee ID or password');
 
@@ -612,16 +616,39 @@ function getEmployeesHandler(_req, res, next) {
   }
 }
 
+// Enabling mobile login for an employee with no `users` row (the only account-creation
+// path in this codebase was previously EDGE's one-time first-run admin setup — nothing
+// ever provisioned per-employee app credentials, so every seeded/imported employee was
+// permanently unable to log into the APK) now auto-creates one, same temp-password
+// pattern as authController.js's approveResetRequestHandler.
 function patchEmployeeHandler(req, res, next) {
   try {
     const { id } = req.params;
     const { mobileLoginEnabled } = req.body || {};
     if (mobileLoginEnabled === undefined) throw createHttpError(400, 'mobileLoginEnabled is required');
     if (![0, 1].includes(Number(mobileLoginEnabled))) throw createHttpError(400, 'mobileLoginEnabled must be 0 or 1');
+
     const db = getDb();
-    if (!db.prepare('SELECT id FROM employees WHERE id = ?').get(id)) throw createHttpError(404, 'Employee not found');
+    const employee = db.prepare('SELECT id, email, name FROM employees WHERE id = ?').get(id);
+    if (!employee) throw createHttpError(404, 'Employee not found');
+
     db.prepare('UPDATE employees SET mobile_login_enabled = ? WHERE id = ?').run(Number(mobileLoginEnabled), id);
-    return sendOk(res, { updated: true });
+
+    let tempPassword = null;
+    if (Number(mobileLoginEnabled) === 1 && employee.email) {
+      const hasAccount = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(employee.email);
+      if (!hasAccount) {
+        tempPassword = `TMP#${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+        const salt = crypto.randomBytes(16).toString('hex');
+        const hash = crypto.scryptSync(tempPassword, salt, 64).toString('hex');
+        db.prepare(
+          `INSERT INTO users (id, email, password_hash, role, password_must_change)
+           VALUES (?, ?, ?, 'employee', 1)`,
+        ).run(randomUUID(), employee.email, `${salt}:${hash}`);
+      }
+    }
+
+    return sendOk(res, { updated: true, tempPassword });
   } catch (err) {
     return next(err);
   }

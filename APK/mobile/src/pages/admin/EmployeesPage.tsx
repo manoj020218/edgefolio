@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { KeyRound } from 'lucide-react';
 import { apiGet, apiPatch, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -20,6 +22,7 @@ export default function EmployeesPage() {
   const [rows, setRows] = useState<EmployeeRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
+  const [issued, setIssued] = useState<{ empName: string; tempPassword: string } | null>(null);
 
   function load() {
     apiGet<EmployeeRow[]>('/employees')
@@ -33,11 +36,18 @@ export default function EmployeesPage() {
     if (!canEdit) return;
     setPendingId(row.id);
     try {
-      await apiPatch(`/employees/${row.id}`, { mobileLoginEnabled: row.mobileLoginEnabled ? 0 : 1 });
+      const nextEnabled = row.mobileLoginEnabled ? 0 : 1;
+      // Turning login on for someone with no account yet auto-creates one — see
+      // patchEmployeeHandler in apkController.js. tempPassword is only ever
+      // returned this once; there's no other way to retrieve it afterwards.
+      const res = await apiPatch<{ updated: boolean; tempPassword: string | null }>(`/employees/${row.id}`, {
+        mobileLoginEnabled: nextEnabled,
+      });
+      if (res.tempPassword) {
+        setIssued({ empName: row.name, tempPassword: res.tempPassword });
+      }
       setRows((prev) =>
-        prev
-          ? prev.map((r) => (r.id === row.id ? { ...r, mobileLoginEnabled: r.mobileLoginEnabled ? 0 : 1 } : r))
-          : prev,
+        prev ? prev.map((r) => (r.id === row.id ? { ...r, mobileLoginEnabled: nextEnabled } : r)) : prev,
       );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Update failed.');
@@ -48,7 +58,28 @@ export default function EmployeesPage() {
 
   return (
     <div className="px-4 py-4">
-      <h1 className="mb-4 text-lg font-semibold text-slate-100">Employees</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-slate-100">Employees</h1>
+        <Link
+          to="/admin/password-resets"
+          className="flex items-center gap-1.5 rounded-md bg-surface-light px-3 py-1.5 text-sm text-slate-200"
+        >
+          <KeyRound size={16} /> Resets
+        </Link>
+      </div>
+
+      {issued && (
+        <div className="mb-4 rounded-lg border border-success bg-surface p-3">
+          <p className="text-sm text-slate-300">
+            Temporary password for <span className="font-medium text-slate-100">{issued.empName}</span> (new
+            account):
+          </p>
+          <p className="mt-1 font-mono text-lg text-slate-100">{issued.tempPassword}</p>
+          <button onClick={() => setIssued(null)} className="mt-2 text-xs text-brand-500 underline">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
       {!error && !rows && <p className="text-sm text-slate-400">Loading…</p>}

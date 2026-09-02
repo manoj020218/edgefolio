@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import ForgotPasswordPage from './ForgotPasswordPage';
 
 interface LoginCheckResponse {
   allowed: boolean;
@@ -13,7 +14,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<'empCode' | 'password'>('empCode');
+  const [step, setStep] = useState<'empCode' | 'password' | 'forgot'>('empCode');
   const [empCode, setEmpCode] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -60,24 +61,28 @@ export default function LoginPage() {
     }
   }
 
+  if (step === 'forgot') {
+    return <ForgotPasswordPage onBack={() => setStep('empCode')} />;
+  }
+
   return (
     <div className="flex min-h-full flex-col justify-center px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold text-slate-100">EdgeFolio</h1>
-      <p className="mb-8 text-sm text-slate-300">Sign in with your Employee ID.</p>
+      <p className="mb-8 text-sm text-slate-300">Sign in with your Employee ID or email.</p>
 
       {step === 'empCode' && (
         <form onSubmit={handleCheckEmpCode} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm text-slate-300" htmlFor="empCode">
-              Employee ID
+              Employee ID or email
             </label>
             <input
               id="empCode"
               className="w-full rounded-md border border-surface-light bg-surface px-3 py-2.5 text-slate-100 outline-none focus:border-brand-500"
-              placeholder="EMP003"
+              placeholder="EMP003 or you@company.com"
               value={empCode}
               onChange={(e) => setEmpCode(e.target.value)}
-              autoCapitalize="characters"
+              autoCapitalize="none"
               autoCorrect="off"
               autoFocus
             />
@@ -90,13 +95,20 @@ export default function LoginPage() {
           >
             {busy ? 'Checking…' : 'Continue'}
           </button>
+          <button
+            type="button"
+            onClick={() => setStep('forgot')}
+            className="w-full text-center text-sm text-brand-500 underline"
+          >
+            Forgot password?
+          </button>
         </form>
       )}
 
       {step === 'password' && (
         <form onSubmit={handleLogin} className="space-y-4">
           <p className="text-sm text-slate-300">
-            Employee ID: <span className="font-medium text-slate-100">{empCode}</span>{' '}
+            Signing in as: <span className="font-medium text-slate-100">{empCode}</span>{' '}
             <button
               type="button"
               className="text-brand-500 underline"

@@ -30,7 +30,11 @@ module.exports = {
   LOG_DIR,
   EDGE_ID: process.env.EDGE_ID || 'edgefolio-local',
   NODE_ENV: process.env.NODE_ENV || 'development',
-  HOST: process.env.HOST || '127.0.0.1',
+  // 0.0.0.0 (all interfaces), not 127.0.0.1 — the APK connects from a phone on
+  // the same LAN, which is unreachable if EDGE only listens on loopback. The
+  // sensitive routes are already behind requireAuth/requireRole; /health and
+  // /apk/login-check are the only intentionally-public ones.
+  HOST: process.env.HOST || '0.0.0.0',
   PORT: Number(process.env.PORT || 7001),
   API_PREFIX: '/api/v1',
   DB_PATH:

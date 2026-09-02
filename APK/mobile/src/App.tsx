@@ -5,6 +5,7 @@ import { useAuth } from './lib/auth';
 import ServerSetupPage from './pages/ServerSetupPage';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import AdminShell from './pages/admin/AdminShell';
 import LiveFeedPage from './pages/admin/LiveFeedPage';
 import EmployeesPage from './pages/admin/EmployeesPage';
@@ -12,6 +13,7 @@ import AssignmentsPage from './pages/admin/AssignmentsPage';
 import AlertsPage from './pages/admin/AlertsPage';
 import AnalyticsPage from './pages/admin/AnalyticsPage';
 import BroadcastPage from './pages/admin/BroadcastPage';
+import PasswordResetsPage from './pages/admin/PasswordResetsPage';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -31,6 +33,13 @@ export default function App() {
 
   if (!baseUrl) {
     return <ServerSetupPage onDone={setBaseUrlState} />;
+  }
+
+  // Forced gate — intercepts every route until the temp password is replaced.
+  // Applies regardless of role/path; ChangePasswordPage clears this via
+  // markPasswordChanged() on success, which re-renders past this check.
+  if (user?.passwordMustChange) {
+    return <ChangePasswordPage />;
   }
 
   const isAdmin = user?.role === 'hr-admin' || user?.role === 'owner';
@@ -54,6 +63,7 @@ export default function App() {
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="broadcast" element={<BroadcastPage />} />
+        <Route path="password-resets" element={<PasswordResetsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

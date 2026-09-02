@@ -8,7 +8,7 @@ const {
   statusHandler,
   setupHandler,
 } = require('../controllers/authController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -19,8 +19,12 @@ router.post('/login',  loginHandler);
 router.post('/forgot-password', forgotPasswordHandler);
 
 // Protected
-router.post('/change-password',             requireAuth, changePasswordHandler);
-router.get('/reset-requests',               requireAuth, listResetRequestsHandler);
-router.post('/reset-requests/:id/approve',  requireAuth, approveResetRequestHandler);
+router.post('/change-password', requireAuth, changePasswordHandler);
+// 'admin' = desktop EDGE admin, 'hr-admin' = APK role — either can manage resets.
+// Previously these had no role check at all (any authenticated user, including a
+// plain 'employee' APK login, could approve resets) — closing that here since the
+// APK now actually calls this.
+router.get('/reset-requests',               requireAuth, requireRole('admin', 'hr-admin'), listResetRequestsHandler);
+router.post('/reset-requests/:id/approve',  requireAuth, requireRole('admin', 'hr-admin'), approveResetRequestHandler);
 
 module.exports = router;

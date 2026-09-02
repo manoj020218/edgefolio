@@ -24,10 +24,14 @@ export default function ServerSetupPage({ onDone }: Props) {
       return;
     }
 
-    const base = `http://${trimmedIp}:${port || '7001'}/api/v1`;
+    const root = `http://${trimmedIp}:${port || '7001'}`;
+    const base = `${root}/api/v1`;
     setChecking(true);
     try {
-      const res = await fetch(`${base}/health`);
+      // EDGE/backend/server.js only exposes an unauthenticated health check at
+      // plain /health — /api/v1/health sits behind requireAuth and always 401s
+      // for this pre-login check.
+      const res = await fetch(`${root}/health`);
       if (!res.ok) throw new Error('Server did not respond');
       await setBaseUrl(base);
       onDone(base);
