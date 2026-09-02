@@ -11,6 +11,7 @@ Completed phase:
 - Phase 4: TypeScript ESC/POS helpers for text, feed, cut, cash drawer, and receipt composition
 - Phase 5: Android USB discovery, permission handoff, and attach/detach events
 - Phase 6: Android USB connect, bulk OUT endpoint discovery, and raw writes
+- Phase 7: TypeScript ESC/POS QR and CODE128 barcode helpers
 
 Important architecture decisions:
 
@@ -35,11 +36,13 @@ Important architecture decisions:
 - Resolve USB writes against a claimed interface with a bulk OUT endpoint, preferring printer-class interfaces first and falling back to other bulk OUT interfaces only when needed.
 - Serialize USB raw writes through a single native executor so the public `write()` API stays transport-independent and concurrent print calls do not interleave.
 - Share one parsed native raw-byte payload model for BLE and USB so both transports accept the same Capacitor `number[]` write contract.
+- Keep QR and barcode command composition in TypeScript as transport-independent `write()` wrappers, matching the existing text/feed/cut helper pattern.
+- Limit the initial barcode helper to CODE128 with automatic Code Set B selection and brace escaping, and keep QR/barcode payloads ASCII-only to avoid silent machine-readable data corruption.
 
 Implementation plan:
 
-1. Phase 7: add ESC/POS QR and barcode helpers with byte-sequence tests.
-2. Phase 8+: add profiles, reconnect handling, demo usage, and final documentation in order.
+1. Phase 8: add printer profile types/helpers, bounded reconnect handling, and status refinements.
+2. Phase 9+: add demo usage and final documentation in order.
 
 Files added or changed:
 
@@ -53,9 +56,13 @@ Files added or changed:
 - `cap-thermal-printer/src/bytes.ts`
 - `cap-thermal-printer/src/errors.ts`
 - `cap-thermal-printer/src/index.ts`
+- `cap-thermal-printer/src/escpos/barcode.ts`
+- `cap-thermal-printer/src/escpos/barcode.test.ts`
 - `cap-thermal-printer/src/escpos/builder.ts`
 - `cap-thermal-printer/src/escpos/commands.ts`
 - `cap-thermal-printer/src/escpos/index.ts`
+- `cap-thermal-printer/src/escpos/qrcode.ts`
+- `cap-thermal-printer/src/escpos/qrcode.test.ts`
 - `cap-thermal-printer/src/escpos/builder.test.ts`
 - `cap-thermal-printer/src/escpos/commands.test.ts`
 - `cap-thermal-printer/src/transport.ts`
@@ -91,4 +98,4 @@ Current build status:
 
 Next phase:
 
-- Phase 7: ESC/POS QR and barcode helpers.
+- Phase 8: printer profiles, bounded reconnect handling, and status refinements.

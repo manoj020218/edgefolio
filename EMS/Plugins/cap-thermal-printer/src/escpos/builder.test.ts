@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EscPosBuilder, buildPrintTextData } from './builder';
+import { EscPosBuilder, buildPrintBarcodeData, buildPrintQRCodeData, buildPrintTextData } from './builder';
 
 describe('EscPosBuilder', () => {
   it('builds a basic formatted receipt payload', () => {
@@ -36,5 +36,12 @@ describe('EscPosBuilder', () => {
       72, 105,
       0x1b, 0x61, 0x00,
     ]);
+  });
+
+  it('builds QR and barcode helper payloads', () => {
+    expect(buildPrintQRCodeData({ data: 'OK' })).toEqual(new EscPosBuilder().qrCode({ data: 'OK' }).build());
+    expect(buildPrintBarcodeData({ data: '123', format: 'code128' })).toEqual(
+      new EscPosBuilder().barcode({ data: '123', format: 'code128' }).build(),
+    );
   });
 });

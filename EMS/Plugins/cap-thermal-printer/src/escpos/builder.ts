@@ -1,4 +1,5 @@
-import type { CashDrawerOptions, PrintTextOptions, PrinterAlignment } from '../definitions';
+import type { CashDrawerOptions, PrintBarcodeOptions, PrintQRCodeOptions, PrintTextOptions, PrinterAlignment } from '../definitions';
+import { barcodeBytes } from './barcode';
 import {
   cutPaper,
   feedLines,
@@ -12,6 +13,7 @@ import {
   setUnderline,
   textBytes,
 } from './commands';
+import { qrCodeBytes } from './qrcode';
 
 export class EscPosBuilder {
   private readonly buffer: number[] = [];
@@ -52,6 +54,14 @@ export class EscPosBuilder {
     return this.append(separatorLine(length, char));
   }
 
+  qrCode(options: PrintQRCodeOptions): this {
+    return this.append(qrCodeBytes(options));
+  }
+
+  barcode(options: PrintBarcodeOptions): this {
+    return this.append(barcodeBytes(options));
+  }
+
   cut(partial = false): this {
     return this.append(cutPaper(partial));
   }
@@ -80,4 +90,12 @@ export function buildPrintTextData(options: PrintTextOptions): number[] {
     builder.align('left');
   }
   return builder.build();
+}
+
+export function buildPrintQRCodeData(options: PrintQRCodeOptions): number[] {
+  return new EscPosBuilder().qrCode(options).build();
+}
+
+export function buildPrintBarcodeData(options: PrintBarcodeOptions): number[] {
+  return new EscPosBuilder().barcode(options).build();
 }

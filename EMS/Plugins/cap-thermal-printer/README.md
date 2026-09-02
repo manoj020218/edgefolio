@@ -11,7 +11,7 @@ Current support:
 - USB enumeration with attach/detach events
 - USB connect/disconnect with Android permission handoff
 - Raw byte writes over BLE and USB with transport-specific chunking
-- Basic ESC/POS helpers for text, feed, cut, and cash drawer
+- ESC/POS helpers for text, feed, cut, cash drawer, QR, and CODE128 barcodes
 - Connection state and error events
 
 Planned public API:
@@ -73,6 +73,8 @@ const receipt = new EscPosBuilder()
 
 await ThermalPrinter.write({ data: receipt });
 await ThermalPrinter.printText({ text: 'Quick text path\n', alignment: 'center' });
+await ThermalPrinter.printQRCode({ data: 'https://jenix.example/receipt/123', alignment: 'center', size: 6 });
+await ThermalPrinter.printBarcode({ data: 'INV-123', format: 'code128', alignment: 'center', width: 3 });
 ```
 
-`printQRCode`, `printBarcode`, and `printImage` remain reserved for later phases.
+`printImage` remains reserved for a later phase. QR and barcode helpers currently support ASCII-only payloads.

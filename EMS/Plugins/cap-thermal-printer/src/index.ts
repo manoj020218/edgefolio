@@ -16,7 +16,7 @@ import type {
   ThermalPrinterPlugin,
   WriteOptions,
 } from './definitions';
-import { buildPrintTextData, EscPosBuilder } from './escpos';
+import { buildPrintBarcodeData, buildPrintQRCodeData, buildPrintTextData, EscPosBuilder } from './escpos';
 
 const nativeThermalPrinter = registerPlugin<ThermalPrinterPlugin>('JenixThermalPrinter', {
   web: () => import('./web').then((m) => new m.ThermalPrinterWeb()),
@@ -72,11 +72,11 @@ class ThermalPrinterClient implements ThermalPrinterPlugin {
   }
 
   printQRCode(options: PrintQRCodeOptions): Promise<{ written: number }> {
-    return nativeThermalPrinter.printQRCode(options);
+    return this.write({ data: buildPrintQRCodeData(options) });
   }
 
   printBarcode(options: PrintBarcodeOptions): Promise<{ written: number }> {
-    return nativeThermalPrinter.printBarcode(options);
+    return this.write({ data: buildPrintBarcodeData(options) });
   }
 
   printImage(options: PrintImageOptions): Promise<{ written: number }> {

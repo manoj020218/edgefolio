@@ -11,6 +11,8 @@ BLE:
 - Send a short raw receipt (`ESC @`, text, feed) and confirm the printer outputs it.
 - Send a long raw receipt that exceeds one BLE packet and confirm chunked printing succeeds.
 - Send `printText`, `feed`, `cut`, and `openCashDrawer` commands and confirm the helper APIs map to printer behavior.
+- Send `printQRCode` with ASCII content and confirm the printer renders a scannable QR code.
+- Send `printBarcode` with CODE128 data and confirm the barcode scans correctly.
 - Disconnect manually and confirm `disconnected` plus `isConnected() === false`.
 - Power off or move the printer out of range while connected and confirm disconnect/error events.
 - Deny permission and confirm the plugin returns `PERMISSION_DENIED`.
@@ -22,6 +24,7 @@ USB:
 - Reject the USB permission prompt and confirm a stable permission error is returned.
 - Connect by `deviceId` when multiple USB printers are attached.
 - Send a short raw receipt and confirm bulk OUT printing succeeds.
+- Send `printQRCode` and `printBarcode` through the USB transport and confirm the printed codes scan correctly.
 - Disconnect manually and confirm `disconnected` plus `isConnected() === false`.
 - Unplug the printer while connected and confirm `usbDetached` plus disconnect/error events.
 
