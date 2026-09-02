@@ -7,6 +7,7 @@ const STORAGE_BASE = process.env.EDGEFOLIO_STORAGE_PATH || path.join(EDGE_ROOT, 
 const STORAGE_DIR = path.join(STORAGE_BASE, 'database');
 const BACKUP_DIR = path.join(STORAGE_BASE, 'backups');
 const FACES_DIR = path.join(STORAGE_BASE, 'faces');
+const UPLOADS_DIR = path.join(STORAGE_BASE, 'uploads');
 const LOG_DIR = process.env.EDGEFOLIO_LOG_PATH || path.join(EDGE_ROOT, 'logs');
 const IS_TEST = process.env.NODE_ENV === 'test';
 
@@ -27,6 +28,7 @@ module.exports = {
   STORAGE_DIR,
   BACKUP_DIR,
   FACES_DIR,
+  UPLOADS_DIR,
   LOG_DIR,
   EDGE_ID: process.env.EDGE_ID || 'edgefolio-local',
   NODE_ENV: process.env.NODE_ENV || 'development',

@@ -23,7 +23,16 @@ const {
   broadcastHandler,
   getEmployeesHandler,
   patchEmployeeHandler,
+  getProfileHandler,
+  updateProfileHandler,
+  listMyPayslipsHandler,
+  getMyAttendanceHistoryHandler,
+  getMyLeaveBalanceHandler,
 } = require('../controllers/apkController');
+const requestsRoutes = require('./requests');
+const visitsRoutes = require('./visits');
+const supportRoutes = require('./support');
+const documentsRoutes = require('./documents');
 
 const router = express.Router();
 
@@ -75,5 +84,22 @@ router.get('/analytics', requireRole('hr-admin', 'owner'), getAnalyticsHandler);
 // Employee management (hr-admin only)
 router.get('/employees',       requireRole('hr-admin', 'owner'), getEmployeesHandler);
 router.patch('/employees/:id', requireRole('hr-admin'),          patchEmployeeHandler);
+
+// Detailed Profile (any authenticated employee, own record only)
+router.get('/profile',   getProfileHandler);
+router.patch('/profile', updateProfileHandler);
+
+// Pay Settings screen support (own data only — see handler comments for why these
+// don't just proxy to the desktop /payroll and /attendance endpoints)
+router.get('/payslips',           listMyPayslipsHandler);
+router.get('/attendance-history', getMyAttendanceHistoryHandler);
+router.get('/leave-balance',      getMyLeaveBalanceHandler);
+
+// Unified Requests hub, Work/Visits, Help & Support, Documents — each is its own
+// router; all inherit requireAuth + requireLicense from above.
+router.use('/requests', requestsRoutes);
+router.use('/visits', visitsRoutes);
+router.use('/support-tickets', supportRoutes);
+router.use('/documents', documentsRoutes);
 
 module.exports = router;

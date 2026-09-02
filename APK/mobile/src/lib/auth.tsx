@@ -10,6 +10,7 @@ export interface AuthUser {
   department: string | null;
   designation: string | null;
   role: AppRole;
+  isFieldEmployee: boolean;
   passwordMustChange: boolean;
 }
 

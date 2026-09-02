@@ -65,7 +65,7 @@ function apkLoginHandler(req, res, next) {
     const row = db
       .prepare(
         `SELECT e.id AS empId, e.emp_code, e.name, e.department, e.designation,
-                e.app_role, e.mobile_login_enabled,
+                e.app_role, e.mobile_login_enabled, e.is_field_employee,
                 u.email, u.password_hash, u.temp_password_hash, u.password_must_change
          FROM employees e
          JOIN users u ON LOWER(u.email) = LOWER(e.email)
@@ -106,6 +106,7 @@ function apkLoginHandler(req, res, next) {
         department: row.department,
         designation: row.designation,
         role,
+        isFieldEmployee: Boolean(row.is_field_employee),
         passwordMustChange: Boolean(row.password_must_change),
       },
     });
@@ -132,7 +133,7 @@ function registerFcmTokenHandler(req, res, next) {
 
 // ─── Work Assignments ────────────────────────────────────────────────────────
 
-// GET /apk/today-status — employee checks their own work type for today
+// GET /apk/today-status — employee checks their own work type + today's attendance for the Home dashboard
 function getTodayStatusHandler(req, res, next) {
   try {
     const empId = req.user?.empId;
@@ -140,6 +141,14 @@ function getTodayStatusHandler(req, res, next) {
 
     const today = new Date().toISOString().slice(0, 10);
     const db = getDb();
+
+    const record = db
+      .prepare('SELECT check_in, check_out, hours_worked, status FROM attendance_records WHERE member_id = ? AND date = ?')
+      .get(empId, today);
+    const todayAttendance = record
+      ? { checkIn: record.check_in, checkOut: record.check_out, hoursWorked: record.hours_worked, status: record.status }
+      : null;
+
     const assignment = db
       .prepare(
         `SELECT * FROM work_assignments
@@ -148,7 +157,7 @@ function getTodayStatusHandler(req, res, next) {
       )
       .get(empId, today, today);
 
-    if (!assignment) return sendOk(res, { workType: 'office', assignment: null });
+    if (!assignment) return sendOk(res, { workType: 'office', assignment: null, todayAttendance });
 
     return sendOk(res, {
       workType: assignment.work_type,
@@ -158,6 +167,7 @@ function getTodayStatusHandler(req, res, next) {
         toDate: assignment.to_date,
         notes: assignment.notes || null,
       },
+      todayAttendance,
     });
   } catch (err) {
     return next(err);
@@ -724,6 +734,116 @@ async function notifyWatchers(db, empId, empName, event, time, workType) {
   await fcm.sendToTokens(tokens, title, body, { type: 'ATTENDANCE_ALERT', empId, event, workType, time });
 }
 
+// ─── Detailed Profile (optional personal fields) ─────────────────────────────
+
+const PROFILE_FIELDS = [
+  'gender', 'date_of_birth', 'blood_group', 'anniversary_date',
+  'current_address', 'permanent_address', 'vehicle_number',
+  'emergency_contact_name', 'emergency_contact_relation', 'emergency_contact_phone',
+];
+
+function toCamel(s) {
+  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+// GET /apk/profile
+function getProfileHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const row = getDb()
+      .prepare(`SELECT id, ${PROFILE_FIELDS.join(', ')} FROM employees WHERE id = ?`)
+      .get(empId);
+    if (!row) throw createHttpError(404, 'Employee not found');
+
+    const profile = {};
+    PROFILE_FIELDS.forEach((f) => { profile[toCamel(f)] = row[f] ?? null; });
+    return sendOk(res, profile);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// PATCH /apk/profile — body: any subset of the optional profile fields (camelCase)
+function updateProfileHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const body = req.body || {};
+    const setCols = PROFILE_FIELDS.filter((f) => toCamel(f) in body);
+    if (!setCols.length) throw createHttpError(400, 'No recognised profile fields in body');
+
+    const db = getDb();
+    const setSql = setCols.map((f) => `${f} = ?`).join(', ');
+    const values = setCols.map((f) => {
+      const v = body[toCamel(f)];
+      return v === '' ? null : v;
+    });
+    db.prepare(`UPDATE employees SET ${setSql} WHERE id = ?`).run(...values, empId);
+
+    return sendOk(res, { updated: true });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /apk/payslips — own payslips only (the desktop /payroll/payslips endpoint
+// returns every employee's, unsafe to expose to a mobile employee session directly)
+function listMyPayslipsHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const rows = getDb()
+      .prepare(
+        `SELECT payslip_id AS id, month, gross, net_salary AS netSalary, status
+         FROM payslips WHERE employee_id = ? ORDER BY month DESC LIMIT 12`,
+      )
+      .all(empId);
+    return sendOk(res, rows);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /apk/leave-balance — own balance only (the desktop /leaves/balances endpoint
+// returns every employee's, unsafe to expose to a mobile employee session directly)
+function getMyLeaveBalanceHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const row = getDb()
+      .prepare('SELECT annual, sick, casual FROM leave_balances WHERE employee_id = ?')
+      .get(empId);
+    return sendOk(res, row || { annual: 0, sick: 0, casual: 0 });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /apk/attendance-history — own monthly present-day counts, last 6 months
+function getMyAttendanceHistoryHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const rows = getDb()
+      .prepare(
+        `SELECT substr(date, 1, 7) AS month, COUNT(*) AS present
+         FROM attendance_records
+         WHERE member_id = ? AND status = 'present'
+         GROUP BY month ORDER BY month DESC LIMIT 6`,
+      )
+      .all(empId);
+    return sendOk(res, rows);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   getConfigHandler,
   getAnalyticsHandler,
@@ -746,4 +866,9 @@ module.exports = {
   broadcastHandler,
   getEmployeesHandler,
   patchEmployeeHandler,
+  getProfileHandler,
+  updateProfileHandler,
+  listMyPayslipsHandler,
+  getMyAttendanceHistoryHandler,
+  getMyLeaveBalanceHandler,
 };

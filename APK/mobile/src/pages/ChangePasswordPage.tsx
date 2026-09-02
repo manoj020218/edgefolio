@@ -2,10 +2,17 @@ import { useState, type FormEvent } from 'react';
 import { authApiPost, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
+interface Props {
+  // Set when reached voluntarily from Profile (not the forced gate) — called after
+  // a successful change so the caller can navigate back.
+  onDone?: () => void;
+}
+
 // Forced gate — shown whenever user.passwordMustChange is true (fresh account,
 // or after an HR-admin password reset via PasswordResetsPage). Wired in App.tsx
-// ahead of the normal employee/admin routes.
-export default function ChangePasswordPage() {
+// ahead of the normal employee/admin routes. Also reachable voluntarily from
+// Profile via the /change-password route (onDone set in that case).
+export default function ChangePasswordPage({ onDone }: Props) {
   const { markPasswordChanged } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -30,6 +37,7 @@ export default function ChangePasswordPage() {
     try {
       await authApiPost('/change-password', { currentPassword, newPassword });
       markPasswordChanged();
+      onDone?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not change password.');
     } finally {

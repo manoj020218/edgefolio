@@ -29,11 +29,14 @@ export default function AdminShell() {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-16">
+      <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 flex border-t border-surface-light bg-surface">
+      <nav
+        className="fixed inset-x-0 bottom-0 flex border-t border-surface-light bg-surface"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
         {tabs.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}

@@ -381,6 +381,98 @@ function runMigrations(db) {
     FOREIGN KEY(field_id) REFERENCES custom_field_definitions(field_id) ON DELETE CASCADE,
     UNIQUE(employee_id, field_id)
   )`);
+
+  // employees: is this a field/sales role (sees Visits on the APK Work tab) vs
+  // office-based (sees attendance status only)? HR-admin toggle UI is later work —
+  // this just makes the classification exist so the Work tab can adapt now.
+  if (!columnExists(db, 'employees', 'is_field_employee')) {
+    db.exec('ALTER TABLE employees ADD COLUMN is_field_employee INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // employees: extended optional profile fields (APK "Detailed Profile" screen) — all nullable
+  const profileCols = [
+    'gender', 'date_of_birth', 'blood_group', 'anniversary_date',
+    'current_address', 'permanent_address', 'vehicle_number',
+    'emergency_contact_name', 'emergency_contact_relation', 'emergency_contact_phone',
+  ];
+  profileCols.forEach((col) => {
+    if (!columnExists(db, 'employees', col)) {
+      db.exec(`ALTER TABLE employees ADD COLUMN ${col} TEXT`);
+    }
+  });
+
+  // Unified request system (APK "Requests" hub) — one table for all 9 types, type-specific
+  // fields live in details_json rather than one column per type. Approval endpoints are
+  // HR-side work (not built yet) — this phase only submits and displays status.
+  db.exec(`CREATE TABLE IF NOT EXISTS employee_requests (
+    id TEXT PRIMARY KEY,
+    employee_id TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN (
+      'leave','attendance_correction','advance_salary','expense',
+      'travel','shift_change','wfh','comp_off','document_request'
+    )),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+    title TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    decision_note TEXT,
+    decided_by TEXT,
+    decided_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_requests_emp_status
+    ON employee_requests(employee_id, status)`);
+
+  // Field/sales employee visit tracking (APK "Work" tab, role-adaptive)
+  db.exec(`CREATE TABLE IF NOT EXISTS employee_visits (
+    id TEXT PRIMARY KEY,
+    employee_id TEXT NOT NULL,
+    customer_name TEXT NOT NULL,
+    location TEXT,
+    contact_person TEXT,
+    purpose TEXT,
+    status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','checked_in','completed')),
+    scheduled_for TEXT,
+    check_in_at TEXT,
+    check_in_lat REAL,
+    check_in_lon REAL,
+    remarks TEXT,
+    photo_path TEXT,
+    signature_data TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_visits_emp_date
+    ON employee_visits(employee_id, scheduled_for)`);
+
+  // Help/HR support tickets — employee_id nullable for anonymous grievances
+  db.exec(`CREATE TABLE IF NOT EXISTS support_tickets (
+    id TEXT PRIMARY KEY,
+    employee_id TEXT,
+    is_anonymous INTEGER NOT NULL DEFAULT 0,
+    category TEXT NOT NULL CHECK(category IN ('hr','complaint','it','payroll','grievance')),
+    subject TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved')),
+    resolved_by TEXT,
+    resolved_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE SET NULL
+  )`);
+
+  // Documents — employee_id NULL means company-wide (e.g. policies), visible to everyone
+  db.exec(`CREATE TABLE IF NOT EXISTS employee_documents (
+    id TEXT PRIMARY KEY,
+    employee_id TEXT,
+    source TEXT NOT NULL CHECK(source IN ('company','self')),
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    uploaded_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )`);
 }
 
 function seedIfEmpty(db) {

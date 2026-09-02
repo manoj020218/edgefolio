@@ -65,6 +65,9 @@ function makeClient(routePrefix: string) {
 // since they're shared with the desktop EDGE admin app, not APK-specific.
 const client = makeClient('/apk');
 const authClient = makeClient('/auth');
+// Plain /api/v1 root — for endpoints shared with the desktop app that aren't
+// APK-specific (e.g. announcements). Same requireAuth+requireLicense gate applies.
+const rootClient = makeClient('');
 
 export interface ApiEnvelope<T> {
   ok: boolean;
@@ -117,6 +120,12 @@ export async function authApiGet<T>(path: string, params?: Record<string, unknow
 
 export async function authApiPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await authClient.post<ApiEnvelope<T>>(path, body);
+  if (!res.data.ok) throw toApiError(res.data);
+  return res.data.data as T;
+}
+
+export async function rootApiGet<T>(path: string, params?: Record<string, unknown>): Promise<T> {
+  const res = await rootClient.get<ApiEnvelope<T>>(path, { params });
   if (!res.data.ok) throw toApiError(res.data);
   return res.data.data as T;
 }
