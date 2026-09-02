@@ -21,18 +21,25 @@ import com.getcapacitor.annotation.PermissionCallback
 )
 class ThermalPrinterPlugin : Plugin() {
     private lateinit var bleScanner: BlePrinterScanner
+    private lateinit var bleConnection: BlePrinterConnection
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scanTimeoutRunnable = Runnable { finishScan("timeout") }
     private var activeScanCallId: String? = null
 
     override fun load() {
         bleScanner = BlePrinterScanner(context)
+        bleConnection = BlePrinterConnection(context, object : BleConnectionListener {
+            override fun onConnected(snapshot: BleConnectionSnapshot) = emitListenerEvent("connected", buildBleStatusPayload(snapshot))
+            override fun onDisconnected(snapshot: BleConnectionSnapshot) = emitListenerEvent("disconnected", buildBleStatusPayload(snapshot))
+            override fun onConnectionError(message: String, code: String) = emitListenerEvent("connectionError", buildConnectionErrorPayload(message, code))
+        })
     }
 
     override fun handleOnDestroy() {
         cancelScanTimeout()
         bleScanner.stop()
         releaseActiveScanCall()
+        bleConnection.shutdown()
     }
 
     @PluginMethod
@@ -46,7 +53,7 @@ class ThermalPrinterPlugin : Plugin() {
             return
         }
         if (!hasScanPermissions()) {
-            requestPermissionForAliases(scanPermissionAliases(), call, "scanPermissionCallback")
+            requestPermissionForAliases(bleScanPermissionAliases(), call, "scanPermissionCallback")
             return
         }
         startScan(call)
@@ -66,25 +73,45 @@ class ThermalPrinterPlugin : Plugin() {
     }
 
     @PluginMethod
-    fun connect(call: PluginCall) = rejectNotReady(call, "Printer connections will be added in a later phase.")
+    fun connect(call: PluginCall) {
+        val config = readBleConnectConfig(call) ?: return
+        if (!hasConnectPermissions()) {
+            requestPermissionForAliases(bleConnectPermissionAliases(), call, "connectPermissionCallback")
+            return
+        }
+        startConnect(call, config)
+    }
 
     @PluginMethod
     fun disconnect(call: PluginCall) {
-        call.resolve(disconnectedState())
+        bleConnection.disconnect {
+            call.resolve(buildBleStatusPayload(bleConnection.status()))
+        }
     }
 
     @PluginMethod
     fun isConnected(call: PluginCall) {
-        call.resolve(JSObject().apply { put("connected", false) })
+        call.resolve(JSObject().apply { put("connected", bleConnection.isConnected()) })
     }
 
     @PluginMethod
     fun getStatus(call: PluginCall) {
-        call.resolve(disconnectedState())
+        call.resolve(buildBleStatusPayload(bleConnection.status()))
     }
 
     @PluginMethod
-    fun write(call: PluginCall) = rejectNotReady(call, "Raw writes will be added in a later phase.")
+    fun write(call: PluginCall) {
+        if (!hasConnectPermissions()) {
+            call.reject("Bluetooth permission denied.", "PERMISSION_DENIED")
+            return
+        }
+        val payload = readBleWritePayload(call) ?: return
+        bleConnection.write(
+            payload,
+            onSuccess = { written -> call.resolve(JSObject().apply { put("written", written) }) },
+            onError = { message, code -> call.reject(message, code) },
+        )
+    }
 
     @PluginMethod
     fun printText(call: PluginCall) = rejectNotReady(call, "Text printing will be added in a later phase.")
@@ -116,15 +143,23 @@ class ThermalPrinterPlugin : Plugin() {
         startScan(call)
     }
 
+    @PermissionCallback
+    private fun connectPermissionCallback(call: PluginCall) {
+        if (!hasConnectPermissions()) {
+            call.reject("Bluetooth connect permission denied.", "PERMISSION_DENIED")
+            return
+        }
+        val config = readBleConnectConfig(call) ?: return
+        startConnect(call, config)
+    }
+
     private fun startScan(call: PluginCall) {
         val config = readBleScanConfig(call) ?: return
         val timeoutMs = normalizeBleScanTimeout(call.getInt("timeoutMs"))
-
         finishScan("restarted")
         call.setKeepAlive(true)
         saveCall(call)
         activeScanCallId = call.callbackId
-
         try {
             bleScanner.start(config, ::emitDeviceFound, ::handleScanFailure)
             cancelScanTimeout()
@@ -136,11 +171,20 @@ class ThermalPrinterPlugin : Plugin() {
         }
     }
 
+    private fun startConnect(call: PluginCall, config: BleConnectConfig) {
+        finishScan("manual")
+        bleConnection.connect(
+            config = config,
+            scannedDevice = bleScanner.getDevice(config.deviceId),
+            onSuccess = { snapshot -> call.resolve(buildBleStatusPayload(snapshot)) },
+            onError = { message, code -> call.reject(message, code) },
+        )
+    }
+
     private fun handleScanFailure(errorCode: Int) {
         cancelScanTimeout()
         val devices = bleScanner.getDevices()
-        notifyListeners("scanStopped", buildScanStoppedPayload("failed", devices, errorCode))
-
+        emitListenerEvent("scanStopped", buildScanStoppedPayload("failed", devices, errorCode))
         val savedCall = activeScanCall() ?: run {
             clearActiveScanCall()
             return
@@ -154,13 +198,9 @@ class ThermalPrinterPlugin : Plugin() {
         val hadActiveScan = bleScanner.isScanning() || activeScanCallId != null
         cancelScanTimeout()
         bleScanner.stop()
-        if (!hadActiveScan) {
-            return
-        }
-
+        if (!hadActiveScan) return
         val devices = bleScanner.getDevices()
-        notifyListeners("scanStopped", buildScanStoppedPayload(reason, devices))
-
+        emitListenerEvent("scanStopped", buildScanStoppedPayload(reason, devices))
         val savedCall = activeScanCall() ?: run {
             clearActiveScanCall()
             return
@@ -171,11 +211,19 @@ class ThermalPrinterPlugin : Plugin() {
     }
 
     private fun emitDeviceFound(device: BlePrinterDevice) {
-        notifyListeners("deviceFound", device.toJs())
+        emitListenerEvent("deviceFound", device.toJs())
+    }
+
+    private fun emitListenerEvent(eventName: String, payload: JSObject) {
+        mainHandler.post { notifyListeners(eventName, payload) }
     }
 
     private fun hasScanPermissions(): Boolean {
         return bleScanPermissionAliases().all { getPermissionState(it) == PermissionState.GRANTED }
+    }
+
+    private fun hasConnectPermissions(): Boolean {
+        return bleConnectPermissionAliases().all { getPermissionState(it) == PermissionState.GRANTED }
     }
 
     private fun cancelScanTimeout() {
@@ -206,10 +254,5 @@ class ThermalPrinterPlugin : Plugin() {
 
     private fun rejectNotReady(call: PluginCall, message: String) {
         call.reject(message, "UNSUPPORTED_OPERATION")
-    }
-
-    private fun disconnectedState() = JSObject().apply {
-        put("connected", false)
-        put("connectionState", "disconnected")
     }
 }

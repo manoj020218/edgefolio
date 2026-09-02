@@ -7,6 +7,7 @@ Completed phase:
 - Phase 0: repository integration
 - Phase 1: core models, transport contract, byte helpers, and shared errors
 - Phase 2: Android BLE scan, permissions, deduplicated discovery, and scan events
+- Phase 3: Android BLE connect, writable characteristic discovery, queued raw writes, and connection status
 
 Important architecture decisions:
 
@@ -20,13 +21,15 @@ Important architecture decisions:
 - Split BLE discovery into small Kotlin files for the scanner, payload helpers, and plugin bridge.
 - Use runtime permission alias `ble` on Android 12+ and `location` on Android 11 and below for scanning.
 - Cache BLE discoveries per scan, emit `deviceFound` once per unique device, and return the deduplicated snapshot when scanning stops.
+- Keep scan state and active BLE connection state separate so later USB work can share the public API without reusing scan caches as connection state.
+- Prefer caller-supplied BLE service and characteristic UUIDs when available, otherwise discover the first writable characteristic and prefer `WRITE_NO_RESPONSE`.
+- Queue raw BLE writes natively and derive chunk size from negotiated MTU with a conservative 20-byte minimum fallback.
 
 Implementation plan:
 
-1. Phase 3: add BLE connect, characteristic discovery, chunked raw writes, and connection status.
-2. Phase 4: add basic ESC/POS builders on top of the raw write path.
-3. Phase 5: add USB discovery, permission handling, and attach/detach events.
-4. Phase 6+: add USB raw printing, profiles, demo usage, and final documentation in order.
+1. Phase 4: add basic ESC/POS builders on top of the raw write path.
+2. Phase 5: add USB discovery, permission handling, and attach/detach events.
+3. Phase 6+: add USB raw printing, profiles, demo usage, and final documentation in order.
 
 Files added or changed:
 
@@ -47,8 +50,14 @@ Files added or changed:
 - `cap-thermal-printer/android/build.gradle`
 - `cap-thermal-printer/android/src/main/AndroidManifest.xml`
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BlePrinterDevice.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleConnectionSupport.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleGattCallback.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleGattSupport.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BlePrinterConnection.kt`
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BlePrinterScanner.kt`
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleScanSupport.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleWriteRequest.kt`
+- `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/BleWriteSession.kt`
 - `cap-thermal-printer/android/src/main/java/com/jenix/cap/thermalprinter/ThermalPrinterPlugin.kt`
 
 Current build status:
@@ -60,4 +69,4 @@ Current build status:
 
 Next phase:
 
-- Phase 3: Android BLE connect and raw write.
+- Phase 4: basic ESC/POS builders on top of the raw write path.

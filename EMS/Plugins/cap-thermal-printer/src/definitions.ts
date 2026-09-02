@@ -73,6 +73,12 @@ export interface ScanStoppedEvent {
   errorCode?: number;
 }
 
+export interface ConnectionErrorEvent {
+  code: PrinterErrorCode;
+  message: string;
+  transport: PrinterTransportType;
+}
+
 export interface WriteOptions {
   data: number[];
   chunkSize?: number;
@@ -121,6 +127,9 @@ export interface CashDrawerOptions {
 export interface ThermalPrinterPlugin {
   addListener(eventName: 'deviceFound', listenerFunc: (device: PrinterDevice) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'scanStopped', listenerFunc: (event: ScanStoppedEvent) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'connected', listenerFunc: (status: PrinterStatus) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'disconnected', listenerFunc: (status: PrinterStatus) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'connectionError', listenerFunc: (event: ConnectionErrorEvent) => void): Promise<PluginListenerHandle>;
   scan(options?: ScanOptions): Promise<{ devices: PrinterDevice[] }>;
   stopScan(): Promise<{ scanning: false }>;
   getDevices(options?: GetDevicesOptions): Promise<{ devices: PrinterDevice[] }>;

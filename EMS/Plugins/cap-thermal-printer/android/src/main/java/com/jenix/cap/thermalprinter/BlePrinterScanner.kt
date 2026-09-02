@@ -33,6 +33,8 @@ class BlePrinterScanner(private val context: Context) {
 
     fun getDevices(): List<BlePrinterDevice> = devices.values.toList()
 
+    fun getDevice(deviceId: String): BlePrinterDevice? = devices[deviceId]
+
     @SuppressLint("MissingPermission")
     fun start(
         config: BleScanConfig,

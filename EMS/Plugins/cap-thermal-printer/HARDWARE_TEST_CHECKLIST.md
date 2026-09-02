@@ -6,6 +6,12 @@ BLE:
 - Scan with `namePrefix` and confirm non-matching devices are filtered out.
 - Scan with `serviceUuid` and confirm matching devices are returned.
 - Stop scan manually and confirm `scanStopped` fires with discovered devices.
+- Connect to a scanned device by `deviceId` and confirm `connected` plus `getStatus()`.
+- Connect with explicit `serviceUuid` and `writeCharacteristicUuid` when known.
+- Send a short raw receipt (`ESC @`, text, feed) and confirm the printer outputs it.
+- Send a long raw receipt that exceeds one BLE packet and confirm chunked printing succeeds.
+- Disconnect manually and confirm `disconnected` plus `isConnected() === false`.
+- Power off or move the printer out of range while connected and confirm disconnect/error events.
 - Deny permission and confirm the plugin returns `PERMISSION_DENIED`.
 
 USB:
@@ -17,3 +23,4 @@ USB:
 Shared:
 
 - Confirm cached device lists reset on a new scan and remain deduplicated.
+- Confirm write attempts without an active connection return `NOT_CONNECTED`.
