@@ -627,3 +627,68 @@ right now means the same manual rebuild+reinstall — there is no live update
 channel yet. Standing up a real release pipeline is separate, deliberately
 deferred work (needs a GitHub token and a real versioning discipline going
 forward) — flagged to the client, not started.
+
+### 2026-09-02, later still — manual "Check for Updates" + marketing site distribution
+
+Two more real bugs/gaps found and closed while shipping the ALOG fix out to the
+client:
+
+1. **Auto-match machine ID → employee by name.** Client pointed out the machine
+   file already sends the employee's name (now correctly extracted, per the
+   parser fix above) — HR shouldn't have to manually re-pick from a dropdown
+   for an obvious exact match. `ImportModal.jsx`'s `MachineImportTab` now
+   builds a name→employeeId index from the already-fetched employee list and
+   pre-fills the mapping dropdown for any `machine_name` that matches **exactly
+   one** employee (case/whitespace-insensitive); ambiguous or no-match rows are
+   left blank for manual review — no backend change needed, both `unmapped` and
+   `employees` were already in the frontend's state. A "✓ matched" badge shows
+   which rows were auto-filled; editing one manually clears its badge.
+
+2. **No real update-delivery mechanism**, and the client explicitly does NOT
+   want electron-updater's silent auto-download/auto-install model (matches the
+   dormant `updater.js` code, still left disabled) — wants a manual,
+   user-initiated "Check for Updates" button that hands back a download link,
+   with an explicit backup-then-uninstall-then-reinstall instruction rather
+   than an in-place silent replace. Built:
+   - `electron/main.js`: new `check-for-update` IPC handler — fetches
+     `https://edgefolio.iotsoft.in/version.json` (plain static JSON, no auth,
+     served by the marketing site's existing `express.static`), compares
+     semver against `app.getVersion()`, returns
+     `{updateAvailable, latestVersion, downloadUrl, notes}`. Never downloads or
+     installs anything itself.
+   - `electron/preload.js`: exposes it as `window.electronAPI.checkForUpdate()`.
+   - `SettingsPage.jsx` (Data & Backup tab, next to Backup & Restore
+     deliberately): new "Check for Updates" card — button, result state, and
+     when an update is available, explicit numbered instructions (backup →
+     uninstall current → install new → restore backup) plus a download link.
+   - Bumped `EDGE/package.json` to `1.0.1` (first version bump ever — was
+     `1.0.0` since the start).
+
+**Deployed, not just built:** rebuilt (`npm run build:exe`), reinstalled
+locally (`/S` silent), confirmed clean restart. Investigated the actual
+marketing site on the VPS (`edgefolio-marketing`, PM2, `/root/projects/
+public-credit/edgefolio/VPS/marketing/`, public at
+`https://edgefolio.iotsoft.in`, proxied via nginx) — `server.js` already
+serves fixed-filename downloads (`/download` → `downloads/EdgeFolio-Setup.exe`,
+`/download/portable` → `downloads/EdgeFolio-Portable.exe`) via
+`express.static`, so no server code changes were needed, just files: uploaded
+the new 1.0.1 installers under those same fixed filenames (`pscp`) and a new
+`version.json` (`{version, notes, downloadUrl}`) to the marketing site's root,
+where the existing `express.static(__dirname)` line serves it automatically at
+`/version.json`. Verified live: `curl https://edgefolio.iotsoft.in/version.json`
+returns the new JSON, `/download` and `/download/portable` content-lengths
+match the new files exactly.
+
+**Same launch flakiness as the earlier documented incident recurred twice more
+while testing this** (single inert process, "Not Responding", ~35MB, no
+backend log) — ruled out a regression by (a) confirming the packaged
+`electron-updater/package.json` was NOT corrupted this time (targeted
+`asar extract-file`, clean content) and (b) running the packaged
+`backend/index.js` standalone under `ELECTRON_RUN_AS_NODE` against the real
+production DB, which started perfectly in ~3 seconds both times. A second
+launch attempt succeeded both times. This is now twice confirmed
+non-deterministic and unrelated to any code change in this repo — worth
+remembering next time it looks like a real regression: retry once before
+assuming a bug was introduced, and if it recurs often it may be worth
+investigating on its own (AV scan interference is the leading suspect, never
+confirmed).

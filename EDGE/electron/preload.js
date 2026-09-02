@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVersion:  () => ipcRenderer.invoke('get-version'),
   getPlatform: () => ipcRenderer.invoke('get-platform'),
 
+  // Manual "Check for Update" — fetches the marketing site's version.json and
+  // compares against the running app's version. Never auto-downloads/installs.
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+
   // ── Native file dialogs ───────────────────────────────────────────────────
   // Used by: ZK .dat import, Excel import, Report export
   openFileDialog: (options) => ipcRenderer.invoke('show-open-dialog', {

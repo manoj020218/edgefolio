@@ -63,9 +63,6 @@ venv/
 coverage/
 .nyc_output/
 
-#contact info
-ImportModal.jsx
-
 # Generated per-install JWT secret — must never be committed
 **/jwt-secret.key
 

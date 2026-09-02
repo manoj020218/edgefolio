@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron')
 const path = require('path')
+const https = require('https')
 const { setupUpdater } = require('./updater')
 
 const isDev = !app.isPackaged
@@ -91,6 +92,55 @@ function createWindow() {
 
 ipcMain.handle('get-version', () => app.getVersion())
 ipcMain.handle('get-platform', () => process.platform)
+
+// ── Manual "Check for Update" ────────────────────────────────────────────────
+// Deliberately NOT the silent auto-download/auto-install electron-updater flow
+// (that code exists in updater.js but stays disabled — see its own comment).
+// This is a lightweight, explicit, user-initiated check: fetch a small static
+// JSON file from the marketing site, compare versions, hand back a download
+// link. Never downloads or installs anything itself.
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(Number)
+  const pb = String(b).split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0)
+    if (diff !== 0) return diff > 0 ? 1 : -1
+  }
+  return 0
+}
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { timeout: 8000 }, (res) => {
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)) }
+      let raw = ''
+      res.on('data', (c) => { raw += c })
+      res.on('end', () => {
+        try { resolve(JSON.parse(raw)) } catch (e) { reject(e) }
+      })
+    })
+    req.on('timeout', () => req.destroy(new Error('Request timed out')))
+    req.on('error', reject)
+  })
+}
+
+ipcMain.handle('check-for-update', async () => {
+  const currentVersion = app.getVersion()
+  try {
+    const info = await fetchJson('https://edgefolio.iotsoft.in/version.json')
+    const latestVersion = info.version
+    return {
+      ok: true,
+      currentVersion,
+      latestVersion,
+      updateAvailable: latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false,
+      notes: info.notes || '',
+      downloadUrl: info.downloadUrl || 'https://edgefolio.iotsoft.in/download',
+    }
+  } catch (err) {
+    return { ok: false, currentVersion, error: err.message }
+  }
+})
 
 ipcMain.handle('show-open-dialog', async (_event, options) => {
   return dialog.showOpenDialog(options)

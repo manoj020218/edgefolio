@@ -1420,6 +1420,9 @@ export const SettingsPage = () => {
   const [backingUp, setBackingUp]    = useState(false)
   const [restoring, setRestoring]    = useState(false)
   const [settingPath, setSettingPath] = useState(false)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [updateInfo, setUpdateInfo]   = useState(null)
+  const [updateError, setUpdateError] = useState('')
 
   const [shifts, setShifts]         = useState([])
   const [departments, setDepartments] = useState([])
@@ -1476,6 +1479,17 @@ export const SettingsPage = () => {
       showSuccess('Sync completed!')
     } catch (e) { setError(e.message) }
     finally { setSyncing(false) }
+  }
+
+  const handleCheckForUpdate = async () => {
+    if (!hasElectron()) { setUpdateError('Update check requires the desktop app.'); return }
+    setCheckingUpdate(true); setUpdateError(''); setUpdateInfo(null)
+    try {
+      const res = await window.electronAPI.checkForUpdate()
+      if (!res.ok) { setUpdateError(res.error || 'Could not check for updates.'); return }
+      setUpdateInfo(res)
+    } catch (e) { setUpdateError(e.message) }
+    finally { setCheckingUpdate(false) }
   }
 
   const handleBackup = async () => {
@@ -1923,6 +1937,55 @@ export const SettingsPage = () => {
                   <p className="text-slate-500 text-xs mt-1">Your data stays here even if the app is uninstalled or reinstalled.</p>
                 </div>
               </div>
+            </div>
+          </Card>
+
+          {/* Check for Updates */}
+          <Card>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-5 h-5 text-sky-400" />
+                  <h2 className="text-xl font-bold text-slate-100">Check for Updates</h2>
+                </div>
+                <Button size="sm" variant="primary" isLoading={checkingUpdate} onClick={handleCheckForUpdate}>
+                  Check for Updates
+                </Button>
+              </div>
+
+              {updateError && (
+                <p className="text-red-400 text-sm bg-red-900/20 border border-red-700/40 rounded px-3 py-2">{updateError}</p>
+              )}
+
+              {updateInfo && !updateInfo.updateAvailable && (
+                <p className="text-green-400 text-sm bg-green-900/20 border border-green-700/40 rounded px-3 py-2">
+                  You're on the latest version (v{updateInfo.currentVersion}).
+                </p>
+              )}
+
+              {updateInfo && updateInfo.updateAvailable && (
+                <div className="bg-amber-900/20 border border-amber-700/40 rounded-lg p-4 space-y-3">
+                  <p className="text-amber-300 font-semibold text-sm">
+                    Version {updateInfo.latestVersion} is available (you have {updateInfo.currentVersion}).
+                  </p>
+                  {updateInfo.notes && <p className="text-slate-300 text-xs whitespace-pre-line">{updateInfo.notes}</p>}
+                  <div className="bg-slate-900 border border-slate-700 rounded p-3 text-xs text-slate-300 space-y-1">
+                    <p className="font-semibold text-slate-200">Before you update:</p>
+                    <p>1. Take a backup below (or from &ldquo;Backup &amp; Restore&rdquo;) — keep the file somewhere safe.</p>
+                    <p>2. Uninstall the current EDGEFOLIO version from this PC.</p>
+                    <p>3. Install the new version, then restore your backup if needed.</p>
+                  </div>
+                  <a href={updateInfo.downloadUrl} target="_blank" rel="noreferrer">
+                    <Button size="sm" variant="primary">Download New Version</Button>
+                  </a>
+                </div>
+              )}
+
+              {!hasElectron() && (
+                <p className="text-amber-400 text-xs bg-amber-900/20 border border-amber-700/40 rounded px-3 py-2">
+                  Update check requires the EDGEFOLIO desktop app (.exe). Not available in browser mode.
+                </p>
+              )}
             </div>
           </Card>
 

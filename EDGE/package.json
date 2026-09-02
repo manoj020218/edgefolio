@@ -1,6 +1,6 @@
 {
   "name": "edgefolio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "EDGEFOLIO — Offline-first Payroll & Attendance for Indian SMEs",
   "main": "electron/main.js",
   "private": true,
