@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { X, Edit2, Save, User, Settings, Landmark, Fingerprint, CheckCircle2, Circle, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { X, Edit2, Save, User, Settings, Landmark, Fingerprint, CheckCircle2, Circle, RefreshCw, ArrowRight } from 'lucide-react';
 import { Button, Badge, Input, Select } from '../atomic';
-import { updateEmployee, getCustomFields, getEmployeeCustomValues, setEmployeeCustomValues, getFaceStatus } from '../../services/api';
+import { CreatableSelect } from '../shared/CreatableSelect';
+import {
+  updateEmployee, getCustomFields, getEmployeeCustomValues, setEmployeeCustomValues, getFaceStatus,
+  getSalaryPolicies, getSalaryStructures, getDepartments, createDepartment, getDesignations, createDesignation,
+  estimateSalaryStructure,
+} from '../../services/api';
 
-const DEPARTMENTS = ['HR', 'Production', 'Finance', 'Admin', 'Maintenance', 'Sales'];
 const WORK_TYPE_OPTS = [
   { value: 'office', label: 'Office' },
   { value: 'field', label: 'Field Duty' },
@@ -22,6 +27,7 @@ const PAYMENT_MODE_OPTS = [
 ];
 
 export function EmployeeDrawer({ employee, onClose, onUpdated }) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState('basic');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,6 +39,36 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
   const [faceStatus, setFaceStatus] = useState(null);
   const [faceLoading, setFaceLoading] = useState(false);
   const [faceErr, setFaceErr] = useState('');
+  const [salaryPolicies, setSalaryPolicies] = useState([]);
+  const [salaryStructures, setSalaryStructures] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [estimate, setEstimate] = useState(null);
+  const [estimating, setEstimating] = useState(false);
+  const estimateTimer = useRef(null);
+
+  useEffect(() => {
+    getSalaryPolicies().then((res) => setSalaryPolicies(res.data || [])).catch(() => {});
+    getSalaryStructures().then((res) => setSalaryStructures(res.data || [])).catch(() => {});
+    getDepartments().then((res) => setDepartments(res.data || [])).catch(() => {});
+    getDesignations().then((res) => setDesignations(res.data || [])).catch(() => {});
+  }, []);
+
+  // Live "what would this actually pay out" preview while HR adjusts Basic,
+  // department, designation, or the structure override — debounced so it
+  // doesn't fire on every keystroke.
+  useEffect(() => {
+    if (!editing || !form.salary) { setEstimate(null); return; }
+    clearTimeout(estimateTimer.current);
+    estimateTimer.current = setTimeout(() => {
+      setEstimating(true);
+      estimateSalaryStructure({
+        salary: Number(form.salary), department: form.department, designation: form.designation,
+        salaryStructureGroupId: form.salaryStructureGroupId || null,
+      }).then((res) => setEstimate(res.data)).catch(() => setEstimate(null)).finally(() => setEstimating(false));
+    }, 350);
+    return () => clearTimeout(estimateTimer.current);
+  }, [editing, form.salary, form.department, form.designation, form.salaryStructureGroupId]);
 
   useEffect(() => {
     if (!employee) return;
@@ -50,6 +86,8 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
       bankIfsc: employee.bankIfsc || '',
       bankName: employee.bankName || '',
       paymentMode: employee.paymentMode || 'NEFT',
+      salaryPolicyGroupId: employee.salaryPolicyGroupId || '',
+      salaryStructureGroupId: employee.salaryStructureGroupId || '',
     });
     setEditing(false);
     setTab('basic');
@@ -162,9 +200,19 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
                   <InfoRow label="Email" value={employee.email} />
                   <InfoRow label="Phone" value={employee.phone} />
                   <InfoRow label="Department" value={employee.department} />
-                  <InfoRow label="Designation" value={employee.designation} />
-                  <InfoRow label="Salary" value={employee.salary ? `₹${Number(employee.salary).toLocaleString()}` : null} />
+                  <InfoRow label="Designation" value={employee.designation || 'Not set'} />
+                  <InfoRow label="Basic Salary" value={employee.salary ? `₹${Number(employee.salary).toLocaleString()}` : null} />
                   <InfoRow label="Joining Date" value={employee.joiningDate} />
+                  <InfoRow label="Salary Structure" value={
+                    employee.salaryStructureGroupId
+                      ? (salaryStructures.find((s) => s.structure_group_id === employee.salaryStructureGroupId)?.name || 'Custom override')
+                      : (employee.designation ? `Resolved from designation "${employee.designation}"` : 'No designation — using Default Structure (set a designation or override below)')
+                  } />
+                  <InfoRow label="Salary Policy" value={
+                    employee.salaryPolicyGroupId
+                      ? (salaryPolicies.find((p) => p.policy_group_id === employee.salaryPolicyGroupId)?.name || 'Custom override')
+                      : 'Uses assigned/default policy'
+                  } />
                   <div className="flex gap-4">
                     <InfoRow label="Work Type" value={WORK_TYPE_OPTS.find((o) => o.value === employee.workType)?.label || employee.workType} />
                     <InfoRow label="App Role" value={ROLE_OPTS.find((o) => o.value === employee.appRole)?.label || employee.appRole} />
@@ -185,19 +233,71 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Input label="Phone" value={form.phone} onChange={f('phone')} />
-                    <Input label="Salary (₹)" type="number" min="0" value={form.salary} onChange={f('salary')} />
+                    <Input label="Basic Salary (₹)" type="number" min="0" value={form.salary} onChange={f('salary')} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <Select label="Department" value={form.department} onChange={f('department')}
-                      options={DEPARTMENTS.map((d) => ({ value: d, label: d }))} />
-                    <Input label="Designation" value={form.designation} onChange={f('designation')} />
+                    <CreatableSelect label="Department" value={form.department}
+                      onChange={(name) => setForm((p) => ({ ...p, department: name }))}
+                      options={departments.map((d) => ({ value: d.name, label: d.name }))}
+                      onCreate={async (name) => { const res = await createDepartment({ name }); setDepartments((p) => [...p, res.data]); return res.data; }}
+                      createLabel="+ Create New Department" placeholder="— Department —" />
+                    <CreatableSelect label="Designation" value={form.designation}
+                      onChange={(name) => setForm((p) => ({ ...p, designation: name }))}
+                      options={designations.map((d) => ({ value: d.name, label: d.name }))}
+                      onCreate={async (name) => { const res = await createDesignation({ name }); setDesignations((p) => [...p, res.data]); return res.data; }}
+                      createLabel="+ Create New Designation" placeholder="— Designation —" />
                   </div>
+
+                  {(estimating || estimate) && (
+                    <div className="bg-slate-900 border border-sky-700/40 rounded-lg px-3 py-2.5">
+                      {estimating ? (
+                        <p className="text-xs text-slate-500">Calculating…</p>
+                      ) : estimate ? (
+                        <>
+                          <p className="text-xs text-slate-400">
+                            Calculated Full Salary <span className="text-slate-600">(structure: {estimate.structureName || 'Default Structure'})</span>
+                          </p>
+                          <div className="flex items-baseline gap-4 mt-0.5">
+                            <span className="text-lg font-bold text-sky-300">₹{estimate.gross.toLocaleString('en-IN')}</span>
+                            <span className="text-xs text-slate-500">gross payout · ₹{estimate.net.toLocaleString('en-IN')} net to employee</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Based on the resolved Salary Structure at this Basic. Doesn&rsquo;t include Salary Policy
+                            items that depend on actual attendance (overtime, late/early, tour, etc.).
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3">
                     <Select label="Work Type" value={form.workType} onChange={f('workType')} options={WORK_TYPE_OPTS} />
                     <Select label="App Role" value={form.appRole} onChange={f('appRole')} options={ROLE_OPTS} />
                   </div>
                   <Select label="Status" value={form.status} onChange={f('status')}
                     options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
+                  <div>
+                    <Select label="Salary Structure Override" value={form.salaryStructureGroupId} onChange={f('salaryStructureGroupId')}
+                      options={[
+                        { value: '', label: form.designation ? `Use structure assigned to "${form.designation}"` : 'Use Default Structure' },
+                        ...salaryStructures.map((s) => ({ value: s.structure_group_id, label: s.name })),
+                      ]} />
+                    <button type="button" onClick={() => navigate('/settings?tab=salary-structures')}
+                      className="mt-1 flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300">
+                      + Create new structure in Settings <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div>
+                    <Select label="Salary Policy Override" value={form.salaryPolicyGroupId} onChange={f('salaryPolicyGroupId')}
+                      options={[
+                        { value: '', label: 'Use assigned/default policy' },
+                        ...salaryPolicies.map((p) => ({ value: p.policy_group_id, label: p.name })),
+                      ]} />
+                    <button type="button" onClick={() => navigate('/settings?tab=salary-policies')}
+                      className="mt-1 flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300">
+                      + Create new policy in Settings <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               )}
             </>

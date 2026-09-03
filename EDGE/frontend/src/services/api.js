@@ -99,6 +99,31 @@ export const getPayrollAdjustments = (monthKey) => http.get('/payroll/adjustment
 export const createPayrollAdjustment = (data) => http.post('/payroll/adjustments', data)
 export const deletePayrollAdjustment = (id)   => http.delete(`/payroll/adjustments/${id}`)
 
+// ── Salary Policies (versioned, per-designation/department pay rules) ──────────
+export const getSalaryPolicies       = ()            => http.get('/payroll/salary-policies')
+export const getSalaryPolicyHistory  = (groupId)      => http.get(`/payroll/salary-policies/${groupId}/history`)
+export const createSalaryPolicy      = (data)         => http.post('/payroll/salary-policies', data)
+export const updateSalaryPolicy      = (groupId, data) => http.patch(`/payroll/salary-policies/${groupId}`, data)
+export const deleteSalaryPolicy      = (groupId)      => http.delete(`/payroll/salary-policies/${groupId}`)
+export const getSalaryPolicyAssignments = ()          => http.get('/payroll/salary-policy-assignments')
+export const setSalaryPolicyAssignment  = (data)      => http.post('/payroll/salary-policy-assignments', data)
+export const deleteSalaryPolicyAssignment = (scope, scopeValue) =>
+  http.delete(`/payroll/salary-policy-assignments/${scope}/${encodeURIComponent(scopeValue)}`)
+export const getSalaryPolicyScopeOptions = ()         => http.get('/payroll/salary-policies/scope-options')
+
+// ── Salary Structures (versioned, designation-based pay composition) ───────────
+export const getSalaryStructures       = ()            => http.get('/payroll/salary-structures')
+export const getSalaryStructureHistory = (groupId)      => http.get(`/payroll/salary-structures/${groupId}/history`)
+export const createSalaryStructure     = (data)         => http.post('/payroll/salary-structures', data)
+export const updateSalaryStructure     = (groupId, data) => http.patch(`/payroll/salary-structures/${groupId}`, data)
+export const deleteSalaryStructure     = (groupId)      => http.delete(`/payroll/salary-structures/${groupId}`)
+export const getSalaryStructureAssignments = ()         => http.get('/payroll/salary-structure-assignments')
+export const setSalaryStructureAssignment  = (data)     => http.post('/payroll/salary-structure-assignments', data)
+export const deleteSalaryStructureAssignment = (scope, scopeValue) =>
+  http.delete(`/payroll/salary-structure-assignments/${scope}/${encodeURIComponent(scopeValue)}`)
+export const getSalaryStructureScopeOptions = ()        => http.get('/payroll/salary-structures/scope-options')
+export const estimateSalaryStructure = (data)           => http.post('/payroll/estimate-structure', data)
+
 // ── Leaves ────────────────────────────────────────────────────────────────────
 export const getLeaves        = (params) => http.get('/leaves', { params })
 export const getLeaveBalances = ()       => http.get('/leaves/balances')
@@ -135,6 +160,12 @@ export const getDepartments    = ()           => http.get('/departments')
 export const createDepartment  = (data)       => http.post('/departments', data)
 export const updateDepartment  = (id, data)   => http.put(`/departments/${id}`, data)
 export const deleteDepartment  = (id)         => http.delete(`/departments/${id}`)
+
+// ── Designations ─────────────────────────────────────────────────────────────
+export const getDesignations    = ()           => http.get('/designations')
+export const createDesignation  = (data)       => http.post('/designations', data)
+export const updateDesignation  = (id, data)   => http.put(`/designations/${id}`, data)
+export const deleteDesignation  = (id)         => http.delete(`/designations/${id}`)
 
 // ── Holidays ──────────────────────────────────────────────────────────────────
 export const getHolidays    = (year)      => http.get('/holidays', { params: year ? { year } : {} })

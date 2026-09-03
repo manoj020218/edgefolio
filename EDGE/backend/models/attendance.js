@@ -311,6 +311,65 @@ function getOvertimeHours(memberId, fromDate, toDate) {
   return rows.reduce((sum, r) => sum + Math.max(0, Number(r.hours_worked || 0) - hoursPerDay), 0);
 }
 
+// Late-arrival / early-leave / early-arrival day counts for the salary
+// policy engine — only meaningful once a policy actually enables one of
+// these, so grace minutes are passed in by the caller (models/payroll.js,
+// from the resolved policy) rather than read from working_hours directly.
+// Only counts 'present' days with a real check_in/check_out — nothing to
+// compare against on a day with no punch.
+function getLateEarlyStats(memberId, fromDate, toDate, lateGraceMinutes = 10, earlyGraceMinutes = 10) {
+  const db = getDb();
+  const whRow = db.prepare('SELECT start_time, end_time FROM working_hours WHERE id = 1').get();
+  const shiftStart = toMins(whRow?.start_time) ?? 0;
+  const shiftEnd = toMins(whRow?.end_time) ?? 24 * 60;
+
+  const rows = db.prepare(
+    `SELECT check_in, check_out FROM attendance_records
+     WHERE member_id = ? AND date BETWEEN ? AND ? AND status = 'present'`,
+  ).all(memberId, fromDate, toDate);
+
+  let lateDays = 0, earlyLeaveDays = 0, earlyArrivalDays = 0;
+  for (const r of rows) {
+    const inMins = toMins(r.check_in);
+    const outMins = toMins(r.check_out);
+    if (inMins !== null) {
+      if (inMins > shiftStart + lateGraceMinutes) lateDays += 1;
+      else if (inMins < shiftStart - earlyGraceMinutes) earlyArrivalDays += 1;
+    }
+    if (outMins !== null && outMins < shiftEnd - earlyGraceMinutes) earlyLeaveDays += 1;
+  }
+  return { lateDays, earlyLeaveDays, earlyArrivalDays };
+}
+
+// Days an employee actually punched in ('present') that fall on a holiday
+// or a weekly off — for the optional "pay extra for working on a day off"
+// policy toggles. Independent of LOP's own holiday/weekly-off exclusion,
+// which is about NOT penalizing a missing punch on those days; this is the
+// opposite direction, rewarding a punch that didn't have to happen.
+function getHolidayWorkedDays(memberId, fromDate, toDate) {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT COUNT(*) AS n FROM attendance_records ar
+     WHERE ar.member_id = ? AND ar.date BETWEEN ? AND ? AND ar.status = 'present'
+       AND ar.date IN (SELECT date FROM holidays)`,
+  ).get(memberId, fromDate, toDate);
+  return Number(row?.n || 0);
+}
+
+function getWeeklyOffWorkedDays(memberId, fromDate, toDate) {
+  const db = getDb();
+  const whRow = db.prepare('SELECT weekly_off_days FROM working_hours WHERE id = 1').get();
+  let weeklyOffDays = [0, 6];
+  try { weeklyOffDays = JSON.parse(whRow?.weekly_off_days || '[0,6]'); } catch { /* keep default */ }
+  const offSet = new Set(weeklyOffDays);
+
+  const rows = db.prepare(
+    `SELECT date FROM attendance_records WHERE member_id = ? AND date BETWEEN ? AND ? AND status = 'present'`,
+  ).all(memberId, fromDate, toDate);
+
+  return rows.filter((r) => offSet.has(new Date(`${r.date}T00:00:00`).getDay())).length;
+}
+
 module.exports = {
   listAttendanceByDate,
   listAttendanceByMember,
@@ -322,4 +381,7 @@ module.exports = {
   insertAttendanceBatch,
   getLopDaysCount,
   getOvertimeHours,
+  getLateEarlyStats,
+  getHolidayWorkedDays,
+  getWeeklyOffWorkedDays,
 };

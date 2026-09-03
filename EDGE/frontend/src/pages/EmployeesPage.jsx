@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { Button, Card, Badge, Alert, Modal, Input, Select } from '../components/atomic';
-import { getEmployees, createEmployee, deleteEmployee } from '../services/api';
+import { CreatableSelect } from '../components/shared/CreatableSelect';
+import {
+  getEmployees, createEmployee, deleteEmployee,
+  getDepartments, createDepartment, getDesignations, createDesignation,
+} from '../services/api';
 import { EmployeeDrawer } from '../components/employees/EmployeeDrawer';
 
-const DEPARTMENTS = ['HR', 'Production', 'Finance', 'Admin', 'Maintenance', 'Sales'];
 const WORK_TYPE_OPTS = [
   { value: 'office', label: 'Office' },
   { value: 'field', label: 'Field' },
@@ -33,6 +36,8 @@ const DEFAULT_VISIBLE = new Set(['empCode', 'name', 'department', 'designation',
 
 export const EmployeesPage = () => {
   const [employees, setEmployees] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,7 +61,10 @@ export const EmployeesPage = () => {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchEmployees(); }, []);
+  const reloadDepartments = () => getDepartments().then((res) => setDepartments(res.data || [])).catch(() => {});
+  const reloadDesignations = () => getDesignations().then((res) => setDesignations(res.data || [])).catch(() => {});
+
+  useEffect(() => { fetchEmployees(); reloadDepartments(); reloadDesignations(); }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -170,7 +178,7 @@ export const EmployeesPage = () => {
             className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:border-sky-500 focus:outline-none"
           >
             <option value="all">All Departments</option>
-            {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+            {departments.map((d) => <option key={d.dept_id} value={d.name}>{d.name}</option>)}
           </select>
           <div className="relative" ref={colPickerRef}>
             <button
@@ -303,9 +311,16 @@ export const EmployeesPage = () => {
             <Input label="Salary (₹) *" type="number" min="0" placeholder="30000" value={formData.salary} onChange={f('salary')} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Select label="Department *" value={formData.department} onChange={f('department')}
-              options={DEPARTMENTS.map((d) => ({ value: d, label: d }))} />
-            <Input label="Designation" placeholder="Senior Manager" value={formData.designation} onChange={f('designation')} />
+            <CreatableSelect label="Department *" value={formData.department}
+              onChange={(name) => setFormData((p) => ({ ...p, department: name }))}
+              options={departments.map((d) => ({ value: d.name, label: d.name }))}
+              onCreate={async (name) => { const res = await createDepartment({ name }); setDepartments((p) => [...p, res.data]); return res.data; }}
+              createLabel="+ Create New Department" placeholder="— Department —" />
+            <CreatableSelect label="Designation" value={formData.designation}
+              onChange={(name) => setFormData((p) => ({ ...p, designation: name }))}
+              options={designations.map((d) => ({ value: d.name, label: d.name }))}
+              onCreate={async (name) => { const res = await createDesignation({ name }); setDesignations((p) => [...p, res.data]); return res.data; }}
+              createLabel="+ Create New Designation" placeholder="— Designation —" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Select label="Work Type" value={formData.workType} onChange={f('workType')} options={WORK_TYPE_OPTS} />

@@ -22,7 +22,7 @@ import {
   getMachineImportBatches, deleteMachineImportBatch, getMachineImportUnmapped,
   getMachineImportMappings, saveMachineImportMappings,
   commitMachineImport,
-  getEmployees, createEmployee, getDepartments, createDepartment,
+  getEmployees, createEmployee, getDepartments, createDepartment, getDesignations, createDesignation,
 } from '../../services/api'
 
 // ─── Plugin Registry ──────────────────────────────────────────────────────────
@@ -546,8 +546,12 @@ function MachineImportTab({ onImported }) {
   const [newDeptForRow, setNewDeptForRow] = useState(null) // machineEmpId currently entering a new department name
   const [newDeptName, setNewDeptName] = useState('')
   const [creatingDept, setCreatingDept] = useState(false)
+  const [designations, setDesignations] = useState([])
+  const [newDesigForRow, setNewDesigForRow] = useState(null) // machineEmpId currently entering a new designation name
+  const [newDesigName, setNewDesigName] = useState('')
+  const [creatingDesig, setCreatingDesig] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
-  const [bulkRows, setBulkRows] = useState([])   // [{machineEmpId, name, department, salary}]
+  const [bulkRows, setBulkRows] = useState([])   // [{machineEmpId, name, department, designation, salary}]
   const [savingBulk, setSavingBulk] = useState(false)
 
   const load = async (quiet = false) => {
@@ -597,11 +601,11 @@ function MachineImportTab({ onImported }) {
   // HR pre-create every employee by hand before import can proceed. Opens an
   // editable grid (one row per still-unmapped machine ID, name pre-filled from
   // the machine) for the two fields the backend actually requires — department
-  // and salary — then creates + maps all of them in one save. Anything already
-  // selected (manual pick or an existing-employee auto match) is left alone —
-  // this only covers the gaps. Everything else (bank details, designation…)
-  // stays editable from Employees afterwards, same as any import-then-enrich
-  // flow — this grid is deliberately just the two compulsory fields.
+  // and salary (designation is offered too but optional) — then creates +
+  // maps all of them in one save. Anything already selected (manual pick or
+  // an existing-employee auto match) is left alone — this only covers the
+  // gaps. Everything else (bank details, etc.) stays editable from
+  // Employees afterwards, same as any import-then-enrich flow.
   const handleOpenBulkCreate = async () => {
     const rowsNeedingNewEmployee = unmapped.filter((row) => !mappings[row.machine_emp_id])
     if (!rowsNeedingNewEmployee.length) {
@@ -612,10 +616,14 @@ function MachineImportTab({ onImported }) {
     if (!departments.length) {
       try { const dRes = await getDepartments(); setDepartments(dRes.data || []) } catch { /* datalist is optional */ }
     }
+    if (!designations.length) {
+      try { const desRes = await getDesignations(); setDesignations(desRes.data || []) } catch { /* datalist is optional */ }
+    }
     setBulkRows(rowsNeedingNewEmployee.map((row) => ({
       machineEmpId: row.machine_emp_id,
       name: (row.machine_name || '').trim() || `Machine ID ${row.machine_emp_id}`,
       department: '',
+      designation: '',
       salary: '',
     })))
     setBulkOpen(true)
@@ -642,6 +650,21 @@ function MachineImportTab({ onImported }) {
     finally { setCreatingDept(false) }
   }
 
+  // Same treatment for designation — registers it in Settings → Designations
+  // instead of leaving it as a one-off string.
+  const handleCreateDesignation = async (machineEmpId) => {
+    const name = newDesigName.trim()
+    if (!name) return
+    setCreatingDesig(true); setErr('')
+    try {
+      const res = await createDesignation({ name })
+      setDesignations((d) => [...d, res.data])
+      updateBulkRow(machineEmpId, 'designation', res.data.name)
+      setNewDesigForRow(null); setNewDesigName('')
+    } catch (e) { setErr(e.message) }
+    finally { setCreatingDesig(false) }
+  }
+
   const handleSaveBulkCreate = async () => {
     const missing = bulkRows.filter((r) => !r.department.trim() || r.salary === '' || Number.isNaN(Number(r.salary)))
     if (missing.length) { setErr(`Fill in department and salary for all ${bulkRows.length} rows before saving.`); return }
@@ -650,7 +673,7 @@ function MachineImportTab({ onImported }) {
     try {
       const created = {}
       for (const row of bulkRows) {
-        const res = await createEmployee({ name: row.name, department: row.department.trim(), salary: Number(row.salary) })
+        const res = await createEmployee({ name: row.name, department: row.department.trim(), designation: row.designation.trim() || undefined, salary: Number(row.salary) })
         created[row.machineEmpId] = res.data.id
       }
       const allPairs = unmapped.map((row) => ({
@@ -772,29 +795,43 @@ function MachineImportTab({ onImported }) {
           {bulkOpen && (
             <div className="rounded-lg border border-sky-700/40 bg-sky-900/10 p-3 space-y-3">
               <p className="text-slate-300 text-xs font-semibold">
-                {bulkRows.length} new employee{bulkRows.length !== 1 ? 's' : ''} — department &amp; salary required
+                {bulkRows.length} new employee{bulkRows.length !== 1 ? 's' : ''} — department &amp; salary required, designation optional
               </p>
-              <div className="max-h-56 overflow-y-auto pr-1 space-y-2">
+              <div className="max-h-64 overflow-y-auto pr-1 space-y-2">
                 {bulkRows.map((row) => (
                   <div key={row.machineEmpId} className="bg-slate-900/60 border border-slate-700 rounded-lg px-2.5 py-1.5 space-y-1.5">
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                    <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
                       <input value={row.name} onChange={(e) => updateBulkRow(row.machineEmpId, 'name', e.target.value)}
                         className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+                      <input type="number" min="0" placeholder="Salary" value={row.salary}
+                        onChange={(e) => updateBulkRow(row.machineEmpId, 'salary', e.target.value)}
+                        className="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       <select
                         value={newDeptForRow === row.machineEmpId ? '__new__' : row.department}
                         onChange={(e) => {
                           if (e.target.value === '__new__') { setNewDeptForRow(row.machineEmpId); setNewDeptName('') }
                           else { setNewDeptForRow(null); updateBulkRow(row.machineEmpId, 'department', e.target.value) }
                         }}
-                        className="w-36 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none"
+                        className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none"
                       >
                         <option value="">— Department —</option>
                         {departments.map((d) => <option key={d.dept_id || d.name} value={d.name}>{d.name}</option>)}
                         <option value="__new__">+ Create New Department</option>
                       </select>
-                      <input type="number" min="0" placeholder="Salary" value={row.salary}
-                        onChange={(e) => updateBulkRow(row.machineEmpId, 'salary', e.target.value)}
-                        className="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+                      <select
+                        value={newDesigForRow === row.machineEmpId ? '__new__' : row.designation}
+                        onChange={(e) => {
+                          if (e.target.value === '__new__') { setNewDesigForRow(row.machineEmpId); setNewDesigName('') }
+                          else { setNewDesigForRow(null); updateBulkRow(row.machineEmpId, 'designation', e.target.value) }
+                        }}
+                        className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none"
+                      >
+                        <option value="">— Designation —</option>
+                        {designations.map((d) => <option key={d.designation_id || d.name} value={d.name}>{d.name}</option>)}
+                        <option value="__new__">+ Create New Designation</option>
+                      </select>
                     </div>
                     {newDeptForRow === row.machineEmpId && (
                       <div className="flex gap-2 items-center pl-0.5">
@@ -805,6 +842,18 @@ function MachineImportTab({ onImported }) {
                           Add
                         </Button>
                         <button onClick={() => { setNewDeptForRow(null); setNewDeptName('') }}
+                          className="text-xs text-slate-400 hover:text-slate-200 px-1">Cancel</button>
+                      </div>
+                    )}
+                    {newDesigForRow === row.machineEmpId && (
+                      <div className="flex gap-2 items-center pl-0.5">
+                        <input autoFocus value={newDesigName} onChange={(e) => setNewDesigName(e.target.value)}
+                          placeholder="New designation name" onKeyDown={(e) => { if (e.key === 'Enter') handleCreateDesignation(row.machineEmpId) }}
+                          className="flex-1 bg-slate-800 border border-sky-600 rounded px-2 py-1.5 text-slate-100 text-sm focus:outline-none" />
+                        <Button size="sm" variant="primary" isLoading={creatingDesig} onClick={() => handleCreateDesignation(row.machineEmpId)}>
+                          Add
+                        </Button>
+                        <button onClick={() => { setNewDesigForRow(null); setNewDesigName('') }}
                           className="text-xs text-slate-400 hover:text-slate-200 px-1">Cancel</button>
                       </div>
                     )}

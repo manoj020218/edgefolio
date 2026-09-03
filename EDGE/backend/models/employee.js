@@ -88,6 +88,19 @@ function updateEmployee(id, payload) {
     bank_ifsc: payload.bankIfsc ?? payload.bank_ifsc ?? existing.bank_ifsc ?? null,
     bank_name: payload.bankName ?? payload.bank_name ?? existing.bank_name ?? null,
     payment_mode: payload.paymentMode ?? payload.payment_mode ?? existing.payment_mode ?? 'NEFT',
+    // Explicit per-employee salary policy override — highest precedence in
+    // resolveSalaryPolicyForEmployee, above designation/department
+    // assignment. Empty string clears it back to "(use assigned policy)".
+    salary_policy_group_id: payload.salaryPolicyGroupId !== undefined
+      ? (payload.salaryPolicyGroupId || null)
+      : (payload.salary_policy_group_id !== undefined ? (payload.salary_policy_group_id || null) : existing.salary_policy_group_id),
+    // Same explicit-override pattern for salary structure (which
+    // components/percentages make up pay) — highest precedence in
+    // resolveSalaryStructureForEmployee, above designation/department
+    // assignment. Empty string clears it back to "(use assigned structure)".
+    salary_structure_group_id: payload.salaryStructureGroupId !== undefined
+      ? (payload.salaryStructureGroupId || null)
+      : (payload.salary_structure_group_id !== undefined ? (payload.salary_structure_group_id || null) : existing.salary_structure_group_id),
     updated_at: new Date().toISOString(),
   };
 
@@ -99,6 +112,8 @@ function updateEmployee(id, payload) {
         allow_remote_attendance=@allow_remote_attendance,
         bank_account_number=@bank_account_number, bank_ifsc=@bank_ifsc,
         bank_name=@bank_name, payment_mode=@payment_mode,
+        salary_policy_group_id=@salary_policy_group_id,
+        salary_structure_group_id=@salary_structure_group_id,
         updated_at=@updated_at
     WHERE id=@id
   `).run(next);
@@ -125,6 +140,14 @@ function patchEmployee(id, fields) {
   if ('appRole' in fields) {
     updates.push('app_role = ?');
     values.push(fields.appRole);
+  }
+  if ('salaryPolicyGroupId' in fields) {
+    updates.push('salary_policy_group_id = ?');
+    values.push(fields.salaryPolicyGroupId || null);
+  }
+  if ('salaryStructureGroupId' in fields) {
+    updates.push('salary_structure_group_id = ?');
+    values.push(fields.salaryStructureGroupId || null);
   }
   if (updates.length === 0) return existing;
 

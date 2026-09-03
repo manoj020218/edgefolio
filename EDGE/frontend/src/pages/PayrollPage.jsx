@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Play, Eye, CheckCircle, Clock, RefreshCw,
   Printer, Mail, MessageCircle,
   AlertTriangle, XCircle, CheckSquare, ChevronDown, ChevronUp,
-  Landmark, FileDown, Upload, X,
+  Landmark, FileDown, Upload, X, Settings, ArrowRight,
 } from 'lucide-react';
 import { Button, Card, Badge, Alert, Modal } from '../components/atomic';
 import {
@@ -181,6 +182,7 @@ function parseCSVText(text) {
 
 // ─── PayrollPage ──────────────────────────────────────────────────────────────
 export const PayrollPage = () => {
+  const navigate = useNavigate();
   const [runs, setRuns]               = useState([]);
   const [payslips, setPayslips]       = useState([]);
   const [disputes, setDisputes]       = useState([]);
@@ -445,6 +447,7 @@ export const PayrollPage = () => {
             </button>
           )}
           <Button icon={RefreshCw} variant="secondary" onClick={() => { fetchRuns(); fetchDisputes(); }}>Refresh</Button>
+          <Button icon={Settings} variant="secondary" onClick={() => navigate('/settings?tab=salary-structures')}>Set Salary Structure</Button>
           <Button icon={Landmark} variant="secondary" onClick={openBankModal}>Bank Payment</Button>
           <Button icon={Play} variant="primary" onClick={() => { setRunModal({ open: true, monthKey: lastMonthKey, step: 'month' }); setPreviewData(null); }}>
             Run Payroll
@@ -660,6 +663,22 @@ export const PayrollPage = () => {
 
         {runModal.step === 'preview' && (
           <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => navigate('/settings?tab=salary-policies')}
+              className="w-full text-left flex items-center justify-between gap-3 px-4 py-3 rounded-lg
+                bg-sky-900/20 border border-sky-700/40 hover:bg-sky-900/30 transition-colors"
+            >
+              <span className="flex items-center gap-2 text-sky-300 text-sm">
+                <Settings className="w-4 h-4 flex-shrink-0" />
+                Payroll uses each employee's assigned Salary Policy. Want to pay overtime, dock late
+                arrivals, or add tour/field allowances?
+              </span>
+              <span className="flex items-center gap-1 text-sky-400 text-sm font-semibold flex-shrink-0">
+                Configure Salary Policies <ArrowRight className="w-4 h-4" />
+              </span>
+            </button>
+
             {previewLoading ? (
               <div className="py-10 text-center text-slate-400">Calculating...</div>
             ) : previewData ? (

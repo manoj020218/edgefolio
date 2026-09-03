@@ -20,6 +20,7 @@ const announcementsRoutes = require('./routes/announcements');
 const facesRoutes         = require('./routes/faces');
 const shiftsRoutes        = require('./routes/shifts');
 const departmentsRoutes   = require('./routes/departments');
+const designationsRoutes  = require('./routes/designations');
 const holidaysRoutes      = require('./routes/holidays');
 const deductionsRoutes    = require('./routes/deductions');
 const earningsRoutes      = require('./routes/earnings');
@@ -76,6 +77,7 @@ function createServer() {
   app.use(`${API_PREFIX}/faces`,         facesRoutes);
   app.use(`${API_PREFIX}/shifts`,        shiftsRoutes);
   app.use(`${API_PREFIX}/departments`,   departmentsRoutes);
+  app.use(`${API_PREFIX}/designations`,  designationsRoutes);
   app.use(`${API_PREFIX}/holidays`,      holidaysRoutes);
   app.use(`${API_PREFIX}/deductions`,    deductionsRoutes);
   app.use(`${API_PREFIX}/earnings`,      earningsRoutes);

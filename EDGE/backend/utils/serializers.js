@@ -19,6 +19,8 @@ function serializeEmployee(row) {
     bankIfsc: row.bank_ifsc || null,
     bankName: row.bank_name || null,
     paymentMode: row.payment_mode || 'NEFT',
+    salaryPolicyGroupId: row.salary_policy_group_id || null,
+    salaryStructureGroupId: row.salary_structure_group_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

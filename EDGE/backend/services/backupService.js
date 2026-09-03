@@ -43,7 +43,7 @@ function getDataInfo() {
   const db = getDb();
   const lastBackup = db.prepare('SELECT * FROM backups ORDER BY created_at DESC LIMIT 1').get();
   let appVersion = '1.0.0';
-  try { appVersion = require('../../../package.json').version; } catch {}
+  try { appVersion = require('../../package.json').version; } catch {}
   return {
     appVersion,
     dataPath:         STORAGE_BASE,
@@ -68,7 +68,7 @@ function estimateSizeKb(payload) {
 
 function buildPayload(db) {
   let appVersion = '1.0.0';
-  try { appVersion = require('../../../package.json').version; } catch {}
+  try { appVersion = require('../../package.json').version; } catch {}
   return {
     schemaVersion: 2,
     appVersion,

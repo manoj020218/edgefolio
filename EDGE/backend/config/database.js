@@ -525,6 +525,215 @@ function runMigrations(db) {
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
   )`);
+
+  // Configurable per-organization pay rules — every toggle defaults to "off /
+  // matches pre-existing behavior" so nobody's numbers change until they
+  // actually customize a policy. See models/salaryPolicy.js for resolution
+  // (employee override > designation > department > the is_default row,
+  // always seeded once below) and models/payroll.js's computeEmployeePayroll
+  // for how each toggle is actually applied.
+  //
+  // VERSIONED, not edited in place — a row is one version of one named
+  // policy's rules, valid for [effective_from, effective_to]. Editing a
+  // policy in the UI closes the current row's effective_to and inserts a
+  // new row starting the next day, so a payroll month already run (or a
+  // past month re-previewed) keeps using the rules that were actually in
+  // effect then, not whatever the policy reads today. policy_group_id is
+  // the stable identity across a policy's edit history — assignments
+  // (which group applies to which department/designation/employee) point
+  // at the group, resolution then picks whichever version of that group
+  // covers the month being calculated.
+  db.exec(`CREATE TABLE IF NOT EXISTS salary_policies (
+    id TEXT PRIMARY KEY,
+    policy_group_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    effective_from TEXT NOT NULL,
+    effective_to TEXT,
+
+    overtime_enabled INTEGER NOT NULL DEFAULT 1,
+    overtime_rate_type TEXT NOT NULL DEFAULT 'multiplier' CHECK(overtime_rate_type IN ('multiplier','fixed_per_hour')),
+    overtime_multiplier REAL NOT NULL DEFAULT 1.5,
+    overtime_fixed_rate REAL NOT NULL DEFAULT 0,
+
+    late_penalty_enabled INTEGER NOT NULL DEFAULT 0,
+    late_grace_minutes INTEGER NOT NULL DEFAULT 10,
+    late_penalty_type TEXT NOT NULL DEFAULT 'none' CHECK(late_penalty_type IN ('none','per_instance_flat','every_n_days_equals_1_day')),
+    late_penalty_value REAL NOT NULL DEFAULT 0,
+
+    early_leave_penalty_enabled INTEGER NOT NULL DEFAULT 0,
+    early_leave_grace_minutes INTEGER NOT NULL DEFAULT 10,
+    early_leave_penalty_type TEXT NOT NULL DEFAULT 'none' CHECK(early_leave_penalty_type IN ('none','per_instance_flat','every_n_days_equals_1_day')),
+    early_leave_penalty_value REAL NOT NULL DEFAULT 0,
+
+    early_arrival_bonus_enabled INTEGER NOT NULL DEFAULT 0,
+    early_arrival_bonus_per_instance REAL NOT NULL DEFAULT 0,
+
+    holiday_work_bonus_enabled INTEGER NOT NULL DEFAULT 0,
+    holiday_work_rate_multiplier REAL NOT NULL DEFAULT 2.0,
+    weekly_off_work_bonus_enabled INTEGER NOT NULL DEFAULT 0,
+    weekly_off_work_rate_multiplier REAL NOT NULL DEFAULT 2.0,
+
+    tour_allowance_enabled INTEGER NOT NULL DEFAULT 0,
+    tour_allowance_per_day REAL NOT NULL DEFAULT 0,
+    field_allowance_enabled INTEGER NOT NULL DEFAULT 0,
+    field_allowance_per_day REAL NOT NULL DEFAULT 0,
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Points at a policy_group_id (stable across that policy's edit history),
+  // not a specific version — resolution picks whichever version of the
+  // group covers the payroll month being calculated. No history of its own:
+  // reassigning which policy a department/designation uses takes effect
+  // immediately, only the policy RULES themselves are versioned. That's the
+  // distinction that was actually asked for — "old structure preserved" is
+  // about a policy's numbers, not about who was assigned to it when.
+  db.exec(`CREATE TABLE IF NOT EXISTS salary_policy_assignments (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL CHECK(scope IN ('department','designation')),
+    scope_value TEXT NOT NULL,
+    policy_group_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(scope, scope_value)
+  )`);
+
+  if (!columnExists(db, 'employees', 'salary_policy_group_id')) {
+    db.exec('ALTER TABLE employees ADD COLUMN salary_policy_group_id TEXT');
+  }
+
+  // Seed exactly one default policy (first version of its group), once —
+  // its values reproduce the behavior that shipped before this table
+  // existed (overtime on at 1.5x, everything else off) so existing payroll
+  // numbers don't silently change. effective_from is a floor date, not
+  // "today" — it must cover every past month too, including ones already
+  // finalized, since this is the fallback baseline that predates the whole
+  // policy system.
+  const defaultPolicyExists = db.prepare('SELECT COUNT(*) AS n FROM salary_policies WHERE is_default = 1').get().n > 0;
+  if (!defaultPolicyExists) {
+    const groupId = `PGRP-${Date.now().toString(36).toUpperCase()}`;
+    // Inherit whatever overtime multiplier was already configured on
+    // working_hours (the older, pre-policy setting) rather than hardcoding
+    // 1.5 — preserves any value the client may already have customized.
+    const whRow = db.prepare('SELECT overtime_rate_multiplier FROM working_hours WHERE id = 1').get();
+    const inheritedMultiplier = Number(whRow?.overtime_rate_multiplier ?? 1.5);
+    db.prepare(
+      `INSERT INTO salary_policies (id, policy_group_id, name, is_default, effective_from, overtime_multiplier)
+       VALUES (?, ?, 'Default Policy', 1, '2000-01-01', ?)`,
+    ).run(`POLICY-${Date.now().toString(36).toUpperCase()}`, groupId, inheritedMultiplier);
+  }
+
+  // ─── Salary Structures — designation-based pay composition ────────────────
+  // Same versioning shape as salary_policies: a stable structure_group_id
+  // identifies "the same named structure" across edits; each edit closes
+  // the current version's effective_to and inserts a new row, so a payroll
+  // month already computed keeps reading the component list that was live
+  // at the time. Assignments point at the group, not a specific version.
+  db.exec(`CREATE TABLE IF NOT EXISTS salary_structures (
+    id TEXT PRIMARY KEY,
+    structure_group_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    effective_from TEXT NOT NULL,
+    effective_to TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_salary_structures_group
+    ON salary_structures(structure_group_id)`);
+
+  // Each row is one earning/deduction line item belonging to exactly one
+  // structure VERSION (structure_id, not group) — a version's components
+  // are a full snapshot, never a diff, so an old version's rows stay
+  // exactly as they were even after the structure is "edited" forward.
+  db.exec(`CREATE TABLE IF NOT EXISTS salary_structure_components (
+    id TEXT PRIMARY KEY,
+    structure_id TEXT NOT NULL,
+    component_type TEXT NOT NULL CHECK(component_type IN ('earning','deduction')),
+    name TEXT NOT NULL,
+    calc_type TEXT NOT NULL DEFAULT 'percentage_of_basic'
+      CHECK(calc_type IN ('percentage_of_basic','fixed_amount')),
+    percentage REAL NOT NULL DEFAULT 0,
+    fixed_amount REAL NOT NULL DEFAULT 0,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY(structure_id) REFERENCES salary_structures(id) ON DELETE CASCADE
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_salary_structure_components_structure
+    ON salary_structure_components(structure_id)`);
+
+  db.exec(`CREATE TABLE IF NOT EXISTS salary_structure_assignments (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL CHECK(scope IN ('department','designation')),
+    scope_value TEXT NOT NULL,
+    structure_group_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(scope, scope_value)
+  )`);
+
+  if (!columnExists(db, 'employees', 'salary_structure_group_id')) {
+    db.exec('ALTER TABLE employees ADD COLUMN salary_structure_group_id TEXT');
+  }
+
+  // Seed exactly one default structure, once — its components are copied
+  // from whatever is currently in earnings_config/deductions so payroll
+  // output doesn't change until someone actually configures a
+  // designation-specific structure. effective_from is a floor date so it
+  // covers every past month too, same reasoning as the default policy above.
+  const defaultStructureExists = db.prepare('SELECT COUNT(*) AS n FROM salary_structures WHERE is_default = 1').get().n > 0;
+  if (!defaultStructureExists) {
+    const structureGroupId = `SGRP-${Date.now().toString(36).toUpperCase()}`;
+    const structureId = `STRUCT-${Date.now().toString(36).toUpperCase()}`;
+    db.prepare(
+      `INSERT INTO salary_structures (id, structure_group_id, name, is_default, effective_from)
+       VALUES (?, ?, 'Default Structure', 1, '2000-01-01')`,
+    ).run(structureId, structureGroupId);
+
+    const insertComponent = db.prepare(
+      `INSERT INTO salary_structure_components
+         (id, structure_id, component_type, name, calc_type, percentage, display_order)
+       VALUES (?, ?, ?, ?, 'percentage_of_basic', ?, ?)`,
+    );
+    let order = 0;
+    const legacyEarnings = db.prepare(
+      "SELECT name, percentage FROM earnings_config WHERE is_active = 1 ORDER BY created_at ASC",
+    ).all();
+    for (const e of legacyEarnings) {
+      insertComponent.run(`SSC-${Date.now().toString(36).toUpperCase()}-${order}`, structureId, 'earning', e.name, e.percentage, order);
+      order += 1;
+    }
+    const legacyDeductions = db.prepare('SELECT name, percentage FROM deductions ORDER BY created_at ASC').all();
+    for (const d of legacyDeductions) {
+      insertComponent.run(`SSC-${Date.now().toString(36).toUpperCase()}-${order}`, structureId, 'deduction', d.name, d.percentage, order);
+      order += 1;
+    }
+  }
+
+  // ─── Designations — same managed-list treatment as departments ────────────
+  // Employees.designation stays a free-text column (unchanged), but this
+  // table backs a real picker + Settings tab instead of hand-typing it every
+  // time, mirroring how "departments" already works.
+  db.exec(`CREATE TABLE IF NOT EXISTS designations (
+    designation_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Seed once from whatever designations already exist on employees, so
+  // nobody's existing free-text designation becomes an orphaned value the
+  // new picker doesn't know about.
+  const designationCount = db.prepare('SELECT COUNT(*) AS n FROM designations').get().n;
+  if (designationCount === 0) {
+    const existingDesignations = db.prepare(
+      "SELECT DISTINCT designation AS name FROM employees WHERE designation IS NOT NULL AND designation != '' ORDER BY designation",
+    ).all();
+    const insertDesignation = db.prepare('INSERT OR IGNORE INTO designations (designation_id, name) VALUES (?, ?)');
+    existingDesignations.forEach((d, i) => {
+      insertDesignation.run(`DESIG-${Date.now().toString(36).toUpperCase()}-${i}`, d.name);
+    });
+  }
 }
 
 function seedIfEmpty(db) {

@@ -18,6 +18,29 @@ const {
   createAdjustment,
   deleteAdjustment,
 } = require('../models/payroll');
+const {
+  listPolicyGroups,
+  getPolicyHistory,
+  createPolicy,
+  updatePolicy,
+  deletePolicyGroup,
+  listAssignments,
+  setAssignment,
+  deleteAssignment,
+  listDistinctDepartmentsAndDesignations,
+} = require('../models/salaryPolicy');
+const salaryStructureModel = require('../models/salaryStructure');
+const {
+  listStructureGroups,
+  getStructureHistory,
+  createStructure,
+  updateStructure,
+  deleteStructureGroup,
+} = salaryStructureModel;
+const listStructureAssignments = salaryStructureModel.listAssignments;
+const setStructureAssignment = salaryStructureModel.setAssignment;
+const deleteStructureAssignment = salaryStructureModel.deleteAssignment;
+const estimateStructureForEmployeeLike = salaryStructureModel.estimateStructureForEmployeeLike;
 const { sendOk, createHttpError } = require('../utils/http');
 const { serializePayrollRun, serializePayslip } = require('../utils/serializers');
 
@@ -159,6 +182,150 @@ function resolveDisputeHandler(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+// ─── Salary policy handlers (versioned per-designation/department pay rules) ─
+
+function listPoliciesHandler(_req, res, next) {
+  try {
+    return sendOk(res, listPolicyGroups());
+  } catch (e) { return next(e); }
+}
+
+function getPolicyHistoryHandler(req, res, next) {
+  try {
+    return sendOk(res, getPolicyHistory(req.params.groupId));
+  } catch (e) { return next(e); }
+}
+
+function createPolicyHandler(req, res, next) {
+  try {
+    const created = createPolicy(req.body || {});
+    res.status(201);
+    return sendOk(res, created);
+  } catch (e) { return next(e); }
+}
+
+// Never mutates the current version in place — closes it out and inserts a
+// new one starting at the given effectiveFrom (default: today), so months
+// already computed under the old rules keep reading the old rules. See
+// models/salaryPolicy.js:updatePolicy for the mechanics.
+function updatePolicyHandler(req, res, next) {
+  try {
+    const updated = updatePolicy(req.params.groupId, req.body || {});
+    return sendOk(res, updated);
+  } catch (e) { return next(e); }
+}
+
+function deletePolicyHandler(req, res, next) {
+  try {
+    return sendOk(res, deletePolicyGroup(req.params.groupId));
+  } catch (e) { return next(e); }
+}
+
+function listPolicyAssignmentsHandler(_req, res, next) {
+  try {
+    return sendOk(res, listAssignments());
+  } catch (e) { return next(e); }
+}
+
+function setPolicyAssignmentHandler(req, res, next) {
+  try {
+    const { scope, scopeValue, policyGroupId } = req.body || {};
+    return sendOk(res, setAssignment(scope, scopeValue, policyGroupId));
+  } catch (e) { return next(e); }
+}
+
+function deletePolicyAssignmentHandler(req, res, next) {
+  try {
+    return sendOk(res, deleteAssignment(req.params.scope, req.params.scopeValue));
+  } catch (e) { return next(e); }
+}
+
+function policyScopeOptionsHandler(_req, res, next) {
+  try {
+    return sendOk(res, listDistinctDepartmentsAndDesignations());
+  } catch (e) { return next(e); }
+}
+
+// ─── Salary structure handlers (versioned, designation-based pay composition) ─
+
+function listStructuresHandler(_req, res, next) {
+  try {
+    return sendOk(res, listStructureGroups());
+  } catch (e) { return next(e); }
+}
+
+function getStructureHistoryHandler(req, res, next) {
+  try {
+    return sendOk(res, getStructureHistory(req.params.groupId));
+  } catch (e) { return next(e); }
+}
+
+function createStructureHandler(req, res, next) {
+  try {
+    const created = createStructure(req.body || {});
+    res.status(201);
+    return sendOk(res, created);
+  } catch (e) { return next(e); }
+}
+
+// Never mutates the current version in place — closes it out and inserts a
+// new one (with a fresh full snapshot of components) starting at the given
+// effectiveFrom (default: today). See models/salaryStructure.js:updateStructure.
+function updateStructureHandler(req, res, next) {
+  try {
+    const updated = updateStructure(req.params.groupId, req.body || {});
+    return sendOk(res, updated);
+  } catch (e) { return next(e); }
+}
+
+function deleteStructureHandler(req, res, next) {
+  try {
+    return sendOk(res, deleteStructureGroup(req.params.groupId));
+  } catch (e) { return next(e); }
+}
+
+function listStructureAssignmentsHandler(_req, res, next) {
+  try {
+    return sendOk(res, listStructureAssignments());
+  } catch (e) { return next(e); }
+}
+
+function setStructureAssignmentHandler(req, res, next) {
+  try {
+    const { scope, scopeValue, structureGroupId } = req.body || {};
+    return sendOk(res, setStructureAssignment(scope, scopeValue, structureGroupId));
+  } catch (e) { return next(e); }
+}
+
+function deleteStructureAssignmentHandler(req, res, next) {
+  try {
+    return sendOk(res, deleteStructureAssignment(req.params.scope, req.params.scopeValue));
+  } catch (e) { return next(e); }
+}
+
+// Same department/designation list as the policy engine's scope-options —
+// reused directly rather than duplicating the query.
+function structureScopeOptionsHandler(_req, res, next) {
+  try {
+    return sendOk(res, listDistinctDepartmentsAndDesignations());
+  } catch (e) { return next(e); }
+}
+
+// HR-facing "what would this pay out to" preview while editing an employee
+// (Basic, department, designation, or structure override) — no attendance,
+// no policy, just the structure that would resolve for this employee shape
+// right now. See models/salaryStructure.js:estimateStructureForEmployeeLike.
+function estimateStructureHandler(req, res, next) {
+  try {
+    const { salary, department, designation, salaryStructureGroupId } = req.body || {};
+    const estimate = estimateStructureForEmployeeLike({
+      salary, department, designation,
+      salary_structure_group_id: salaryStructureGroupId || null,
+    });
+    return sendOk(res, estimate);
+  } catch (e) { return next(e); }
+}
+
 module.exports = {
   listPayrollRunsHandler,
   runPayrollHandler,
@@ -175,4 +342,23 @@ module.exports = {
   disputeCountHandler,
   raiseDisputeHandler,
   resolveDisputeHandler,
+  listPoliciesHandler,
+  getPolicyHistoryHandler,
+  createPolicyHandler,
+  updatePolicyHandler,
+  deletePolicyHandler,
+  listPolicyAssignmentsHandler,
+  setPolicyAssignmentHandler,
+  deletePolicyAssignmentHandler,
+  policyScopeOptionsHandler,
+  listStructuresHandler,
+  getStructureHistoryHandler,
+  createStructureHandler,
+  updateStructureHandler,
+  deleteStructureHandler,
+  listStructureAssignmentsHandler,
+  setStructureAssignmentHandler,
+  deleteStructureAssignmentHandler,
+  structureScopeOptionsHandler,
+  estimateStructureHandler,
 };

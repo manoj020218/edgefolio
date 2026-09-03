@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Settings, RefreshCw, Plus, Trash2, Edit2, Moon,
   FolderOpen, Shield, RotateCcw, HardDrive, Info, Landmark, X,
-  Cpu, Wifi, Server,
+  Cpu, Wifi, Server, Clock, History, Users, Copy,
 } from 'lucide-react'
 import { Button, Card, Input, Alert } from '../components/atomic'
 import {
@@ -12,9 +13,8 @@ import {
   getDataInfo, setCustomBackupPath, clearCustomBackupPath, restoreFromBackup,
   getShifts, createShift, updateShift, deleteShift,
   getDepartments, createDepartment, updateDepartment, deleteDepartment,
+  getDesignations, createDesignation, updateDesignation, deleteDesignation,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
-  getDeductions, createDeduction, updateDeduction, deleteDeduction,
-  getEarnings, createEarning, updateEarning, deleteEarning,
   getCustomFields, createCustomField, updateCustomField, deleteCustomField,
   getBankTemplates, createBankTemplate, updateBankTemplate, deleteBankTemplate,
   getU5Devices, createU5Device, updateU5Device, deleteU5Device,
@@ -22,6 +22,10 @@ import {
   getM68Devices, createM68Device, updateM68Device, deleteM68Device,
   getM68DeviceUsers, getM68Status, sendM68Command, getM68Events,
   getLicenseStatus, refreshLicense,
+  getSalaryPolicies, getSalaryPolicyHistory, createSalaryPolicy, updateSalaryPolicy, deleteSalaryPolicy,
+  getSalaryPolicyAssignments, setSalaryPolicyAssignment, deleteSalaryPolicyAssignment, getSalaryPolicyScopeOptions,
+  getSalaryStructures, getSalaryStructureHistory, createSalaryStructure, updateSalaryStructure, deleteSalaryStructure,
+  getSalaryStructureAssignments, setSalaryStructureAssignment, deleteSalaryStructureAssignment, getSalaryStructureScopeOptions,
 } from '../services/api'
 
 const hasElectron = () => typeof window !== 'undefined' && !!window.electronAPI
@@ -30,10 +34,11 @@ const TABS = [
   { id: 'company',        label: 'Company' },
   { id: 'working-hours',  label: 'Working Hours' },
   { id: 'departments',    label: 'Departments' },
+  { id: 'designations',   label: 'Designations' },
   { id: 'shifts',         label: 'Shifts' },
   { id: 'holidays',       label: 'Holidays' },
-  { id: 'earnings',       label: 'Earnings' },
-  { id: 'deductions',     label: 'Deductions' },
+  { id: 'salary-structures', label: 'Salary Structure' },
+  { id: 'salary-policies', label: 'Salary Policies' },
   { id: 'bank-templates', label: 'Bank Templates' },
   { id: 'u5-machines',   label: 'U5 Machines' },
   { id: 'm68-machines',  label: 'M68 (WitEasy)' },
@@ -231,6 +236,39 @@ function DeptForm({ item, onDone, onSaved }) {
   )
 }
 
+// ─── Designation form ─────────────────────────────────────────────────────────
+function DesigForm({ item, onDone, onSaved }) {
+  const [form, setForm] = useState({ name: item?.name ?? '', description: item?.description ?? '' })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const handleSave = async () => {
+    setSaving(true); setErr('')
+    try {
+      if (item) await updateDesignation(item.designation_id, form)
+      else await createDesignation(form)
+      onSaved(); onDone()
+    } catch (e) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="space-y-3">
+      {err && <p className="text-red-400 text-sm">{err}</p>}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input label="Designation Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Senior Manager" />
+        <Input label="Description"      value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Optional" />
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" variant="secondary" onClick={onDone}>Cancel</Button>
+        <Button size="sm" variant="primary" isLoading={saving} onClick={handleSave}>
+          {item ? 'Update' : 'Add Designation'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Holiday form ─────────────────────────────────────────────────────────────
 function HolidayForm({ item, onDone, onSaved }) {
   const [form, setForm] = useState({
@@ -270,49 +308,6 @@ function HolidayForm({ item, onDone, onSaved }) {
         <Button size="sm" variant="secondary" onClick={onDone}>Cancel</Button>
         <Button size="sm" variant="primary" isLoading={saving} onClick={handleSave}>
           {item ? 'Update' : 'Add Holiday'}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Earning form ─────────────────────────────────────────────────────────────
-function EarningForm({ item, onDone, onSaved }) {
-  const [form, setForm] = useState({
-    name: item?.name ?? '', percentage: item?.percentage ?? 0, type: item?.type ?? 'fixed',
-  })
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-
-  const handleSave = async () => {
-    setSaving(true); setErr('')
-    try {
-      if (item) await updateEarning(item.earning_id, form)
-      else await createEarning(form)
-      onSaved(); onDone()
-    } catch (e) { setErr(e.message) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div className="space-y-3">
-      {err && <p className="text-red-400 text-sm">{err}</p>}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Input label="Component Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. DA, HRA, Conveyance" />
-        <Input label="% of Basic" type="number" step="0.01" value={form.percentage} onChange={(e) => setForm({ ...form, percentage: Number(e.target.value) })} />
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Type</label>
-          <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm">
-            <option value="fixed">Fixed %</option>
-            <option value="variable">Variable</option>
-          </select>
-        </div>
-      </div>
-      <div className="flex gap-2 pt-1">
-        <Button size="sm" variant="secondary" onClick={onDone}>Cancel</Button>
-        <Button size="sm" variant="primary" isLoading={saving} onClick={handleSave}>
-          {item ? 'Update' : 'Add Earning'}
         </Button>
       </div>
     </div>
@@ -478,46 +473,747 @@ function BankTemplatesCrudPanel({ templates, onDelete, onSaved }) {
   )
 }
 
-// ─── Deduction form ───────────────────────────────────────────────────────────
-function DeductionForm({ item, onDone, onSaved }) {
-  const [form, setForm] = useState({
-    name: item?.name ?? '', percentage: item?.percentage ?? 0, type: item?.type ?? 'fixed',
+// ─── Salary Policies ──────────────────────────────────────────────────────────
+// Configurable, per-department/designation/employee pay rules (overtime,
+// late/early, holiday & weekly-off work, tour & field allowance). Editing a
+// policy never changes past months — it closes the current version and
+// starts a new one from the chosen effective date forward (see
+// backend/models/salaryPolicy.js:updatePolicy). Older versions stay visible
+// in each policy's History so past payslips are never ambiguous.
+
+const todayISO = () => new Date().toISOString().slice(0, 10)
+
+const BLANK_POLICY_FORM = {
+  name: '',
+  effectiveFrom: todayISO(),
+  overtime_enabled: 1, overtime_rate_type: 'multiplier', overtime_multiplier: 1.5, overtime_fixed_rate: 0,
+  late_penalty_enabled: 0, late_grace_minutes: 10, late_penalty_type: 'per_instance_flat', late_penalty_value: 0,
+  early_leave_penalty_enabled: 0, early_leave_grace_minutes: 10, early_leave_penalty_type: 'per_instance_flat', early_leave_penalty_value: 0,
+  early_arrival_bonus_enabled: 0, early_arrival_bonus_per_instance: 0,
+  holiday_work_bonus_enabled: 0, holiday_work_rate_multiplier: 2,
+  weekly_off_work_bonus_enabled: 0, weekly_off_work_rate_multiplier: 2,
+  tour_allowance_enabled: 0, tour_allowance_per_day: 0,
+  field_allowance_enabled: 0, field_allowance_per_day: 0,
+}
+
+function policyToForm(p) {
+  if (!p) return { ...BLANK_POLICY_FORM }
+  const form = { ...BLANK_POLICY_FORM, effectiveFrom: todayISO() }
+  Object.keys(BLANK_POLICY_FORM).forEach((k) => {
+    if (k === 'effectiveFrom' || k === 'name') return
+    if (p[k] !== undefined && p[k] !== null) form[k] = p[k]
   })
+  form.name = p.name || ''
+  return form
+}
+
+// One collapsible rule group — a header checkbox that reveals its own
+// sub-fields only once enabled, so the form doesn't read as a wall of inputs
+// for companies that only use two or three of these rules.
+function RuleGroup({ title, helper, enabled, onToggle, children }) {
+  return (
+    <div className="border border-slate-700 rounded-lg overflow-hidden">
+      <label className="flex items-start gap-3 p-3 bg-slate-800/60 cursor-pointer select-none">
+        <input type="checkbox" className="mt-1" checked={!!enabled} onChange={(e) => onToggle(e.target.checked ? 1 : 0)} />
+        <div>
+          <p className="text-sm font-semibold text-slate-100">{title}</p>
+          <p className="text-xs text-slate-400">{helper}</p>
+        </div>
+      </label>
+      {!!enabled && <div className="p-3 border-t border-slate-700 bg-slate-900/40 grid grid-cols-1 md:grid-cols-3 gap-3">{children}</div>}
+    </div>
+  )
+}
+
+function NumField({ label, value, onChange, step = '1', min }) {
+  return (
+    <div>
+      <label className="block text-xs text-slate-400 mb-1">{label}</label>
+      <input type="number" step={step} min={min} value={value}
+        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm" />
+    </div>
+  )
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <div>
+      <label className="block text-xs text-slate-400 mb-1">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm">
+        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </div>
+  )
+}
+
+function PolicyEditor({ policy, onDone, onSaved }) {
+  const [form, setForm] = useState(() => policyToForm(policy))
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  const set = (patch) => setForm((p) => ({ ...p, ...patch }))
+  const isEdit = !!policy
 
   const handleSave = async () => {
+    if (!form.name.trim()) { setErr('Policy name is required'); return }
     setSaving(true); setErr('')
     try {
-      if (item) await updateDeduction(item.deduction_id, form)
-      else await createDeduction(form)
+      if (isEdit) await updateSalaryPolicy(policy.policy_group_id, form)
+      else await createSalaryPolicy(form)
       onSaved(); onDone()
     } catch (e) { setErr(e.message) }
     finally { setSaving(false) }
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {err && <p className="text-red-400 text-sm">{err}</p>}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Input label="Deduction Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Provident Fund" />
-        <Input label="Percentage (%)" type="number" step="0.01" value={form.percentage} onChange={(e) => setForm({ ...form, percentage: Number(e.target.value) })} />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input label="Policy Name" value={form.name} onChange={(e) => set({ name: e.target.value })}
+          placeholder="e.g. Field Sales Policy, Factory Staff Policy" />
         <div>
-          <label className="block text-xs text-slate-400 mb-1">Type</label>
-          <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm">
-            <option value="fixed">Fixed %</option>
-            <option value="variable">Variable</option>
-          </select>
+          <label className="block text-xs text-slate-400 mb-1">Effective From</label>
+          <input type="date" value={form.effectiveFrom} onChange={(e) => set({ effectiveFrom: e.target.value })}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm" />
+          {isEdit && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              Changes apply from this date forward only. Payroll already run before this date keeps using the old rules — nothing is recalculated backward.
+            </p>
+          )}
         </div>
       </div>
+
+      <RuleGroup title="Overtime Pay" helper="Pay extra for hours worked beyond the standard shift."
+        enabled={form.overtime_enabled} onToggle={(v) => set({ overtime_enabled: v })}>
+        <SelectField label="Rate Type" value={form.overtime_rate_type} onChange={(v) => set({ overtime_rate_type: v })}
+          options={[['multiplier', '× hourly rate'], ['fixed_per_hour', 'Fixed ₹ / hour']]} />
+        {form.overtime_rate_type === 'fixed_per_hour'
+          ? <NumField label="Fixed ₹ / hour" step="1" min="0" value={form.overtime_fixed_rate} onChange={(v) => set({ overtime_fixed_rate: v })} />
+          : <NumField label="Multiplier (e.g. 1.5×)" step="0.1" min="0" value={form.overtime_multiplier} onChange={(v) => set({ overtime_multiplier: v })} />}
+      </RuleGroup>
+
+      <RuleGroup title="Late Coming" helper="Dock pay for arriving after the shift start, past a grace window."
+        enabled={form.late_penalty_enabled} onToggle={(v) => set({ late_penalty_enabled: v })}>
+        <NumField label="Grace (minutes)" step="1" min="0" value={form.late_grace_minutes} onChange={(v) => set({ late_grace_minutes: v })} />
+        <SelectField label="Penalty Type" value={form.late_penalty_type} onChange={(v) => set({ late_penalty_type: v })}
+          options={[['per_instance_flat', 'Flat ₹ per late day'], ['every_n_days_equals_1_day', 'Every N late days = 1 day′s pay']]} />
+        <NumField label={form.late_penalty_type === 'every_n_days_equals_1_day' ? 'N (days)' : '₹ per instance'} step="1" min="0"
+          value={form.late_penalty_value} onChange={(v) => set({ late_penalty_value: v })} />
+      </RuleGroup>
+
+      <RuleGroup title="Early Leaving" helper="Dock pay for leaving before shift end, past a grace window."
+        enabled={form.early_leave_penalty_enabled} onToggle={(v) => set({ early_leave_penalty_enabled: v })}>
+        <NumField label="Grace (minutes)" step="1" min="0" value={form.early_leave_grace_minutes} onChange={(v) => set({ early_leave_grace_minutes: v })} />
+        <SelectField label="Penalty Type" value={form.early_leave_penalty_type} onChange={(v) => set({ early_leave_penalty_type: v })}
+          options={[['per_instance_flat', 'Flat ₹ per early day'], ['every_n_days_equals_1_day', 'Every N early days = 1 day′s pay']]} />
+        <NumField label={form.early_leave_penalty_type === 'every_n_days_equals_1_day' ? 'N (days)' : '₹ per instance'} step="1" min="0"
+          value={form.early_leave_penalty_value} onChange={(v) => set({ early_leave_penalty_value: v })} />
+      </RuleGroup>
+
+      <RuleGroup title="Early Arrival Bonus" helper="Pay a bonus for arriving well before shift start."
+        enabled={form.early_arrival_bonus_enabled} onToggle={(v) => set({ early_arrival_bonus_enabled: v })}>
+        <NumField label="₹ per instance" step="1" min="0" value={form.early_arrival_bonus_per_instance} onChange={(v) => set({ early_arrival_bonus_per_instance: v })} />
+      </RuleGroup>
+
+      <RuleGroup title="Holiday Worked Bonus" helper="Pay extra when an employee works on a declared holiday."
+        enabled={form.holiday_work_bonus_enabled} onToggle={(v) => set({ holiday_work_bonus_enabled: v })}>
+        <NumField label="Rate multiplier (e.g. 2×)" step="0.1" min="0" value={form.holiday_work_rate_multiplier} onChange={(v) => set({ holiday_work_rate_multiplier: v })} />
+      </RuleGroup>
+
+      <RuleGroup title="Weekly-Off Worked Bonus" helper="Pay extra when an employee works on their weekly off day."
+        enabled={form.weekly_off_work_bonus_enabled} onToggle={(v) => set({ weekly_off_work_bonus_enabled: v })}>
+        <NumField label="Rate multiplier (e.g. 2×)" step="0.1" min="0" value={form.weekly_off_work_rate_multiplier} onChange={(v) => set({ weekly_off_work_rate_multiplier: v })} />
+      </RuleGroup>
+
+      <RuleGroup title="Tour Allowance" helper="Flat per-day allowance for days on an approved tour assignment."
+        enabled={form.tour_allowance_enabled} onToggle={(v) => set({ tour_allowance_enabled: v })}>
+        <NumField label="₹ per day" step="1" min="0" value={form.tour_allowance_per_day} onChange={(v) => set({ tour_allowance_per_day: v })} />
+      </RuleGroup>
+
+      <RuleGroup title="Field Allowance" helper="Flat per-day allowance for days with a completed field/customer visit."
+        enabled={form.field_allowance_enabled} onToggle={(v) => set({ field_allowance_enabled: v })}>
+        <NumField label="₹ per day" step="1" min="0" value={form.field_allowance_per_day} onChange={(v) => set({ field_allowance_per_day: v })} />
+      </RuleGroup>
+
       <div className="flex gap-2 pt-1">
         <Button size="sm" variant="secondary" onClick={onDone}>Cancel</Button>
         <Button size="sm" variant="primary" isLoading={saving} onClick={handleSave}>
-          {item ? 'Update' : 'Add Deduction'}
+          {isEdit ? 'Save as New Version' : 'Create Policy'}
         </Button>
       </div>
     </div>
+  )
+}
+
+function PolicyHistoryPanel({ groupId, onClose }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    getSalaryPolicyHistory(groupId).then((r) => { setRows(r.data || []); setLoading(false) }).catch(() => setLoading(false))
+  }, [groupId])
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-slate-200 flex items-center gap-1"><History className="w-4 h-4" /> Version History</p>
+        <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X className="w-4 h-4" /></button>
+      </div>
+      {loading ? <p className="text-xs text-slate-500">Loading...</p> : rows.length === 0 ? (
+        <p className="text-xs text-slate-500">No history.</p>
+      ) : (
+        <ul className="space-y-1">
+          {rows.map((r) => (
+            <li key={r.id} className="text-xs text-slate-400 flex justify-between border-b border-slate-800 py-1 last:border-0">
+              <span>{r.effective_from} → {r.effective_to || 'now'}</span>
+              <span className="text-slate-500">
+                {r.overtime_enabled ? `OT ${r.overtime_rate_type === 'fixed_per_hour' ? `₹${r.overtime_fixed_rate}/h` : `${r.overtime_multiplier}×`}` : 'OT off'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function PolicyCard({ policy, onEdit, onDelete, onDuplicate }) {
+  const [showHistory, setShowHistory] = useState(false)
+  const summary = [
+    policy.overtime_enabled ? `Overtime ${policy.overtime_rate_type === 'fixed_per_hour' ? `₹${policy.overtime_fixed_rate}/h` : `${policy.overtime_multiplier}×`}` : null,
+    policy.late_penalty_enabled ? 'Late penalty' : null,
+    policy.early_leave_penalty_enabled ? 'Early-leave penalty' : null,
+    policy.early_arrival_bonus_enabled ? 'Early-arrival bonus' : null,
+    policy.holiday_work_bonus_enabled ? 'Holiday bonus' : null,
+    policy.weekly_off_work_bonus_enabled ? 'Weekly-off bonus' : null,
+    policy.tour_allowance_enabled ? 'Tour allowance' : null,
+    policy.field_allowance_enabled ? 'Field allowance' : null,
+  ].filter(Boolean)
+
+  return (
+    <div className="border border-slate-700 rounded-lg p-3 bg-slate-900/40 space-y-2">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+            {policy.name}
+            {!!policy.is_default && <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-900/50 text-sky-300">Default</span>}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">Effective from {policy.effective_from}</p>
+        </div>
+        <div className="flex gap-1">
+          <button title="Edit (starts a new version)" onClick={() => onEdit(policy)} className="p-1.5 hover:bg-slate-700 rounded text-blue-400"><Edit2 className="w-4 h-4" /></button>
+          <button title="Duplicate as a new policy" onClick={() => onDuplicate(policy)} className="p-1.5 hover:bg-slate-700 rounded text-slate-400"><Copy className="w-4 h-4" /></button>
+          <button title="History" onClick={() => setShowHistory((s) => !s)} className="p-1.5 hover:bg-slate-700 rounded text-slate-400"><History className="w-4 h-4" /></button>
+          {!policy.is_default && (
+            <button title="Delete" onClick={() => onDelete(policy)} className="p-1.5 hover:bg-slate-700 rounded text-red-400"><Trash2 className="w-4 h-4" /></button>
+          )}
+        </div>
+      </div>
+      {summary.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {summary.map((s) => <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{s}</span>)}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">No optional rules enabled — basic salary + LOP only.</p>
+      )}
+      {showHistory && <PolicyHistoryPanel groupId={policy.policy_group_id} onClose={() => setShowHistory(false)} />}
+    </div>
+  )
+}
+
+function AssignmentsPanel({ policies, assignments, scopeOptions, onReload }) {
+  const [err, setErr] = useState('')
+  const policyOptions = [['', '(use default policy)'], ...policies.map((p) => [p.policy_group_id, p.name])]
+  const assignedTo = (scope, value) => assignments.find((a) => a.scope === scope && a.scope_value === value)?.policy_group_id || ''
+
+  const handleChange = async (scope, value, policyGroupId) => {
+    setErr('')
+    try {
+      if (policyGroupId) await setSalaryPolicyAssignment({ scope, scopeValue: value, policyGroupId })
+      else await deleteSalaryPolicyAssignment(scope, value)
+      onReload()
+    } catch (e) { setErr(e.message) }
+  }
+
+  if (scopeOptions.departments.length === 0 && scopeOptions.designations.length === 0) {
+    return <p className="text-xs text-slate-500">No departments or designations found yet — add employees first, then assign policies here.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {err && <p className="text-red-400 text-sm">{err}</p>}
+      {scopeOptions.departments.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 mb-1">By Department</p>
+          <div className="space-y-1.5">
+            {scopeOptions.departments.map((d) => (
+              <div key={d} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
+                <span className="text-sm text-slate-200">{d}</span>
+                <select value={assignedTo('department', d)} onChange={(e) => handleChange('department', d, e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-100 text-xs focus:border-sky-500 focus:outline-none">
+                  {policyOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {scopeOptions.designations.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 mb-1">By Designation</p>
+          <div className="space-y-1.5">
+            {scopeOptions.designations.map((d) => (
+              <div key={d} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
+                <span className="text-sm text-slate-200">{d}</span>
+                <select value={assignedTo('designation', d)} onChange={(e) => handleChange('designation', d, e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-100 text-xs focus:border-sky-500 focus:outline-none">
+                  {policyOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500">
+        Designation match takes priority over department match. An employee's own override (set in their profile) beats both.
+      </p>
+    </div>
+  )
+}
+
+function SalaryPoliciesTab() {
+  const [policies, setPolicies] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [scopeOptions, setScopeOptions] = useState({ departments: [], designations: [] })
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [editing, setEditing] = useState(null) // null closed, 'new', or a policy object
+  const [duplicateSeed, setDuplicateSeed] = useState(null)
+
+  const reload = () => {
+    setLoading(true); setErr('')
+    Promise.all([getSalaryPolicies(), getSalaryPolicyAssignments(), getSalaryPolicyScopeOptions()])
+      .then(([p, a, so]) => {
+        setPolicies(p.data || [])
+        setAssignments(a.data || [])
+        setScopeOptions(so.data || { departments: [], designations: [] })
+      })
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { reload() }, [])
+
+  const handleDelete = async (policy) => {
+    if (!window.confirm(`Delete "${policy.name}"? Departments/designations/employees assigned to it must be reassigned first.`)) return
+    try { await deleteSalaryPolicy(policy.policy_group_id); reload() }
+    catch (e) { setErr(e.message) }
+  }
+
+  const closeEditor = () => { setEditing(null); setDuplicateSeed(null) }
+
+  return (
+    <Card>
+      <div className="space-y-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-sky-400" /> Salary Policies
+            </h2>
+            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+              Overtime, late/early rules, holiday & weekly-off pay, and tour/field allowances — never forced on. Build one
+              policy per pay structure and assign it by department or designation below. Editing a policy only changes
+              pay from your chosen date forward; earlier months keep the version that was in effect at the time.
+            </p>
+          </div>
+          {!editing && (
+            <Button size="sm" icon={Plus} variant="primary" onClick={() => setEditing('new')}>New Policy</Button>
+          )}
+        </div>
+
+        {err && <Alert variant="danger" message={err} onClose={() => setErr('')} />}
+
+        {editing && (
+          <div className="bg-slate-900 border border-sky-700 rounded-lg p-4">
+            <p className="text-sm font-semibold text-sky-300 mb-3">
+              {editing === 'new' ? (duplicateSeed ? `New Policy (copied from "${duplicateSeed.name}")` : 'New Policy') : `Edit "${editing.name}"`}
+            </p>
+            <PolicyEditor
+              policy={editing === 'new' ? (duplicateSeed ? { ...duplicateSeed, name: `${duplicateSeed.name} (Copy)` } : null) : editing}
+              onDone={closeEditor}
+              onSaved={reload}
+            />
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-6 text-center text-slate-400">Loading...</div>
+        ) : (
+          <div className="space-y-2">
+            {policies.map((p) => (
+              <PolicyCard key={p.policy_group_id} policy={p}
+                onEdit={(pol) => setEditing(pol)}
+                onDelete={handleDelete}
+                onDuplicate={(pol) => { setDuplicateSeed(pol); setEditing('new') }}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="pt-2 border-t border-slate-800">
+          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2 mb-2">
+            <Users className="w-4 h-4 text-sky-400" /> Assignments
+          </h3>
+          {loading ? null : (
+            <AssignmentsPanel policies={policies} assignments={assignments} scopeOptions={scopeOptions} onReload={reload} />
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+// ─── Salary Structure ─────────────────────────────────────────────────────────
+// Designation/department-based pay composition — which earning/deduction
+// components make up an employee's pay, and at what %/₹ each. Distinct from
+// Salary Policies (attendance-driven rules like overtime/late-coming):
+// Structure is WHAT you pay, Policy is the RULES layered on top. Same
+// versioning discipline as Salary Policies — editing a structure never
+// changes a month already run; it starts a new version from the chosen date.
+
+const BLANK_COMPONENT = () => ({
+  _key: crypto.randomUUID ? crypto.randomUUID() : `c${Math.random()}`,
+  component_type: 'earning', name: '', calc_type: 'percentage_of_basic', percentage: 0, fixed_amount: 0,
+})
+
+function componentsToForm(components) {
+  return (components || []).map((c) => ({
+    _key: crypto.randomUUID ? crypto.randomUUID() : `c${Math.random()}`,
+    component_type: c.component_type, name: c.name, calc_type: c.calc_type,
+    percentage: c.percentage ?? 0, fixed_amount: c.fixed_amount ?? 0,
+  }))
+}
+
+function ComponentRow({ row, onChange, onRemove }) {
+  return (
+    <div className="grid grid-cols-12 gap-2 items-center">
+      <select value={row.component_type} onChange={(e) => onChange({ component_type: e.target.value })}
+        className="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100 text-xs focus:border-sky-500 focus:outline-none">
+        <option value="earning">Earning</option>
+        <option value="deduction">Deduction</option>
+      </select>
+      <input value={row.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="e.g. HRA, PF, Conveyance"
+        className="col-span-4 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+      <select value={row.calc_type} onChange={(e) => onChange({ calc_type: e.target.value })}
+        className="col-span-3 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100 text-xs focus:border-sky-500 focus:outline-none">
+        <option value="percentage_of_basic">% of Basic</option>
+        <option value="fixed_amount">Fixed ₹</option>
+      </select>
+      {row.calc_type === 'fixed_amount' ? (
+        <input type="number" step="1" min="0" value={row.fixed_amount}
+          onChange={(e) => onChange({ fixed_amount: e.target.value === '' ? '' : Number(e.target.value) })}
+          className="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+      ) : (
+        <input type="number" step="0.01" min="0" value={row.percentage}
+          onChange={(e) => onChange({ percentage: e.target.value === '' ? '' : Number(e.target.value) })}
+          className="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+      )}
+      <button onClick={onRemove} className="col-span-1 p-1.5 hover:bg-slate-700 rounded text-red-400 justify-self-center"><Trash2 className="w-4 h-4" /></button>
+    </div>
+  )
+}
+
+function StructureEditor({ structure, onDone, onSaved }) {
+  const [name, setName] = useState(structure?.name || '')
+  const [effectiveFrom, setEffectiveFrom] = useState(todayISO())
+  const [rows, setRows] = useState(() => componentsToForm(structure?.components))
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const isEdit = !!structure
+
+  const updateRow = (key, patch) => setRows((rs) => rs.map((r) => (r._key === key ? { ...r, ...patch } : r)))
+  const removeRow = (key) => setRows((rs) => rs.filter((r) => r._key !== key))
+  const addRow = () => setRows((rs) => [...rs, BLANK_COMPONENT()])
+
+  const handleSave = async () => {
+    if (!name.trim()) { setErr('Structure name is required'); return }
+    const cleaned = rows.filter((r) => r.name.trim())
+    if (cleaned.length === 0) { setErr('Add at least one earning or deduction component'); return }
+    setSaving(true); setErr('')
+    try {
+      const payload = { name, effectiveFrom, components: cleaned.map(({ _key, ...c }) => c) }
+      if (isEdit) await updateSalaryStructure(structure.structure_group_id, payload)
+      else await createSalaryStructure(payload)
+      onSaved(); onDone()
+    } catch (e) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="space-y-4">
+      {err && <p className="text-red-400 text-sm">{err}</p>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input label="Structure Name" value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Field Sales Structure, Factory Staff Structure" />
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">Effective From</label>
+          <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none text-sm" />
+          {isEdit && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              Changes apply from this date forward only. Payroll already run before this date keeps using the old components — nothing is recalculated backward.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="grid grid-cols-12 gap-2 text-[11px] text-slate-500 px-1">
+          <span className="col-span-2">Type</span>
+          <span className="col-span-4">Component Name</span>
+          <span className="col-span-3">Calculation</span>
+          <span className="col-span-2">Value</span>
+        </div>
+        {rows.map((row) => (
+          <ComponentRow key={row._key} row={row} onChange={(patch) => updateRow(row._key, patch)} onRemove={() => removeRow(row._key)} />
+        ))}
+        <Button size="sm" variant="secondary" icon={Plus} onClick={addRow}>Add Component</Button>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" variant="secondary" onClick={onDone}>Cancel</Button>
+        <Button size="sm" variant="primary" isLoading={saving} onClick={handleSave}>
+          {isEdit ? 'Save as New Version' : 'Create Structure'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function StructureHistoryPanel({ groupId, onClose }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    getSalaryStructureHistory(groupId).then((r) => { setRows(r.data || []); setLoading(false) }).catch(() => setLoading(false))
+  }, [groupId])
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-slate-200 flex items-center gap-1"><History className="w-4 h-4" /> Version History</p>
+        <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X className="w-4 h-4" /></button>
+      </div>
+      {loading ? <p className="text-xs text-slate-500">Loading...</p> : rows.length === 0 ? (
+        <p className="text-xs text-slate-500">No history.</p>
+      ) : (
+        <ul className="space-y-1">
+          {rows.map((r) => (
+            <li key={r.id} className="text-xs text-slate-400 border-b border-slate-800 py-1 last:border-0">
+              <div className="flex justify-between">
+                <span>{r.effective_from} → {r.effective_to || 'now'}</span>
+              </div>
+              <div className="text-slate-500 mt-0.5">
+                {(r.components || []).map((c) => `${c.name} ${c.calc_type === 'fixed_amount' ? `₹${c.fixed_amount}` : `${c.percentage}%`}`).join(', ')}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function StructureCard({ structure, onEdit, onDelete, onDuplicate }) {
+  const [showHistory, setShowHistory] = useState(false)
+  return (
+    <div className="border border-slate-700 rounded-lg p-3 bg-slate-900/40 space-y-2">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+            {structure.name}
+            {!!structure.is_default && <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-900/50 text-sky-300">Default</span>}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">Effective from {structure.effective_from}</p>
+        </div>
+        <div className="flex gap-1">
+          <button title="Edit (starts a new version)" onClick={() => onEdit(structure)} className="p-1.5 hover:bg-slate-700 rounded text-blue-400"><Edit2 className="w-4 h-4" /></button>
+          <button title="Duplicate as a new structure" onClick={() => onDuplicate(structure)} className="p-1.5 hover:bg-slate-700 rounded text-slate-400"><Copy className="w-4 h-4" /></button>
+          <button title="History" onClick={() => setShowHistory((s) => !s)} className="p-1.5 hover:bg-slate-700 rounded text-slate-400"><History className="w-4 h-4" /></button>
+          {!structure.is_default && (
+            <button title="Delete" onClick={() => onDelete(structure)} className="p-1.5 hover:bg-slate-700 rounded text-red-400"><Trash2 className="w-4 h-4" /></button>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {(structure.components || []).map((c) => (
+          <span key={c.id} className={`text-[11px] px-2 py-0.5 rounded-full ${c.component_type === 'earning' ? 'bg-emerald-900/40 text-emerald-300' : 'bg-rose-900/40 text-rose-300'}`}>
+            {c.name} {c.calc_type === 'fixed_amount' ? `₹${c.fixed_amount}` : `${c.percentage}%`}
+          </span>
+        ))}
+      </div>
+      {showHistory && <StructureHistoryPanel groupId={structure.structure_group_id} onClose={() => setShowHistory(false)} />}
+    </div>
+  )
+}
+
+function StructureAssignmentsPanel({ structures, assignments, scopeOptions, onReload }) {
+  const [err, setErr] = useState('')
+  const structureOptions = [['', '(use default structure)'], ...structures.map((s) => [s.structure_group_id, s.name])]
+  const assignedTo = (scope, value) => assignments.find((a) => a.scope === scope && a.scope_value === value)?.structure_group_id || ''
+
+  const handleChange = async (scope, value, structureGroupId) => {
+    setErr('')
+    try {
+      if (structureGroupId) await setSalaryStructureAssignment({ scope, scopeValue: value, structureGroupId })
+      else await deleteSalaryStructureAssignment(scope, value)
+      onReload()
+    } catch (e) { setErr(e.message) }
+  }
+
+  const unassignedDepartments = scopeOptions.departments.filter((d) => !assignedTo('department', d))
+  const unassignedDesignations = scopeOptions.designations.filter((d) => !assignedTo('designation', d))
+
+  if (scopeOptions.departments.length === 0 && scopeOptions.designations.length === 0) {
+    return <p className="text-xs text-slate-500">No departments or designations found yet — add employees first, then assign structures here.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {err && <p className="text-red-400 text-sm">{err}</p>}
+      {(unassignedDepartments.length > 0 || unassignedDesignations.length > 0) && (
+        <div className="p-2.5 bg-amber-900/20 border border-amber-700/40 rounded-lg text-amber-300 text-xs">
+          {unassignedDepartments.length} department{unassignedDepartments.length !== 1 ? 's' : ''} / {unassignedDesignations.length} designation{unassignedDesignations.length !== 1 ? 's' : ''} have
+          no structure assigned yet — those employees use the Default Structure until you set one below.
+        </div>
+      )}
+      {scopeOptions.departments.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 mb-1">By Department</p>
+          <div className="space-y-1.5">
+            {scopeOptions.departments.map((d) => (
+              <div key={d} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
+                <span className="text-sm text-slate-200">{d}</span>
+                <select value={assignedTo('department', d)} onChange={(e) => handleChange('department', d, e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-100 text-xs focus:border-sky-500 focus:outline-none">
+                  {structureOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {scopeOptions.designations.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 mb-1">By Designation</p>
+          <div className="space-y-1.5">
+            {scopeOptions.designations.map((d) => (
+              <div key={d} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
+                <span className="text-sm text-slate-200">{d}</span>
+                <select value={assignedTo('designation', d)} onChange={(e) => handleChange('designation', d, e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-100 text-xs focus:border-sky-500 focus:outline-none">
+                  {structureOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500">
+        Designation match takes priority over department match. An employee's own override (set in their profile) beats both —
+        and a promotion (designation change) auto-picks-up the new designation's structure from that point forward.
+      </p>
+    </div>
+  )
+}
+
+function SalaryStructuresTab() {
+  const [structures, setStructures] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [scopeOptions, setScopeOptions] = useState({ departments: [], designations: [] })
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [editing, setEditing] = useState(null) // null closed, 'new', or a structure object
+  const [duplicateSeed, setDuplicateSeed] = useState(null)
+
+  const reload = () => {
+    setLoading(true); setErr('')
+    Promise.all([getSalaryStructures(), getSalaryStructureAssignments(), getSalaryStructureScopeOptions()])
+      .then(([s, a, so]) => {
+        setStructures(s.data || [])
+        setAssignments(a.data || [])
+        setScopeOptions(so.data || { departments: [], designations: [] })
+      })
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { reload() }, [])
+
+  const handleDelete = async (structure) => {
+    if (!window.confirm(`Delete "${structure.name}"? Departments/designations/employees assigned to it must be reassigned first.`)) return
+    try { await deleteSalaryStructure(structure.structure_group_id); reload() }
+    catch (e) { setErr(e.message) }
+  }
+
+  const closeEditor = () => { setEditing(null); setDuplicateSeed(null) }
+
+  return (
+    <Card>
+      <div className="space-y-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <Landmark className="w-5 h-5 text-sky-400" /> Salary Structure
+            </h2>
+            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+              What each employee is actually paid — Basic plus earning components (DA, HRA, allowances) and
+              deduction components (PF, ESI, tax) — set once per designation and assigned below. Build the
+              structure first, then attendance-based rules in Salary Policies layer on top. Editing a
+              structure only changes pay from your chosen date forward.
+            </p>
+          </div>
+          {!editing && (
+            <Button size="sm" icon={Plus} variant="primary" onClick={() => setEditing('new')}>New Structure</Button>
+          )}
+        </div>
+
+        {err && <Alert variant="danger" message={err} onClose={() => setErr('')} />}
+
+        {editing && (
+          <div className="bg-slate-900 border border-sky-700 rounded-lg p-4">
+            <p className="text-sm font-semibold text-sky-300 mb-3">
+              {editing === 'new' ? (duplicateSeed ? `New Structure (copied from "${duplicateSeed.name}")` : 'New Structure') : `Edit "${editing.name}"`}
+            </p>
+            <StructureEditor
+              structure={editing === 'new' ? (duplicateSeed ? { ...duplicateSeed, name: `${duplicateSeed.name} (Copy)` } : null) : editing}
+              onDone={closeEditor}
+              onSaved={reload}
+            />
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-6 text-center text-slate-400">Loading...</div>
+        ) : (
+          <div className="space-y-2">
+            {structures.map((s) => (
+              <StructureCard key={s.structure_group_id} structure={s}
+                onEdit={(st) => setEditing(st)}
+                onDelete={handleDelete}
+                onDuplicate={(st) => { setDuplicateSeed(st); setEditing('new') }}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="pt-2 border-t border-slate-800">
+          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2 mb-2">
+            <Users className="w-4 h-4 text-sky-400" /> Assignments
+          </h3>
+          {loading ? null : (
+            <StructureAssignmentsPanel structures={structures} assignments={assignments} scopeOptions={scopeOptions} onReload={reload} />
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }
 
@@ -1400,7 +2096,24 @@ function M68MachinesTab() {
 
 // ─── Main SettingsPage ────────────────────────────────────────────────────────
 export const SettingsPage = () => {
-  const [activeTab, setActiveTab] = useState('company')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTabState] = useState(
+    TABS.some((t) => t.id === tabFromUrl) ? tabFromUrl : 'company'
+  )
+  // Keep the URL in sync so a deep link (e.g. from the Payroll preview page's
+  // "Configure Salary Policies →" link) lands on the right tab, and so the
+  // tab survives a refresh.
+  const setActiveTab = (id) => {
+    setActiveTabState(id)
+    setSearchParams(id === 'company' ? {} : { tab: id }, { replace: true })
+  }
+  useEffect(() => {
+    if (tabFromUrl && TABS.some((t) => t.id === tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTabState(tabFromUrl)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabFromUrl])
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState('')
@@ -1426,9 +2139,8 @@ export const SettingsPage = () => {
 
   const [shifts, setShifts]         = useState([])
   const [departments, setDepartments] = useState([])
+  const [designations, setDesignations] = useState([])
   const [holidays, setHolidays]     = useState([])
-  const [deductions, setDeductions] = useState([])
-  const [earnings, setEarnings]     = useState([])
   const [bankTemplates, setBankTemplates] = useState([])
 
   const showSuccess = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(''), 3000) }
@@ -1437,18 +2149,17 @@ export const SettingsPage = () => {
     setLoading(true)
     Promise.all([
       getCompanySettings(), getWorkingHours(), getSyncStatus(), getBackups(),
-      getShifts(), getDepartments(), getHolidays(), getDeductions(), getDataInfo(), getEarnings(),
+      getShifts(), getDepartments(), getDesignations(), getHolidays(), getDataInfo(),
       getBankTemplates(),
-    ]).then(([cs, wh, ss, bk, sh, dp, hol, ded, di, ear, bt]) => {
+    ]).then(([cs, wh, ss, bk, sh, dp, desig, hol, di, bt]) => {
       if (cs.data)  setCompany(cs.data)
       if (wh.data)  setHours(wh.data)
       setSyncStatus(ss.data)
       setBackups(bk.data || [])
       setShifts(sh.data || [])
       setDepartments(dp.data || [])
+      setDesignations(desig.data || [])
       setHolidays(hol.data || [])
-      setDeductions(ded.data || [])
-      setEarnings(ear.data || [])
       setBankTemplates(bt.data || [])
       if (di.data)  setDataInfo(di.data)
     }).catch((e) => setError(e.message))
@@ -1563,21 +2274,15 @@ export const SettingsPage = () => {
     catch (e) { setError(e.message) }
   }
 
+  const handleDeleteDesig = async (id) => {
+    if (!window.confirm('Delete this designation?')) return
+    try { await deleteDesignation(id); setDesignations((p) => p.filter((d) => d.designation_id !== id)) }
+    catch (e) { setError(e.message) }
+  }
+
   const handleDeleteHoliday = async (id) => {
     if (!window.confirm('Delete this holiday?')) return
     try { await deleteHoliday(id); setHolidays((p) => p.filter((h) => h.holiday_id !== id)) }
-    catch (e) { setError(e.message) }
-  }
-
-  const handleDeleteDeduction = async (id) => {
-    if (!window.confirm('Delete this deduction?')) return
-    try { await deleteDeduction(id); setDeductions((p) => p.filter((d) => d.deduction_id !== id)) }
-    catch (e) { setError(e.message) }
-  }
-
-  const handleDeleteEarning = async (id) => {
-    if (!window.confirm('Delete this earning component?')) return
-    try { await deleteEarning(id); setEarnings((p) => p.filter((e) => e.earning_id !== id)) }
     catch (e) { setError(e.message) }
   }
 
@@ -1589,9 +2294,8 @@ export const SettingsPage = () => {
 
   const reloadShifts        = () => getShifts().then((r) => setShifts(r.data || [])).catch(() => {})
   const reloadDepts         = () => getDepartments().then((r) => setDepartments(r.data || [])).catch(() => {})
+  const reloadDesigs        = () => getDesignations().then((r) => setDesignations(r.data || [])).catch(() => {})
   const reloadHolidays      = () => getHolidays().then((r) => setHolidays(r.data || [])).catch(() => {})
-  const reloadDeductions    = () => getDeductions().then((r) => setDeductions(r.data || [])).catch(() => {})
-  const reloadEarnings      = () => getEarnings().then((r) => setEarnings(r.data || [])).catch(() => {})
   const reloadBankTemplates = () => getBankTemplates().then((r) => setBankTemplates(r.data || [])).catch(() => {})
 
   return (
@@ -1734,6 +2438,33 @@ export const SettingsPage = () => {
         </Card>
       )}
 
+      {/* ── Designations ── */}
+      {activeTab === 'designations' && (
+        <Card>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Designations</h2>
+              <p className="text-slate-400 text-sm mt-1">Job titles/roles used across employee forms and Salary Structure/Policy assignments.</p>
+            </div>
+            {loading ? <div className="py-4 text-center text-slate-400">Loading...</div> : (
+              <CrudTable
+                idKey="designation_id"
+                addLabel="Add Designation"
+                columns={[
+                  { key: 'name',        label: 'Name' },
+                  { key: 'description', label: 'Description' },
+                ]}
+                rows={designations}
+                onDelete={handleDeleteDesig}
+                renderForm={({ item, onDone }) => (
+                  <DesigForm item={item} onDone={onDone} onSaved={reloadDesigs} />
+                )}
+              />
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* ── Shifts ── */}
       {activeTab === 'shifts' && (
         <Card>
@@ -1806,72 +2537,11 @@ export const SettingsPage = () => {
         </Card>
       )}
 
-      {/* ── Earnings ── */}
-      {activeTab === 'earnings' && (
-        <Card>
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold text-slate-100">Payroll Earnings</h2>
-              <p className="text-slate-400 text-sm mt-1">
-                Allowances added on top of Basic salary (DA, HRA, Conveyance, etc.). Each is a configurable
-                percentage of Basic. <span className="text-sky-400">Basic salary is always 100% of the employee's salary.</span>
-              </p>
-            </div>
-            {loading ? <div className="py-4 text-center text-slate-400">Loading...</div> : (
-              <CrudTable
-                idKey="earning_id"
-                addLabel="Add Earning"
-                columns={[
-                  { key: 'name',       label: 'Component Name' },
-                  { key: 'percentage', label: '% of Basic', render: (r) => `${r.percentage}%` },
-                  { key: 'type',       label: 'Type', render: (r) => (
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      r.type === 'fixed' ? 'bg-green-900/40 text-green-300' : 'bg-amber-900/40 text-amber-300'
-                    }`}>{r.type}</span>
-                  )},
-                ]}
-                rows={earnings}
-                onDelete={handleDeleteEarning}
-                renderForm={({ item, onDone }) => (
-                  <EarningForm item={item} onDone={onDone} onSaved={reloadEarnings} />
-                )}
-              />
-            )}
-          </div>
-        </Card>
-      )}
+      {/* ── Salary Structure ── */}
+      {activeTab === 'salary-structures' && <SalaryStructuresTab />}
 
-      {/* ── Deductions ── */}
-      {activeTab === 'deductions' && (
-        <Card>
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold text-slate-100">Payroll Deductions</h2>
-              <p className="text-slate-400 text-sm mt-1">PF, ESI, income tax and other deductions applied during payroll processing.</p>
-            </div>
-            {loading ? <div className="py-4 text-center text-slate-400">Loading...</div> : (
-              <CrudTable
-                idKey="deduction_id"
-                addLabel="Add Deduction"
-                columns={[
-                  { key: 'name',       label: 'Name' },
-                  { key: 'percentage', label: 'Rate', render: (r) => `${r.percentage}%` },
-                  { key: 'type',       label: 'Type', render: (r) => (
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      r.type === 'fixed' ? 'bg-green-900/40 text-green-300' : 'bg-amber-900/40 text-amber-300'
-                    }`}>{r.type}</span>
-                  )},
-                ]}
-                rows={deductions}
-                onDelete={handleDeleteDeduction}
-                renderForm={({ item, onDone }) => (
-                  <DeductionForm item={item} onDone={onDone} onSaved={reloadDeductions} />
-                )}
-              />
-            )}
-          </div>
-        </Card>
-      )}
+      {/* ── Salary Policies ── */}
+      {activeTab === 'salary-policies' && <SalaryPoliciesTab />}
 
       {/* ── Bank Templates ── */}
       {activeTab === 'bank-templates' && (

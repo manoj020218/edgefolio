@@ -1,7 +1,12 @@
 const { randomUUID } = require('crypto');
 const { getDb } = require('../config/database');
 const { monthLabel, toISODate } = require('../utils/dateUtils');
-const { getLopDaysCount, getOvertimeHours } = require('./attendance');
+const {
+  getLopDaysCount, getOvertimeHours,
+  getLateEarlyStats, getHolidayWorkedDays, getWeeklyOffWorkedDays,
+} = require('./attendance');
+const { resolveSalaryPolicyForEmployee } = require('./salaryPolicy');
+const { resolveSalaryStructureForEmployee, getStructureComponents, computeStructureAmounts } = require('./salaryStructure');
 
 function monthDateRange(monthKey) {
   const [year, month] = monthKey.split('-').map(Number);
@@ -11,6 +16,38 @@ function monthDateRange(monthKey) {
     from: `${monthKey}-01`,
     to: `${monthKey}-${String(daysInMonth).padStart(2, '0')}`,
   };
+}
+
+// Days within [from, to] covered by an approved tour/WFH work_assignment —
+// only 'tour' counts toward the tour allowance (WFH isn't "extra", it's
+// still a normal working day).
+function getTourDaysCount(employeeId, from, to) {
+  const db = getDb();
+  const rows = db.prepare(
+    `SELECT from_date, to_date FROM work_assignments
+     WHERE employee_id = ? AND work_type = 'tour' AND from_date <= ? AND to_date >= ?`,
+  ).all(employeeId, to, from);
+  let days = 0;
+  for (const r of rows) {
+    const start = r.from_date < from ? from : r.from_date;
+    const end = r.to_date > to ? to : r.to_date;
+    days += Math.round((new Date(`${end}T00:00:00`) - new Date(`${start}T00:00:00`)) / 86400000) + 1;
+  }
+  return days;
+}
+
+// Distinct calendar days within [from, to] with a completed field visit —
+// field allowance is per day visited, not per visit (multiple customer
+// visits in one day still count once).
+function getFieldVisitDaysCount(employeeId, from, to) {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT COUNT(DISTINCT date(COALESCE(completed_at, check_in_at, scheduled_for))) AS n
+     FROM employee_visits
+     WHERE employee_id = ? AND status = 'completed'
+       AND date(COALESCE(completed_at, check_in_at, scheduled_for)) BETWEEN ? AND ?`,
+  ).get(employeeId, from, to);
+  return Number(row?.n || 0);
 }
 
 // ─── Adjustments (bonus / reimbursement / loan EMI / other) ───────────────────
@@ -58,48 +95,113 @@ function deleteAdjustment(id) {
 // writing anything — previewPayrollForMonth calls this directly (repeatable,
 // safe to call many times while HR reviews); createPayrollRun calls it once
 // per employee then persists the result, same as it always has.
-function computeEmployeePayroll(employee, monthKey, earningsConfig, deductionsConfig) {
+function computeEmployeePayroll(employee, monthKey) {
   const { daysInMonth, from, to } = monthDateRange(monthKey);
   const db = getDb();
-  const whRow = db.prepare('SELECT hours_per_day, overtime_rate_multiplier FROM working_hours WHERE id = 1').get();
+  const whRow = db.prepare('SELECT hours_per_day FROM working_hours WHERE id = 1').get();
   const hoursPerDay = Number(whRow?.hours_per_day || 8);
-  const overtimeMultiplier = Number(whRow?.overtime_rate_multiplier ?? 1.5);
+  const perDayRate = () => basic / daysInMonth;
+
+  // Which salary policy version applies to THIS employee for THIS month —
+  // resolved by employee override > designation > department > default
+  // group, then by the version of that group whose effective range covers
+  // monthKey. A policy edited later never changes a month already run
+  // under the version that was in effect at the time.
+  const policy = resolveSalaryPolicyForEmployee(employee, monthKey);
+
+  // Same resolution/versioning shape for the salary STRUCTURE — which
+  // components (DA, HRA, PF, ESI, ...) make up this employee's pay, and at
+  // what %/₹ each. See models/salaryStructure.js.
+  const structure = resolveSalaryStructureForEmployee(employee, monthKey);
+  const components = structure ? getStructureComponents(structure.id) : [];
 
   const basic = Number(employee.salary || 0);
 
-  // Build earnings: basic + configured allowances
-  const earnings = { basic };
-  for (const ec of earningsConfig) {
-    earnings[ec.name] = Number((basic * ec.percentage / 100).toFixed(2));
-  }
+  // Earnings/deductions from the resolved structure's components — same
+  // pure calculation the "Calculated Full Salary" HR preview uses.
+  const { earnings, deductions } = computeStructureAmounts(basic, components);
 
-  // Build deductions from the deductions table
-  const deductions = {};
-  for (const dc of deductionsConfig) {
-    const key = dc.name;
-    const isESI = dc.name.toUpperCase().includes('ESI');
-    if (isESI && basic > 21000) {
-      deductions[key] = 0;
-    } else {
-      deductions[key] = Number((basic * dc.percentage / 100).toFixed(2));
-    }
-  }
-
-  // Loss of Pay — see getLopDaysCount's own comment for exactly what counts.
+  // Loss of Pay — always-on baseline, not policy-gated. Every company
+  // docks genuine absence; see getLopDaysCount's own comment for exactly
+  // what counts.
   const lopDays = getLopDaysCount(employee.id, from, to);
   if (lopDays > 0) {
-    const perDayRate = basic / daysInMonth;
-    deductions[`Loss of Pay (${lopDays}d)`] = Number((perDayRate * lopDays).toFixed(2));
+    deductions[`Loss of Pay (${lopDays}d)`] = Number((perDayRate() * lopDays).toFixed(2));
   }
 
-  // Overtime — hours beyond hours_per_day on days actually worked, at
-  // (hourly rate × multiplier). Hourly rate derived from the same per-day
-  // rate LOP uses, divided by hours_per_day, so the two stay consistent
-  // with each other.
-  const overtimeHours = Number(getOvertimeHours(employee.id, from, to).toFixed(2));
-  if (overtimeHours > 0) {
-    const hourlyRate = (basic / daysInMonth) / hoursPerDay;
-    earnings[`Overtime (${overtimeHours}h)`] = Number((overtimeHours * hourlyRate * overtimeMultiplier).toFixed(2));
+  let overtimeHours = 0;
+
+  if (policy) {
+    // Overtime — hours beyond hours_per_day on days actually worked, at
+    // either (hourly rate × multiplier) or a flat rate per hour, per the
+    // policy's own choice. Off entirely for companies that don't pay it.
+    if (policy.overtime_enabled) {
+      overtimeHours = Number(getOvertimeHours(employee.id, from, to).toFixed(2));
+      if (overtimeHours > 0) {
+        const rate = policy.overtime_rate_type === 'fixed_per_hour'
+          ? Number(policy.overtime_fixed_rate || 0)
+          : (perDayRate() / hoursPerDay) * Number(policy.overtime_multiplier || 1.5);
+        earnings[`Overtime (${overtimeHours}h)`] = Number((overtimeHours * rate).toFixed(2));
+      }
+    }
+
+    // Late coming / early leaving / early arrival — all read off one
+    // attendance pass so the grace windows stay consistent with each other.
+    if (policy.late_penalty_enabled || policy.early_leave_penalty_enabled || policy.early_arrival_bonus_enabled) {
+      const { lateDays, earlyLeaveDays, earlyArrivalDays } = getLateEarlyStats(
+        employee.id, from, to,
+        policy.late_grace_minutes, policy.early_leave_grace_minutes,
+      );
+
+      if (policy.late_penalty_enabled && lateDays > 0) {
+        const amount = policy.late_penalty_type === 'every_n_days_equals_1_day'
+          ? (Math.floor(lateDays / Math.max(1, policy.late_penalty_value)) * perDayRate())
+          : (lateDays * Number(policy.late_penalty_value || 0));
+        if (amount > 0) deductions[`Late Coming (${lateDays}d)`] = Number(amount.toFixed(2));
+      }
+
+      if (policy.early_leave_penalty_enabled && earlyLeaveDays > 0) {
+        const amount = policy.early_leave_penalty_type === 'every_n_days_equals_1_day'
+          ? (Math.floor(earlyLeaveDays / Math.max(1, policy.early_leave_penalty_value)) * perDayRate())
+          : (earlyLeaveDays * Number(policy.early_leave_penalty_value || 0));
+        if (amount > 0) deductions[`Early Leaving (${earlyLeaveDays}d)`] = Number(amount.toFixed(2));
+      }
+
+      if (policy.early_arrival_bonus_enabled && earlyArrivalDays > 0) {
+        const amount = earlyArrivalDays * Number(policy.early_arrival_bonus_per_instance || 0);
+        if (amount > 0) earnings[`Early Arrival Bonus (${earlyArrivalDays}d)`] = Number(amount.toFixed(2));
+      }
+    }
+
+    // Holiday / weekly-off worked bonus — extra pay at a configured
+    // multiplier of the per-day rate for days actually present on what
+    // would otherwise have been a day off.
+    if (policy.holiday_work_bonus_enabled) {
+      const days = getHolidayWorkedDays(employee.id, from, to);
+      if (days > 0) {
+        earnings[`Holiday Worked (${days}d)`] = Number((days * perDayRate() * Number(policy.holiday_work_rate_multiplier || 2)).toFixed(2));
+      }
+    }
+    if (policy.weekly_off_work_bonus_enabled) {
+      const days = getWeeklyOffWorkedDays(employee.id, from, to);
+      if (days > 0) {
+        earnings[`Weekly-Off Worked (${days}d)`] = Number((days * perDayRate() * Number(policy.weekly_off_work_rate_multiplier || 2)).toFixed(2));
+      }
+    }
+
+    // Tour / field allowance — flat per-day amount, independent of basic.
+    if (policy.tour_allowance_enabled) {
+      const days = getTourDaysCount(employee.id, from, to);
+      if (days > 0) {
+        earnings[`Tour Allowance (${days}d)`] = Number((days * Number(policy.tour_allowance_per_day || 0)).toFixed(2));
+      }
+    }
+    if (policy.field_allowance_enabled) {
+      const days = getFieldVisitDaysCount(employee.id, from, to);
+      if (days > 0) {
+        earnings[`Field Allowance (${days}d)`] = Number((days * Number(policy.field_allowance_per_day || 0)).toFixed(2));
+      }
+    }
   }
 
   // Bonus / reimbursement / other adjustments HR added for this employee
@@ -132,16 +234,12 @@ function computeEmployeePayroll(employee, monthKey, earningsConfig, deductionsCo
 // bonus/reimbursement adjustments before finalizing.
 function previewPayrollForMonth(monthKey) {
   const db = getDb();
-  const earningsConfig = db.prepare(
-    "SELECT * FROM earnings_config WHERE is_active=1 ORDER BY created_at ASC",
-  ).all();
-  const deductionsConfig = db.prepare('SELECT * FROM deductions ORDER BY created_at ASC').all();
   const employees = db.prepare(
-    'SELECT id, emp_code, name, email, phone, salary, department FROM employees ORDER BY name',
+    'SELECT id, emp_code, name, email, phone, salary, department, designation, salary_policy_group_id, salary_structure_group_id FROM employees ORDER BY name',
   ).all();
 
   const rows = employees.map((employee) => {
-    const computed = computeEmployeePayroll(employee, monthKey, earningsConfig, deductionsConfig);
+    const computed = computeEmployeePayroll(employee, monthKey);
     return {
       employeeId: employee.id,
       empCode: employee.emp_code || null,
@@ -260,16 +358,8 @@ function createPayrollRun(monthKey, processedBy = 'admin@edgefolio.com') {
     employeeRows.total || 0, toISODate(), processedBy,
   );
 
-  // Load configurable earnings (DA, HRA, etc.) — percentages of basic
-  const earningsConfig = db.prepare(
-    "SELECT * FROM earnings_config WHERE is_active=1 ORDER BY created_at ASC"
-  ).all();
-
-  // Load configurable deductions from the deductions table
-  const deductionsConfig = db.prepare('SELECT * FROM deductions ORDER BY created_at ASC').all();
-
   const employees = db.prepare(
-    'SELECT id, emp_code, name, email, phone, salary FROM employees ORDER BY id'
+    'SELECT id, emp_code, name, email, phone, salary, department, designation, salary_policy_group_id, salary_structure_group_id FROM employees ORDER BY id'
   ).all();
 
   const insertPayslip = db.prepare(`
@@ -286,7 +376,7 @@ function createPayrollRun(monthKey, processedBy = 'admin@edgefolio.com') {
 
   employees.forEach((employee) => {
     const { basic, earnings, deductions, gross, netSalary } =
-      computeEmployeePayroll(employee, monthKey, earningsConfig, deductionsConfig);
+      computeEmployeePayroll(employee, monthKey);
 
     insertPayslip.run({
       payslip_id:     `SLIP-${monthKey}-${randomUUID().slice(0, 8).toUpperCase()}`,
