@@ -36,6 +36,13 @@ Planned public API:
 
 Current implementation is Android-only. The web shim returns unsupported errors.
 
+Standalone demo:
+
+- Minimal demo UI lives under `demo/`.
+- It is intentionally outside any existing Jenix application.
+- The page talks directly to `window.Capacitor.Plugins.JenixThermalPrinter`.
+- Use it inside a throwaway Android Capacitor shell to test BLE scan, USB listing, connect, print, and disconnect flows.
+
 Raw write example:
 
 ```ts

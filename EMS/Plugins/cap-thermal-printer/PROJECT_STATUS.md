@@ -13,6 +13,7 @@ Completed phase:
 - Phase 6: Android USB connect, bulk OUT endpoint discovery, and raw writes
 - Phase 7: TypeScript ESC/POS QR and CODE128 barcode helpers
 - Phase 8: printer profile helpers, bounded BLE reconnect handling, and status refinements
+- Phase 9: standalone demo UI for scan, connect, print, and disconnect testing
 
 Important architecture decisions:
 
@@ -41,11 +42,11 @@ Important architecture decisions:
 - Limit the initial barcode helper to CODE128 with automatic Code Set B selection and brace escaping, and keep QR/barcode payloads ASCII-only to avoid silent machine-readable data corruption.
 - Normalize stored BLE and USB printer profiles in TypeScript before connecting so apps can persist safe defaults without duplicating validation rules.
 - Surface reconnect progress through `connectionState`, reconnect counters, and `lastError`, while keeping BLE retries bounded and opt-in.
+- Keep the demo isolated under the plugin folder and talk to `window.Capacitor.Plugins.JenixThermalPrinter` directly so no existing app routes or build pipelines need to be modified.
 
 Implementation plan:
 
-1. Phase 9: add demo usage following the repository's existing application convention.
-2. Phase 10: finish installation, usage, and limitation documentation after the demo is wired.
+1. Phase 10: finish installation, usage, Android requirements, and limitation documentation around the completed demo flow.
 
 Files added or changed:
 
@@ -55,6 +56,11 @@ Files added or changed:
 - `cap-thermal-printer/README.md`
 - `cap-thermal-printer/PROJECT_STATUS.md`
 - `cap-thermal-printer/HARDWARE_TEST_CHECKLIST.md`
+- `cap-thermal-printer/demo/index.html`
+- `cap-thermal-printer/demo/demo.css`
+- `cap-thermal-printer/demo/demo.js`
+- `cap-thermal-printer/demo/receipt.js`
+- `cap-thermal-printer/demo/README.md`
 - `cap-thermal-printer/src/definitions.ts`
 - `cap-thermal-printer/src/bytes.ts`
 - `cap-thermal-printer/src/errors.ts`
@@ -98,9 +104,11 @@ Current build status:
 
 - `npm run build --workspace @jenix/cap-thermal-printer` passed on 2026-09-03.
 - `npm run test --workspace @jenix/cap-thermal-printer` passed on 2026-09-03.
-- Native Android compile remains pending because the current mobile app does not yet declare `@jenix/cap-thermal-printer`, so there is no clean Gradle target wired to this plugin in this phase.
+- `node --check demo/demo.js` passed on 2026-09-03.
+- `node --check demo/receipt.js` passed on 2026-09-03.
+- Standalone demo assets are ready, but no throwaway Android Capacitor shell has been run for end-to-end demo execution in this phase.
 - Hardware verification remains pending; use `HARDWARE_TEST_CHECKLIST.md`.
 
 Next phase:
 
-- Phase 9: demo and integration example.
+- Phase 10: documentation and final verification.
