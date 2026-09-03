@@ -1,7 +1,164 @@
 const { randomUUID } = require('crypto');
 const { getDb } = require('../config/database');
 const { monthLabel, toISODate } = require('../utils/dateUtils');
-const { getLopDaysCount } = require('./attendance');
+const { getLopDaysCount, getOvertimeHours } = require('./attendance');
+
+function monthDateRange(monthKey) {
+  const [year, month] = monthKey.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return {
+    daysInMonth,
+    from: `${monthKey}-01`,
+    to: `${monthKey}-${String(daysInMonth).padStart(2, '0')}`,
+  };
+}
+
+// ─── Adjustments (bonus / reimbursement / loan EMI / other) ───────────────────
+
+function listAdjustments(employeeId, monthKey) {
+  return getDb().prepare(
+    'SELECT * FROM payroll_adjustments WHERE employee_id = ? AND month_key = ? ORDER BY created_at ASC',
+  ).all(employeeId, monthKey);
+}
+
+function listAdjustmentsForMonth(monthKey) {
+  return getDb().prepare(
+    'SELECT * FROM payroll_adjustments WHERE month_key = ? ORDER BY employee_id, created_at ASC',
+  ).all(monthKey);
+}
+
+function createAdjustment({ employeeId, monthKey, kind, label, amount, notes, createdBy }) {
+  const validKinds = ['bonus', 'reimbursement', 'other_earning', 'loan_emi', 'other_deduction'];
+  if (!validKinds.includes(kind)) {
+    throw Object.assign(new Error(`kind must be one of: ${validKinds.join(', ')}`), { statusCode: 400 });
+  }
+  if (!employeeId || !monthKey || !label || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    throw Object.assign(new Error('employeeId, monthKey, label and a positive amount are required'), { statusCode: 400 });
+  }
+  const db = getDb();
+  const id = `ADJ-${randomUUID().slice(0, 8).toUpperCase()}`;
+  db.prepare(
+    `INSERT INTO payroll_adjustments (id, employee_id, month_key, kind, label, amount, notes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, employeeId, monthKey, kind, String(label).trim(), Number(amount), notes || null, createdBy || null);
+  return db.prepare('SELECT * FROM payroll_adjustments WHERE id = ?').get(id);
+}
+
+function deleteAdjustment(id) {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM payroll_adjustments WHERE id = ?').get(id);
+  if (!row) throw Object.assign(new Error('Adjustment not found'), { statusCode: 404 });
+  db.prepare('DELETE FROM payroll_adjustments WHERE id = ?').run(id);
+  return { id, deleted: true };
+}
+
+// ─── Core calculation, shared by preview (read-only) and finalize (persists) ──
+
+// Returns everything needed for one employee's payslip for one month, without
+// writing anything — previewPayrollForMonth calls this directly (repeatable,
+// safe to call many times while HR reviews); createPayrollRun calls it once
+// per employee then persists the result, same as it always has.
+function computeEmployeePayroll(employee, monthKey, earningsConfig, deductionsConfig) {
+  const { daysInMonth, from, to } = monthDateRange(monthKey);
+  const db = getDb();
+  const whRow = db.prepare('SELECT hours_per_day, overtime_rate_multiplier FROM working_hours WHERE id = 1').get();
+  const hoursPerDay = Number(whRow?.hours_per_day || 8);
+  const overtimeMultiplier = Number(whRow?.overtime_rate_multiplier ?? 1.5);
+
+  const basic = Number(employee.salary || 0);
+
+  // Build earnings: basic + configured allowances
+  const earnings = { basic };
+  for (const ec of earningsConfig) {
+    earnings[ec.name] = Number((basic * ec.percentage / 100).toFixed(2));
+  }
+
+  // Build deductions from the deductions table
+  const deductions = {};
+  for (const dc of deductionsConfig) {
+    const key = dc.name;
+    const isESI = dc.name.toUpperCase().includes('ESI');
+    if (isESI && basic > 21000) {
+      deductions[key] = 0;
+    } else {
+      deductions[key] = Number((basic * dc.percentage / 100).toFixed(2));
+    }
+  }
+
+  // Loss of Pay — see getLopDaysCount's own comment for exactly what counts.
+  const lopDays = getLopDaysCount(employee.id, from, to);
+  if (lopDays > 0) {
+    const perDayRate = basic / daysInMonth;
+    deductions[`Loss of Pay (${lopDays}d)`] = Number((perDayRate * lopDays).toFixed(2));
+  }
+
+  // Overtime — hours beyond hours_per_day on days actually worked, at
+  // (hourly rate × multiplier). Hourly rate derived from the same per-day
+  // rate LOP uses, divided by hours_per_day, so the two stay consistent
+  // with each other.
+  const overtimeHours = Number(getOvertimeHours(employee.id, from, to).toFixed(2));
+  if (overtimeHours > 0) {
+    const hourlyRate = (basic / daysInMonth) / hoursPerDay;
+    earnings[`Overtime (${overtimeHours}h)`] = Number((overtimeHours * hourlyRate * overtimeMultiplier).toFixed(2));
+  }
+
+  // Bonus / reimbursement / other adjustments HR added for this employee
+  // this month — each keeps its own label as the payslip line item, not
+  // lumped together, so "Diwali Bonus" and "Fuel Reimbursement" both show
+  // up distinctly.
+  const adjustments = listAdjustments(employee.id, monthKey);
+  const earningKinds = new Set(['bonus', 'reimbursement', 'other_earning']);
+  for (const adj of adjustments) {
+    const bucket = earningKinds.has(adj.kind) ? earnings : deductions;
+    bucket[adj.label] = Number(adj.amount);
+  }
+
+  const gross = Object.values(earnings).reduce((s, v) => s + Number(v || 0), 0);
+  const totalDeductions = Object.values(deductions).reduce((s, v) => s + Number(v || 0), 0);
+
+  return {
+    basic,
+    earnings,
+    deductions,
+    gross: Number(gross.toFixed(2)),
+    netSalary: Number((gross - totalDeductions).toFixed(2)),
+    lopDays,
+    overtimeHours,
+  };
+}
+
+// Read-only — computes every employee's payslip for a month without writing
+// payroll_runs/payslips. Safe to call repeatedly while HR reviews and adds
+// bonus/reimbursement adjustments before finalizing.
+function previewPayrollForMonth(monthKey) {
+  const db = getDb();
+  const earningsConfig = db.prepare(
+    "SELECT * FROM earnings_config WHERE is_active=1 ORDER BY created_at ASC",
+  ).all();
+  const deductionsConfig = db.prepare('SELECT * FROM deductions ORDER BY created_at ASC').all();
+  const employees = db.prepare(
+    'SELECT id, emp_code, name, email, phone, salary, department FROM employees ORDER BY name',
+  ).all();
+
+  const rows = employees.map((employee) => {
+    const computed = computeEmployeePayroll(employee, monthKey, earningsConfig, deductionsConfig);
+    return {
+      employeeId: employee.id,
+      empCode: employee.emp_code || null,
+      employeeName: employee.name,
+      department: employee.department || null,
+      ...computed,
+    };
+  });
+
+  return {
+    monthKey,
+    monthLabel: monthLabel(monthKey),
+    totalEmployees: rows.length,
+    totalNetPayable: Number(rows.reduce((s, r) => s + r.netSalary, 0).toFixed(2)),
+    employees: rows,
+  };
+}
 
 function listPayrollRuns() {
   const db = getDb();
@@ -126,44 +283,10 @@ function createPayrollRun(monthKey, processedBy = 'admin@edgefolio.com') {
   `);
 
   const monthText = monthLabel(monthKey);
-  const [runYear, runMonth] = monthKey.split('-').map(Number);
-  const daysInMonth = new Date(runYear, runMonth, 0).getDate();
-  const monthFrom = `${monthKey}-01`;
-  const monthTo = `${monthKey}-${String(daysInMonth).padStart(2, '0')}`;
 
   employees.forEach((employee) => {
-    const basic = Number(employee.salary || 0);
-
-    // Build earnings: basic + configured allowances
-    const earnings = { basic };
-    for (const ec of earningsConfig) {
-      earnings[ec.name] = Number((basic * ec.percentage / 100).toFixed(2));
-    }
-
-    // Build deductions from the deductions table
-    const deductions = {};
-    for (const dc of deductionsConfig) {
-      const key = dc.name;
-      const isESI = dc.name.toUpperCase().includes('ESI');
-      if (isESI && basic > 21000) {
-        deductions[key] = 0;
-      } else {
-        deductions[key] = Number((basic * dc.percentage / 100).toFixed(2));
-      }
-    }
-
-    // Loss of Pay — per-day rate on the actual days in this month, for days
-    // HR explicitly marked absent or unpaid leave (see getLopDaysCount's own
-    // comment for why "no punch" alone never counts). Only added when
-    // non-zero so payslips with no LOP look exactly as they did before this.
-    const lopDays = getLopDaysCount(employee.id, monthFrom, monthTo);
-    if (lopDays > 0) {
-      const perDayRate = basic / daysInMonth;
-      deductions[`Loss of Pay (${lopDays}d)`] = Number((perDayRate * lopDays).toFixed(2));
-    }
-
-    const gross = Object.values(earnings).reduce((s, v) => s + Number(v || 0), 0);
-    const totalDeductions = Object.values(deductions).reduce((s, v) => s + Number(v || 0), 0);
+    const { basic, earnings, deductions, gross, netSalary } =
+      computeEmployeePayroll(employee, monthKey, earningsConfig, deductionsConfig);
 
     insertPayslip.run({
       payslip_id:     `SLIP-${monthKey}-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -176,8 +299,8 @@ function createPayrollRun(monthKey, processedBy = 'admin@edgefolio.com') {
       basic_salary:    basic,
       earnings_json:   JSON.stringify(earnings),
       deductions_json: JSON.stringify(deductions),
-      gross:           Number(gross.toFixed(2)),
-      net_salary:      Number((gross - totalDeductions).toFixed(2)),
+      gross,
+      net_salary:      netSalary,
       bank_account:    'XXXX-XXXX-XXXX-0000',
       status:          'generated',
     });
@@ -266,4 +389,9 @@ module.exports = {
   raiseDispute,
   resolveDispute,
   getDisputeForPayslip,
+  previewPayrollForMonth,
+  listAdjustments,
+  listAdjustmentsForMonth,
+  createAdjustment,
+  deleteAdjustment,
 };

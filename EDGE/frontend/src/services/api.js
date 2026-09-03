@@ -94,6 +94,10 @@ export const runPayroll         = (monthKey) => http.post('/payroll/run', { mont
 export const approvePayrollRun  = (runId)   => http.post(`/payroll/approve/${runId}`)
 export const getPayslips        = (month)   => http.get('/payroll/payslips', { params: { month } })
 export const getPayslip         = (id)      => http.get(`/payroll/slip/${id}`)
+export const previewPayrollRun  = (monthKey) => http.get('/payroll/preview-run', { params: { month: monthKey } })
+export const getPayrollAdjustments = (monthKey) => http.get('/payroll/adjustments', { params: { month: monthKey } })
+export const createPayrollAdjustment = (data) => http.post('/payroll/adjustments', data)
+export const deletePayrollAdjustment = (id)   => http.delete(`/payroll/adjustments/${id}`)
 
 // ── Leaves ────────────────────────────────────────────────────────────────────
 export const getLeaves        = (params) => http.get('/leaves', { params })

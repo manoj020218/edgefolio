@@ -294,6 +294,23 @@ function getLopDaysCount(memberId, fromDate, toDate) {
   return lopDays;
 }
 
+// Overtime hours for payroll — sums hours worked beyond the standard
+// hours_per_day, only on days that actually have a punch ('present'). A
+// day with no record, or a leave/absent/holiday day, contributes nothing —
+// there's no "worked extra" to speak of on a day nobody worked at all.
+function getOvertimeHours(memberId, fromDate, toDate) {
+  const db = getDb();
+  const whRow = db.prepare('SELECT hours_per_day FROM working_hours WHERE id = 1').get();
+  const hoursPerDay = Number(whRow?.hours_per_day || 8);
+
+  const rows = db.prepare(
+    `SELECT hours_worked FROM attendance_records
+     WHERE member_id = ? AND date BETWEEN ? AND ? AND status = 'present'`,
+  ).all(memberId, fromDate, toDate);
+
+  return rows.reduce((sum, r) => sum + Math.max(0, Number(r.hours_worked || 0) - hoursPerDay), 0);
+}
+
 module.exports = {
   listAttendanceByDate,
   listAttendanceByMember,
@@ -304,4 +321,5 @@ module.exports = {
   upsertAttendanceEvent,
   insertAttendanceBatch,
   getLopDaysCount,
+  getOvertimeHours,
 };

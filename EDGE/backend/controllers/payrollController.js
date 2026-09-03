@@ -13,6 +13,10 @@ const {
   raiseDispute,
   resolveDispute,
   getDisputeForPayslip,
+  previewPayrollForMonth,
+  listAdjustmentsForMonth,
+  createAdjustment,
+  deleteAdjustment,
 } = require('../models/payroll');
 const { sendOk, createHttpError } = require('../utils/http');
 const { serializePayrollRun, serializePayslip } = require('../utils/serializers');
@@ -70,6 +74,51 @@ function previewPayrollHandler(req, res) {
   sendOk(res, previewPayrollFromSalary(req.body || {}));
 }
 
+// Real, attendance-aware, per-employee preview for an actual payroll month —
+// distinct from previewPayrollHandler above (POST /payroll/preview), which is
+// an unrelated generic single-number DA/HRA/PF/ESI calculator with no
+// employee or attendance awareness at all. Read-only, safe to call
+// repeatedly while HR reviews and adds adjustments before finalizing.
+function previewPayrollRunHandler(req, res, next) {
+  try {
+    const monthKey = req.query.month;
+    if (!/^\d{4}-\d{2}$/.test(String(monthKey || ''))) {
+      return next(createHttpError(400, 'month must be in YYYY-MM format'));
+    }
+    return sendOk(res, previewPayrollForMonth(monthKey));
+  } catch (e) { return next(e); }
+}
+
+// ─── Payroll adjustments (bonus / reimbursement / etc.) ───────────────────────
+
+function listAdjustmentsHandler(req, res, next) {
+  try {
+    const monthKey = req.query.month;
+    if (!/^\d{4}-\d{2}$/.test(String(monthKey || ''))) {
+      return next(createHttpError(400, 'month must be in YYYY-MM format'));
+    }
+    return sendOk(res, listAdjustmentsForMonth(monthKey));
+  } catch (e) { return next(e); }
+}
+
+function createAdjustmentHandler(req, res, next) {
+  try {
+    const { employeeId, monthKey, kind, label, amount, notes } = req.body || {};
+    const created = createAdjustment({
+      employeeId, monthKey, kind, label, amount, notes,
+      createdBy: req.user?.email,
+    });
+    res.status(201);
+    return sendOk(res, created);
+  } catch (e) { return next(e); }
+}
+
+function deleteAdjustmentHandler(req, res, next) {
+  try {
+    return sendOk(res, deleteAdjustment(req.params.id));
+  } catch (e) { return next(e); }
+}
+
 // ─── Dispute handlers ─────────────────────────────────────────────────────────
 
 function listDisputesHandler(req, res, next) {
@@ -118,6 +167,10 @@ module.exports = {
   listPayslipsHandler,
   getPayslipHandler,
   previewPayrollHandler,
+  previewPayrollRunHandler,
+  listAdjustmentsHandler,
+  createAdjustmentHandler,
+  deleteAdjustmentHandler,
   listDisputesHandler,
   disputeCountHandler,
   raiseDisputeHandler,

@@ -10,6 +10,7 @@ import {
   getPayrollRuns, runPayroll, approvePayrollRun, getPayslips,
   getDisputes, resolveDispute,
   getBankTemplates, createPaymentBatch, getPaymentBatch, importBankResponse,
+  previewPayrollRun, getPayrollAdjustments, createPayrollAdjustment, deletePayrollAdjustment,
 } from '../services/api';
 
 function formatMonth(monthKey) {
@@ -204,7 +205,14 @@ export const PayrollPage = () => {
     return d.toISOString().slice(0, 7);
   })();
   const thisMonthKey = new Date().toISOString().slice(0, 7);
-  const [runModal, setRunModal] = useState({ open: false, monthKey: lastMonthKey });
+  // step: 'month' (pick which month) | 'preview' (review before finalizing)
+  const [runModal, setRunModal] = useState({ open: false, monthKey: lastMonthKey, step: 'month' });
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [adjustmentsList, setAdjustmentsList] = useState([]); // raw rows (with ids) for the current preview month, for delete buttons
+  const [adjustForEmp, setAdjustForEmp] = useState(null); // employeeId currently showing the add-adjustment form
+  const [adjustForm, setAdjustForm] = useState({ kind: 'bonus', label: '', amount: '' });
+  const [adjustSaving, setAdjustSaving] = useState(false);
 
   // Bank Payment modal state
   const [bankModal, setBankModal]     = useState({ open: false, step: 'setup', batch: null, records: [], loading: false, error: '' });
@@ -337,13 +345,57 @@ export const PayrollPage = () => {
     if (currentRun?.monthKey) fetchPayslips(currentRun.monthKey);
   }, [currentRun?.monthKey]);
 
+  const loadPreview = async (monthKey) => {
+    setPreviewLoading(true); setError('');
+    try {
+      const [previewRes, adjustRes] = await Promise.all([
+        previewPayrollRun(monthKey),
+        getPayrollAdjustments(monthKey),
+      ]);
+      setPreviewData(previewRes.data);
+      setAdjustmentsList(adjustRes.data || []);
+    } catch (err) { setError(err.message); }
+    finally { setPreviewLoading(false); }
+  };
+
+  const handleOpenPreview = () => {
+    setRunModal((p) => ({ ...p, step: 'preview' }));
+    loadPreview(runModal.monthKey);
+  };
+
+  const handleAddAdjustment = async (employeeId) => {
+    if (!adjustForm.label.trim() || !Number(adjustForm.amount) || Number(adjustForm.amount) <= 0) {
+      setError('Enter a label and a positive amount for the adjustment.');
+      return;
+    }
+    setAdjustSaving(true); setError('');
+    try {
+      await createPayrollAdjustment({
+        employeeId, monthKey: runModal.monthKey,
+        kind: adjustForm.kind, label: adjustForm.label.trim(), amount: Number(adjustForm.amount),
+      });
+      setAdjustForEmp(null);
+      setAdjustForm({ kind: 'bonus', label: '', amount: '' });
+      await loadPreview(runModal.monthKey);
+    } catch (err) { setError(err.message); }
+    finally { setAdjustSaving(false); }
+  };
+
+  const handleRemoveAdjustment = async (id) => {
+    try {
+      await deletePayrollAdjustment(id);
+      await loadPreview(runModal.monthKey);
+    } catch (err) { setError(err.message); }
+  };
+
   const handleRunPayroll = async () => {
     const monthKey = runModal.monthKey;
     setIsProcessing(true); setError('');
     try {
       const res = await runPayroll(monthKey);
       setSuccess(`Payroll processed for ${formatMonth(monthKey)}! ${res.data?.totalEmployees || 0} employees.`);
-      setRunModal({ open: false, monthKey: lastMonthKey });
+      setRunModal({ open: false, monthKey: lastMonthKey, step: 'month' });
+      setPreviewData(null);
       fetchRuns();
     } catch (err) { setError(err.message); }
     finally { setIsProcessing(false); }
@@ -394,7 +446,7 @@ export const PayrollPage = () => {
           )}
           <Button icon={RefreshCw} variant="secondary" onClick={() => { fetchRuns(); fetchDisputes(); }}>Refresh</Button>
           <Button icon={Landmark} variant="secondary" onClick={openBankModal}>Bank Payment</Button>
-          <Button icon={Play} variant="primary" onClick={() => setRunModal({ open: true, monthKey: lastMonthKey })}>
+          <Button icon={Play} variant="primary" onClick={() => { setRunModal({ open: true, monthKey: lastMonthKey, step: 'month' }); setPreviewData(null); }}>
             Run Payroll
           </Button>
         </div>
@@ -556,48 +608,177 @@ export const PayrollPage = () => {
       </Card>
 
       {/* ── Run Payroll Modal ── */}
-      <Modal isOpen={runModal.open} onClose={() => setRunModal((p) => ({ ...p, open: false }))} title="Run Payroll" size="md">
-        <div className="space-y-4">
-          <p className="text-slate-400 text-sm">
-            Choose the month to process. This should normally be the month that just
-            <strong className="text-slate-200"> ended</strong> — run it once attendance for that
-            month is fully entered/corrected, not while it's still in progress.
-          </p>
+      <Modal
+        isOpen={runModal.open}
+        onClose={() => { setRunModal({ open: false, monthKey: lastMonthKey, step: 'month' }); setPreviewData(null); }}
+        title={runModal.step === 'preview' ? `Preview — ${formatMonth(runModal.monthKey)}` : 'Run Payroll'}
+        size={runModal.step === 'preview' ? '2xl' : 'md'}
+      >
+        {runModal.step === 'month' && (
+          <div className="space-y-4">
+            <p className="text-slate-400 text-sm">
+              Choose the month to process. This should normally be the month that just
+              <strong className="text-slate-200"> ended</strong> — run it once attendance for that
+              month is fully entered/corrected, not while it's still in progress.
+            </p>
 
-          <div>
-            <label className="text-sm text-slate-400 mb-1 block">Month</label>
-            <input
-              type="month"
-              value={runModal.monthKey}
-              max={thisMonthKey}
-              onChange={(e) => setRunModal((p) => ({ ...p, monthKey: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"
-            />
-          </div>
-
-          {runModal.monthKey === thisMonthKey && (
-            <div className="p-3 bg-amber-900/20 border border-amber-700/40 rounded-lg text-amber-300 text-sm">
-              {formatMonth(thisMonthKey)} is still in progress — attendance for the rest of the
-              month isn't in yet, so Loss-of-Pay days will be wrong if you run it now. Usually
-              you want last month ({formatMonth(lastMonthKey)}) instead.
+            <div>
+              <label className="text-sm text-slate-400 mb-1 block">Month</label>
+              <input
+                type="month"
+                value={runModal.monthKey}
+                max={thisMonthKey}
+                onChange={(e) => setRunModal((p) => ({ ...p, monthKey: e.target.value }))}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"
+              />
             </div>
-          )}
 
-          {runs.some((r) => r.monthKey === runModal.monthKey) && (
-            <div className="p-3 bg-sky-900/20 border border-sky-700/40 rounded-lg text-sky-300 text-sm">
-              Payroll for {formatMonth(runModal.monthKey)} was already run. Running it again
-              won't reprocess or pick up any attendance corrections made since — it returns the
-              existing run as-is.
+            {runModal.monthKey === thisMonthKey && (
+              <div className="p-3 bg-amber-900/20 border border-amber-700/40 rounded-lg text-amber-300 text-sm">
+                {formatMonth(thisMonthKey)} is still in progress — attendance for the rest of the
+                month isn't in yet, so Loss-of-Pay days will be wrong if you run it now. Usually
+                you want last month ({formatMonth(lastMonthKey)}) instead.
+              </div>
+            )}
+
+            {runs.some((r) => r.monthKey === runModal.monthKey) && (
+              <div className="p-3 bg-sky-900/20 border border-sky-700/40 rounded-lg text-sky-300 text-sm">
+                Payroll for {formatMonth(runModal.monthKey)} was already run. Finalizing again
+                won't reprocess or pick up any attendance corrections made since — it returns the
+                existing run as-is.
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setRunModal((p) => ({ ...p, open: false }))} isFullWidth>Cancel</Button>
+              <Button variant="primary" icon={Eye} onClick={handleOpenPreview} isFullWidth>
+                Preview {formatMonth(runModal.monthKey)}
+              </Button>
             </div>
-          )}
-
-          <div className="flex gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setRunModal((p) => ({ ...p, open: false }))} isFullWidth>Cancel</Button>
-            <Button variant="primary" icon={Play} isLoading={isProcessing} onClick={handleRunPayroll} isFullWidth>
-              Run for {formatMonth(runModal.monthKey)}
-            </Button>
           </div>
-        </div>
+        )}
+
+        {runModal.step === 'preview' && (
+          <div className="space-y-4">
+            {previewLoading ? (
+              <div className="py-10 text-center text-slate-400">Calculating...</div>
+            ) : previewData ? (
+              <>
+                <div className="flex items-center justify-between text-sm bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3">
+                  <span className="text-slate-400">{previewData.totalEmployees} employees</span>
+                  <span className="text-slate-100 font-semibold">
+                    Total Net Payable: ₹{previewData.totalNetPayable.toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-slate-800">
+                      <tr className="border-b border-slate-700">
+                        <th className="text-left py-2 px-2 text-slate-400 font-semibold">Employee</th>
+                        <th className="text-right py-2 px-2 text-slate-400 font-semibold">Basic</th>
+                        <th className="text-right py-2 px-2 text-slate-400 font-semibold">LOP</th>
+                        <th className="text-right py-2 px-2 text-slate-400 font-semibold">Overtime</th>
+                        <th className="text-right py-2 px-2 text-slate-400 font-semibold">Gross</th>
+                        <th className="text-right py-2 px-2 text-slate-400 font-semibold">Deductions</th>
+                        <th className="text-right py-2 px-2 text-slate-400 font-semibold">Net Pay</th>
+                        <th className="text-center py-2 px-2 text-slate-400 font-semibold">Adjustments</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.employees.map((emp) => {
+                        const empAdjustments = adjustmentsList.filter((a) => a.employee_id === emp.employeeId);
+                        const totalDeductions = Object.values(emp.deductions).reduce((s, v) => s + Number(v || 0), 0);
+                        return (
+                          <React.Fragment key={emp.employeeId}>
+                            <tr className="border-b border-slate-800">
+                              <td className="py-2 px-2 text-slate-100 font-medium">{emp.employeeName}</td>
+                              <td className="py-2 px-2 text-right text-slate-300">₹{emp.basic.toLocaleString('en-IN')}</td>
+                              <td className="py-2 px-2 text-right">
+                                {emp.lopDays > 0 ? <span className="text-red-400">{emp.lopDays}d</span> : <span className="text-slate-600">—</span>}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                {emp.overtimeHours > 0 ? <span className="text-green-400">{emp.overtimeHours}h</span> : <span className="text-slate-600">—</span>}
+                              </td>
+                              <td className="py-2 px-2 text-right text-slate-300">₹{emp.gross.toLocaleString('en-IN')}</td>
+                              <td className="py-2 px-2 text-right text-red-400">₹{totalDeductions.toLocaleString('en-IN')}</td>
+                              <td className="py-2 px-2 text-right text-slate-100 font-semibold">₹{emp.netSalary.toLocaleString('en-IN')}</td>
+                              <td className="py-2 px-2 text-center">
+                                <button
+                                  onClick={() => { setAdjustForEmp(adjustForEmp === emp.employeeId ? null : emp.employeeId); setAdjustForm({ kind: 'bonus', label: '', amount: '' }); }}
+                                  className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-700"
+                                >
+                                  + Add
+                                </button>
+                              </td>
+                            </tr>
+                            {empAdjustments.length > 0 && (
+                              <tr className="border-b border-slate-800 bg-slate-900/30">
+                                <td colSpan="8" className="py-1.5 px-2">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {empAdjustments.map((adj) => (
+                                      <span key={adj.id} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-300">
+                                        {adj.label}: ₹{Number(adj.amount).toLocaleString('en-IN')}
+                                        <button onClick={() => handleRemoveAdjustment(adj.id)} className="text-slate-500 hover:text-red-400">
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            {adjustForEmp === emp.employeeId && (
+                              <tr className="border-b border-slate-800 bg-slate-900/50">
+                                <td colSpan="8" className="py-2 px-2">
+                                  <div className="flex gap-2 items-center flex-wrap">
+                                    <select
+                                      value={adjustForm.kind}
+                                      onChange={(e) => setAdjustForm((f) => ({ ...f, kind: e.target.value }))}
+                                      className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-xs"
+                                    >
+                                      <option value="bonus">Bonus</option>
+                                      <option value="reimbursement">Reimbursement</option>
+                                      <option value="other_earning">Other Earning</option>
+                                      <option value="other_deduction">Other Deduction</option>
+                                    </select>
+                                    <input
+                                      placeholder="Label (e.g. Diwali Bonus)"
+                                      value={adjustForm.label}
+                                      onChange={(e) => setAdjustForm((f) => ({ ...f, label: e.target.value }))}
+                                      className="flex-1 min-w-[140px] bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-xs"
+                                    />
+                                    <input
+                                      type="number" min="0" placeholder="Amount"
+                                      value={adjustForm.amount}
+                                      onChange={(e) => setAdjustForm((f) => ({ ...f, amount: e.target.value }))}
+                                      className="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-xs"
+                                    />
+                                    <Button size="sm" variant="primary" isLoading={adjustSaving} onClick={() => handleAddAdjustment(emp.employeeId)}>
+                                      Save
+                                    </Button>
+                                    <button onClick={() => setAdjustForEmp(null)} className="text-xs text-slate-400 hover:text-slate-200">Cancel</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button variant="secondary" onClick={() => setRunModal((p) => ({ ...p, step: 'month' }))} isFullWidth>← Back</Button>
+                  <Button variant="primary" icon={Play} isLoading={isProcessing} onClick={handleRunPayroll} isFullWidth>
+                    Finalize Payroll
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        )}
       </Modal>
 
       {/* ── Bank Payment Modal ── */}

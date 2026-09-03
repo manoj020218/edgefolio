@@ -1035,3 +1035,82 @@ or explicit "reprocess" action, since the current one-shot design doesn't
 support it.
 
 **Deployed:** rebuilt, reinstalled, confirmed clean restart via `/health`.
+
+### 2026-09-03, later — payroll: bonus/reimbursement/overtime + real preview-before-finalize
+
+Client asked for a "professional" payroll experience — preview before
+anything is committed, plus the adjustments every company needs monthly
+(bonus, reimbursement, overtime), with employee loans and late/early rules
+planned as a deliberately separate next phase (both touch either real
+money owed back to the company or labor-law-sensitive pay docking — used
+`/plan` for this one given the scope, approved plan at
+`C:\Users\User\.claude\plans\optimized-floating-gizmo.md`).
+
+Two scoping findings from investigating before planning, both still true
+and worth remembering:
+- **No HR-side approval UI exists** for the APK's unified
+  `employee_requests` (which already has `expense`/`advance_salary`
+  types) — no desktop screen, no approve endpoint. So reimbursements/loans
+  can't be sourced from approved APK requests yet, only entered directly
+  by HR. Real, valuable follow-up once that approval UI gets built.
+- **No employee-to-shift assignment exists** — `shifts` is pure CRUD,
+  never linked to `employees`. Overtime (built this entry) uses the
+  single global `working_hours.hours_per_day`, not a per-shift threshold.
+
+**What shipped:**
+- New `payroll_adjustments` table (`kind` ∈ bonus/reimbursement/
+  other_earning/loan_emi/other_deduction — the last two exist now for
+  Phase 3 later, unused so far). `working_hours` gets
+  `overtime_rate_multiplier` (default 1.5).
+- `models/payroll.js` refactored: the per-employee calculation that used
+  to live inline in `createPayrollRun`'s loop is now a standalone
+  `computeEmployeePayroll(employee, monthKey, earningsConfig,
+  deductionsConfig)` — folds in LOP (existing), a new **Overtime** earnings
+  line (`getOvertimeHours()` in `models/attendance.js`, mirrors
+  `getLopDaysCount`'s exact pattern — sums hours beyond `hours_per_day` on
+  `status='present'` days only), and any `payroll_adjustments` for that
+  employee+month, each keeping its own label as a distinct payslip line
+  (never lumped together). `createPayrollRun` is now a thin
+  compute-then-persist wrapper around the same function.
+- New **real** preview: `GET /payroll/preview-run?month=YYYY-MM` — pure
+  read/compute, safe to call repeatedly, no `payroll_runs`/`payslips`
+  write. Deliberately a different path from the pre-existing
+  `POST /payroll/preview`, which turned out to be something unrelated (a
+  generic single-number DA/HRA/PF/ESI calculator with zero employee or
+  attendance awareness) — found this by actually reading
+  `payrollController.js` before assuming a name was free.
+  `POST/GET /payroll/adjustments`, `DELETE /payroll/adjustments/:id` for
+  bonus/reimbursement entry.
+- `PayrollPage.jsx`'s Run Payroll modal (month picker, added earlier
+  today) now has a real second step: Preview — a table, one row per
+  employee (Basic/LOP/Overtime/Gross/Deductions/Net), a "+ Add" per row
+  for bonus/reimbursement/other with an inline label+amount form,
+  removable adjustment chips, a running total, "← Back" or "Finalize
+  Payroll". The existing payslip view/print/email templates needed **zero
+  changes** — they already render `earnings`/`deductions` generically via
+  `Object.entries()`, confirmed before building any of this so the new
+  line items would "just work."
+
+**Verified for real, not just "should work":** hit `GET /payroll/preview-run
+?month=2026-08` against the real, live company data (21 employees) via a
+real JWT — hand-verified the numbers for one employee against the actual
+formulas: LOP `(10000/31)×14 = 4516.13` ✓ exact match; overtime
+`((10000/31)/8)×5.28×1.5 = 319.35` ✓ exact match. Created a real test
+bonus via `POST /payroll/adjustments`, confirmed it appeared as its own
+payslip line in the next preview call, deleted it via `DELETE
+/payroll/adjustments/:id`, confirmed a follow-up preview call shows it
+gone — no leftover test data in the client's real system. Schema verified
+against a scratch copy of the real DB before deploying, same as every
+other migration this session.
+
+**Deliberately not run for real:** did not click Finalize on the client's
+actual August payroll during this verification — that writes a permanent
+`payroll_runs`/`payslips` record for their real company, which is the
+client's call to make, not something to trigger while testing.
+
+**Not started (Phase 3/4 from the plan, paused for a check-in as
+planned):** Employee Loans/Advances (EMI auto-deduction against a loan
+balance) and Late Coming/Early Leaving rules (report-only by default —
+flagged in the plan as having real Payment-of-Wages-Act implications in
+India if auto-deducted without an explicit HR-confirmed rule). Full design
+for both already exists in the approved plan file; not implemented yet.

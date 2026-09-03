@@ -281,6 +281,10 @@ function runMigrations(db) {
   if (!columnExists(db, 'users', 'recovery_code_hash')) {
     db.exec('ALTER TABLE users ADD COLUMN recovery_code_hash TEXT');
   }
+  // Overtime rate — hourlyRate * multiplier for hours worked beyond hours_per_day.
+  if (!columnExists(db, 'working_hours', 'overtime_rate_multiplier')) {
+    db.exec("ALTER TABLE working_hours ADD COLUMN overtime_rate_multiplier REAL NOT NULL DEFAULT 1.5");
+  }
   // face_enrollments: store computed 192-dim embedding (uploaded by Admin APK after TFLite inference)
   if (!columnExists(db, 'face_enrollments', 'embedding_json')) {
     db.exec('ALTER TABLE face_enrollments ADD COLUMN embedding_json TEXT');
@@ -500,6 +504,24 @@ function runMigrations(db) {
     title TEXT NOT NULL,
     file_path TEXT NOT NULL,
     uploaded_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )`);
+
+  // One-off earnings/deductions for a specific employee in a specific payroll
+  // month — bonus, reimbursement, or (later) an auto-generated loan EMI line.
+  // `kind` decides which payslip bucket it lands in when computeEmployeePayroll
+  // folds these into earnings/deductions (see models/payroll.js).
+  db.exec(`CREATE TABLE IF NOT EXISTS payroll_adjustments (
+    id TEXT PRIMARY KEY,
+    employee_id TEXT NOT NULL,
+    month_key TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('bonus','reimbursement','other_earning','loan_emi','other_deduction')),
+    label TEXT NOT NULL,
+    amount REAL NOT NULL,
+    notes TEXT,
+    loan_id TEXT,
+    created_by TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
   )`);
