@@ -245,14 +245,13 @@ trusting a deploy — this caught a real upload-in-progress race once this sessi
 **Current live installer**: EdgeFolio v1.0.2, deployed 2026-09-03. `EdgeFolio-Setup.exe`
 SHA256 `3226caa7de075a61672d64f479b8cabad944a07956dc38d38eaa3a0885ebd630`;
 `EdgeFolio-Portable.exe` SHA256 `ba82693492fb955b80e8710a799ce6c09c4e6645f3bc689bc3b529e9529710d1`.
-Built from **uncommitted** working-tree changes on top of commit `06fd67a` — this deploy
+Built from commit `b57a91f` — this deploy
 shipped the Salary Policy engine, Salary Structure engine, Designations management, and a
 long-standing bug fix (`EDGE/backend/services/backupService.js`: `getDataInfo()`/
 `buildPayload()` read `require('../../../package.json')`, one directory too high — it
 silently threw and fell back to the hardcoded `'1.0.0'` default, so Settings → Data &
 Backup always showed v1.0.0 regardless of the real installed version; fixed to
-`../../package.json`). **Commit this working tree before the next deploy** so this note
-can reference a real commit hash again.
+`../../package.json`).
 
 ---
 
