@@ -25,3 +25,6 @@ project(':jenix-cap-location').projectDir = new File('../../../EMS/Plugins/cap-l
 
 include ':jenix-cap-push'
 project(':jenix-cap-push').projectDir = new File('../../../EMS/Plugins/cap-push/android')
+
+include ':jenix-cap-thermal-printer'
+project(':jenix-cap-thermal-printer').projectDir = new File('../../../EMS/Plugins/cap-thermal-printer/android')

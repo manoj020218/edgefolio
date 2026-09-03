@@ -17,6 +17,7 @@ dependencies {
     implementation project(':jenix-cap-lifecycle')
     implementation project(':jenix-cap-location')
     implementation project(':jenix-cap-push')
+    implementation project(':jenix-cap-thermal-printer')
 
 }
 

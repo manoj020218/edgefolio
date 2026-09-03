@@ -23,6 +23,7 @@
     "@jenix/cap-lifecycle": "file:../../EMS/Plugins/cap-lifecycle",
     "@jenix/cap-location": "file:../../EMS/Plugins/cap-location",
     "@jenix/cap-push": "file:../../EMS/Plugins/cap-push",
+    "@jenix/cap-thermal-printer": "file:../../EMS/Plugins/cap-thermal-printer",
     "axios": "^1.15.2",
     "lucide-react": "^0.383.0",
     "react": "^18.3.1",
