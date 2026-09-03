@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit2, Save, User, Settings, Landmark } from 'lucide-react';
+import { X, Edit2, Save, User, Settings, Landmark, Fingerprint, CheckCircle2, Circle, RefreshCw } from 'lucide-react';
 import { Button, Badge, Input, Select } from '../atomic';
-import { updateEmployee, getCustomFields, getEmployeeCustomValues, setEmployeeCustomValues } from '../../services/api';
+import { updateEmployee, getCustomFields, getEmployeeCustomValues, setEmployeeCustomValues, getFaceStatus } from '../../services/api';
 
 const DEPARTMENTS = ['HR', 'Production', 'Finance', 'Admin', 'Maintenance', 'Sales'];
 const WORK_TYPE_OPTS = [
@@ -30,6 +30,9 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
   const [fields, setFields] = useState([]);
   const [customValues, setCustomValues] = useState({});
   const [savingCustom, setSavingCustom] = useState(false);
+  const [faceStatus, setFaceStatus] = useState(null);
+  const [faceLoading, setFaceLoading] = useState(false);
+  const [faceErr, setFaceErr] = useState('');
 
   useEffect(() => {
     if (!employee) return;
@@ -62,6 +65,22 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
       setCustomValues(map);
     }).catch(() => {});
   }, [employee]);
+
+  const loadFaceStatus = () => {
+    if (!employee) return;
+    setFaceLoading(true); setFaceErr('');
+    getFaceStatus(employee.id)
+      .then((res) => setFaceStatus(res.data))
+      .catch((e) => setFaceErr(e.message))
+      .finally(() => setFaceLoading(false));
+  };
+
+  // Lazy — only fetched once the Face ID tab is actually opened, not on every
+  // row click in the employee list.
+  useEffect(() => {
+    if (tab === 'faceid' && employee) loadFaceStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, employee]);
 
   if (!employee) return null;
 
@@ -116,6 +135,7 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
           {[
             { id: 'basic', label: 'Basic Info', icon: User },
             { id: 'bank', label: 'Bank Details', icon: Landmark },
+            { id: 'faceid', label: 'Face ID', icon: Fingerprint },
             { id: 'custom', label: 'Custom Fields', icon: Settings },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
@@ -165,7 +185,7 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Input label="Phone" value={form.phone} onChange={f('phone')} />
-                    <Input label="Salary (₹)" type="number" value={form.salary} onChange={f('salary')} />
+                    <Input label="Salary (₹)" type="number" min="0" value={form.salary} onChange={f('salary')} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Select label="Department" value={form.department} onChange={f('department')}
@@ -204,6 +224,68 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
                     <Select label="Payment Mode" value={form.paymentMode} onChange={f('paymentMode')} options={PAYMENT_MODE_OPTS} />
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'faceid' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500 bg-slate-900/60 rounded px-3 py-2 flex-1 mr-2">
+                  Read-only — Face ID for app attendance is set up by the employee on their own phone
+                  (Profile → Face ID), not from here. Office-machine photo enrollment below is separate,
+                  set up at the biometric machine.
+                </p>
+                <Button size="sm" variant="secondary" icon={RefreshCw} isLoading={faceLoading} onClick={loadFaceStatus}>
+                  Refresh
+                </Button>
+              </div>
+
+              {faceErr && (
+                <div className="p-3 bg-red-900/30 border border-red-700 rounded text-red-300 text-sm">{faceErr}</div>
+              )}
+
+              {faceStatus && (
+                <>
+                  <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      {faceStatus.embeddingEnrolled
+                        ? <CheckCircle2 className="w-4 h-4 text-green-400" />
+                        : <Circle className="w-4 h-4 text-slate-600" />}
+                      <p className="text-sm font-semibold text-slate-100">
+                        App Face ID (phone) — {faceStatus.embeddingEnrolled ? 'Set up' : 'Not set up'}
+                      </p>
+                    </div>
+                    {faceStatus.embeddingEnrolled && faceStatus.embeddingEnrolledAt && (
+                      <p className="text-xs text-slate-500 pl-6">
+                        Since {new Date(faceStatus.embeddingEnrolledAt).toLocaleString()}
+                      </p>
+                    )}
+                    {!faceStatus.embeddingEnrolled && (
+                      <p className="text-xs text-slate-500 pl-6">
+                        Employee hasn&rsquo;t set up Face ID on their phone yet — they can&rsquo;t mark
+                        attendance from the app until they do (Profile → Face ID).
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 space-y-2">
+                    <p className="text-sm font-semibold text-slate-100">
+                      Office Machine Photos — <span className="capitalize">{faceStatus.status}</span>
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 pl-1">
+                      {[['Front', faceStatus.angleFront], ['Right', faceStatus.angleRight], ['Left', faceStatus.angleLeft]].map(([label, done]) => (
+                        <div key={label} className="flex items-center gap-1.5">
+                          {done ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" /> : <Circle className="w-3.5 h-3.5 text-slate-600" />}
+                          <span className="text-xs text-slate-400">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {faceStatus.enrolledBy && (
+                      <p className="text-xs text-slate-500">Last enrolled by {faceStatus.enrolledBy}</p>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}

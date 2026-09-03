@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { getDb } = require('../config/database');
 const { monthLabel, toISODate } = require('../utils/dateUtils');
+const { getLopDaysCount } = require('./attendance');
 
 function listPayrollRuns() {
   const db = getDb();
@@ -125,6 +126,11 @@ function createPayrollRun(monthKey, processedBy = 'admin@edgefolio.com') {
   `);
 
   const monthText = monthLabel(monthKey);
+  const [runYear, runMonth] = monthKey.split('-').map(Number);
+  const daysInMonth = new Date(runYear, runMonth, 0).getDate();
+  const monthFrom = `${monthKey}-01`;
+  const monthTo = `${monthKey}-${String(daysInMonth).padStart(2, '0')}`;
+
   employees.forEach((employee) => {
     const basic = Number(employee.salary || 0);
 
@@ -144,6 +150,16 @@ function createPayrollRun(monthKey, processedBy = 'admin@edgefolio.com') {
       } else {
         deductions[key] = Number((basic * dc.percentage / 100).toFixed(2));
       }
+    }
+
+    // Loss of Pay — per-day rate on the actual days in this month, for days
+    // HR explicitly marked absent or unpaid leave (see getLopDaysCount's own
+    // comment for why "no punch" alone never counts). Only added when
+    // non-zero so payslips with no LOP look exactly as they did before this.
+    const lopDays = getLopDaysCount(employee.id, monthFrom, monthTo);
+    if (lopDays > 0) {
+      const perDayRate = basic / daysInMonth;
+      deductions[`Loss of Pay (${lopDays}d)`] = Number((perDayRate * lopDays).toFixed(2));
     }
 
     const gross = Object.values(earnings).reduce((s, v) => s + Number(v || 0), 0);

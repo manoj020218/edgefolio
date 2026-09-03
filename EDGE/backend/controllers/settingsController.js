@@ -66,12 +66,15 @@ function getWorkingHoursHandler(_req, res) {
   const db = getDb();
   const row = db.prepare('SELECT * FROM working_hours WHERE id = 1').get();
   if (!row) return sendOk(res, null);
+  let weeklyOffDays = [0, 6];
+  try { weeklyOffDays = JSON.parse(row.weekly_off_days || '[0,6]'); } catch { /* keep default */ }
   return sendOk(res, {
     startTime:     row.start_time,
     endTime:       row.end_time,
     breakDuration: Number(row.break_duration),
     daysPerWeek:   Number(row.days_per_week),
     hoursPerDay:   Number(row.hours_per_day),
+    weeklyOffDays,
     updatedAt:     row.updated_at,
   });
 }
@@ -80,16 +83,21 @@ function updateWorkingHoursHandler(req, res, next) {
   try {
     const db = getDb();
     const b = req.body || {};
+    const existing = db.prepare('SELECT weekly_off_days FROM working_hours WHERE id = 1').get();
+    const weeklyOffDays = Array.isArray(b.weeklyOffDays)
+      ? b.weeklyOffDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      : JSON.parse(existing?.weekly_off_days || '[0,6]');
     db.prepare(`
       INSERT INTO working_hours
-        (id, start_time, end_time, break_duration, days_per_week, hours_per_day, updated_at)
-      VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        (id, start_time, end_time, break_duration, days_per_week, hours_per_day, weekly_off_days, updated_at)
+      VALUES (1, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
         start_time     = excluded.start_time,
         end_time       = excluded.end_time,
         break_duration = excluded.break_duration,
         days_per_week  = excluded.days_per_week,
         hours_per_day  = excluded.hours_per_day,
+        weekly_off_days = excluded.weekly_off_days,
         updated_at     = excluded.updated_at
     `).run(
       b.startTime    ?? b.start_time    ?? '09:00',
@@ -97,6 +105,7 @@ function updateWorkingHoursHandler(req, res, next) {
       Number(b.breakDuration ?? b.break_duration ?? 60),
       Number(b.daysPerWeek   ?? b.days_per_week  ?? 5),
       Number(b.hoursPerDay   ?? b.hours_per_day  ?? 8),
+      JSON.stringify(weeklyOffDays),
     );
     return getWorkingHoursHandler(req, res);
   } catch (err) {

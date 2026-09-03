@@ -55,11 +55,15 @@
       "electron/**/*",
       "frontend/dist/**/*",
       "backend/**/*",
+      "scripts/reset-admin-password.js",
       "node_modules/**/*",
       "package.json",
       "!node_modules/.cache/**/*",
       "!frontend/node_modules/**/*",
       "!frontend/src/**/*"
+    ],
+    "extraResources": [
+      { "from": "scripts/RESET-ADMIN-PASSWORD.bat", "to": "RESET-ADMIN-PASSWORD.bat" }
     ],
     "directories": {
       "output": "../dist-exe",

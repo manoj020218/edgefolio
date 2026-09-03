@@ -138,14 +138,23 @@ function upsertCheckIn(memberId, date = toISODate()) {
 
 function upsertCheckOut(memberId, date = toISODate()) {
   const db = getDb();
-  upsertCheckIn(memberId, date);
-
-  const current = db
+  const existing = db
     .prepare('SELECT * FROM attendance_records WHERE member_id = ? AND date = ?')
     .get(memberId, date);
 
+  // Previously this silently called upsertCheckIn() first, which for someone
+  // with no record yet stamped check_in AND check_out to the same instant —
+  // a nonsensical "0 hours, checked in and out simultaneously" record with no
+  // warning. Refuse instead: check-out only makes sense once a check-in
+  // exists (from this same manual flow, machine import, or the APK).
+  if (!existing || !existing.check_in) {
+    const err = new Error('No check-in recorded for this employee today — check in first.');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const checkOut = nowTime();
-  const hoursWorked = deriveHoursWorked(current.check_in, checkOut);
+  const hoursWorked = deriveHoursWorked(existing.check_in, checkOut);
 
   db.prepare(
     `
@@ -175,14 +184,20 @@ function upsertAttendanceEvent(payload) {
   const status =
     payload.status || (checkIn || checkOut ? 'present' : existing?.status || 'absent');
   const faceMatch = payload.faceMatch ?? payload.face_match ?? existing?.face_match ?? 0;
+  // Only meaningful for status='leave' — 'paid' or 'unpaid'. Cleared back to
+  // null whenever a row is written with a non-leave status, so a stale leave
+  // type can't linger if the same day later gets a real punch.
+  const leaveType = status === 'leave'
+    ? (payload.leaveType ?? payload.leave_type ?? existing?.leave_type ?? null)
+    : null;
 
   if (!existing) {
     const eventId = payload.eventId || `EVT-${randomUUID().slice(0, 8).toUpperCase()}`;
     db.prepare(
       `
       INSERT INTO attendance_records (
-        event_id, member_id, date, check_in, check_out, status, hours_worked, face_match
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        event_id, member_id, date, check_in, check_out, status, hours_worked, face_match, leave_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     ).run(
       eventId,
@@ -193,6 +208,7 @@ function upsertAttendanceEvent(payload) {
       status,
       Number(hoursWorked || 0),
       Number(faceMatch || 0),
+      leaveType,
     );
 
     return db.prepare('SELECT * FROM attendance_records WHERE event_id = ?').get(eventId);
@@ -201,7 +217,7 @@ function upsertAttendanceEvent(payload) {
   db.prepare(
     `
     UPDATE attendance_records
-    SET check_in = ?, check_out = ?, status = ?, hours_worked = ?, face_match = ?, updated_at = CURRENT_TIMESTAMP
+    SET check_in = ?, check_out = ?, status = ?, hours_worked = ?, face_match = ?, leave_type = ?, updated_at = CURRENT_TIMESTAMP
     WHERE member_id = ? AND date = ?
     `,
   ).run(
@@ -210,6 +226,7 @@ function upsertAttendanceEvent(payload) {
     status,
     Number(hoursWorked || 0),
     Number(faceMatch || 0),
+    leaveType,
     memberId,
     date,
   );
@@ -225,6 +242,58 @@ function insertAttendanceBatch(events = []) {
   return tx(events);
 }
 
+// Loss-of-Pay days for payroll. Now that working_hours.weekly_off_days
+// records WHICH weekday(s) are off (not just a count), a day with no
+// attendance_records row at all can safely be treated as a genuine no-show —
+// as long as it isn't a weekly off or a holiday, which are excluded outright
+// regardless of whether a row exists. A day that DOES have a row only counts
+// if it's explicitly 'absent' or 'leave'+unpaid — a real punch or paid leave
+// never counts, obviously.
+function getLopDaysCount(memberId, fromDate, toDate) {
+  const db = getDb();
+
+  const whRow = db.prepare('SELECT weekly_off_days FROM working_hours WHERE id = 1').get();
+  let weeklyOffDays = [0, 6];
+  try { weeklyOffDays = JSON.parse(whRow?.weekly_off_days || '[0,6]'); } catch { /* keep default */ }
+  const offSet = new Set(weeklyOffDays);
+
+  const holidayDates = new Set(
+    db.prepare('SELECT date FROM holidays WHERE date BETWEEN ? AND ?').all(fromDate, toDate).map((h) => h.date),
+  );
+
+  const monthRecords = db.prepare(
+    'SELECT date, status, leave_type FROM attendance_records WHERE member_id = ? AND date BETWEEN ? AND ?',
+  ).all(memberId, fromDate, toDate);
+
+  // Safety guard: with zero attendance data for this employee in this range —
+  // e.g. payroll run for a month before the company started using EDGEFOLIO,
+  // or before this employee's first import — treating every working day as a
+  // no-show would zero out their entire pay. Silently doing that on a data
+  // gap would be a severe, easy-to-trigger bug. No coverage at all means "we
+  // don't know," not "assume the worst" — skip LOP entirely for this range.
+  if (monthRecords.length === 0) return 0;
+
+  const recordByDate = {};
+  monthRecords.forEach((r) => { recordByDate[r.date] = r; });
+
+  let lopDays = 0;
+  const cursor = new Date(`${fromDate}T00:00:00`);
+  const end = new Date(`${toDate}T00:00:00`);
+  while (cursor <= end) {
+    const dateStr = cursor.toISOString().split('T')[0];
+    if (!offSet.has(cursor.getDay()) && !holidayDates.has(dateStr)) {
+      const rec = recordByDate[dateStr];
+      if (!rec) {
+        lopDays += 1; // no punch, no leave marked, a working day, not a holiday — genuine no-show
+      } else if (rec.status === 'absent' || (rec.status === 'leave' && rec.leave_type === 'unpaid')) {
+        lopDays += 1;
+      }
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return lopDays;
+}
+
 module.exports = {
   listAttendanceByDate,
   listAttendanceByMember,
@@ -234,4 +303,5 @@ module.exports = {
   upsertCheckOut,
   upsertAttendanceEvent,
   insertAttendanceBatch,
+  getLopDaysCount,
 };

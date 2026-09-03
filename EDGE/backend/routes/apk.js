@@ -19,7 +19,8 @@ const {
   deleteAlertSubscriptionHandler,
   getOfficesHandler,
   getEmbeddingHandler,
-  saveEmbeddingHandler,
+  selfEnrollFaceHandler,
+  getMyFaceEnrollStatusHandler,
   broadcastHandler,
   getEmployeesHandler,
   patchEmployeeHandler,
@@ -71,9 +72,14 @@ router.get('/alert-subscriptions',        requireRole('hr-admin', 'owner'), getA
 router.post('/alert-subscriptions',       requireRole('hr-admin', 'owner'), createAlertSubscriptionHandler);
 router.delete('/alert-subscriptions/:id', requireRole('hr-admin', 'owner'), deleteAlertSubscriptionHandler);
 
-// Face embedding download (employee) and upload (hr-admin after generating via TFLite)
-router.get('/faces/:empId/embedding',  getEmbeddingHandler);
-router.post('/faces/:empId/embedding', requireRole('hr-admin'), saveEmbeddingHandler);
+// Face embedding: own-empId reference fetch (used during attendance capture to
+// compare a live capture against), and self-enroll — the employee's own phone
+// generates the embedding on-device via FaceLiveness.capture() and uploads only
+// that (never raw photos). No hr-admin gate: this is deliberately self-serve,
+// per client direction (see apkController.js's selfEnrollFaceHandler comment).
+router.get('/faces/:empId/embedding', getEmbeddingHandler);
+router.post('/faces/self-enroll',     selfEnrollFaceHandler);
+router.get('/faces/self-enroll',      getMyFaceEnrollStatusHandler);
 
 // Broadcast announcement + FCM to all employees (hr-admin / owner)
 router.post('/broadcast', requireRole('hr-admin', 'owner'), broadcastHandler);

@@ -527,33 +527,61 @@ function getOfficesHandler(_req, res) {
 
 // ─── Face Embeddings ─────────────────────────────────────────────────────────
 
+// Used by the employee's own AttendancePage capture flow to fetch the reference
+// embedding to compare a live capture against. Gated to "own" — an employee JWT
+// can only fetch its own empId's embedding; hr-admin/owner can fetch anyone's
+// (no current caller needs that, but matches the override pattern used
+// elsewhere). This is biometric data — never return it for someone else.
+//
+// Readiness is judged purely by embedding_json existing, NOT by `status` —
+// `status`/angle_front/right/left belong to the desktop's separate 3-angle
+// office-machine photo enrollment (faceController.js), a different subsystem
+// that happens to share this table. An employee who has only ever self-enrolled
+// via phone (the primary path now) will have angle_* = 0 and status='pending'
+// forever, which must NOT block their phone-embedding reference lookup.
 function getEmbeddingHandler(req, res, next) {
   try {
+    const requesterId = req.user?.empId;
+    const requesterRole = req.user?.role;
+    if (requesterId !== req.params.empId && requesterRole !== 'hr-admin' && requesterRole !== 'owner') {
+      throw createHttpError(403, 'Not allowed to read another employee\'s face embedding');
+    }
+
     const db = getDb();
     if (!db.prepare('SELECT id FROM employees WHERE id = ?').get(req.params.empId)) {
       throw createHttpError(404, 'Employee not found');
     }
     const row = db.prepare('SELECT * FROM face_enrollments WHERE emp_id = ?').get(req.params.empId);
-    if (!row || row.status !== 'complete') {
-      return res.status(404).json({ ok: false, error: 'NOT_ENROLLED', status: row?.status || 'pending' });
-    }
-    if (!row.embedding_json) {
-      return res.status(404).json({ ok: false, error: 'EMBEDDING_NOT_READY', status: 'enrolled_no_embedding' });
+    if (!row || !row.embedding_json) {
+      return res.status(404).json({ ok: false, error: 'NOT_ENROLLED' });
     }
     return sendOk(res, {
       empId: req.params.empId,
       embedding: JSON.parse(row.embedding_json),
-      updatedAt: row.updated_at,
-      status: 'complete',
+      updatedAt: row.embedding_enrolled_at,
     });
   } catch (err) {
     return next(err);
   }
 }
 
-// Admin APK generates embedding locally (TFLite) and uploads here for storage
-function saveEmbeddingHandler(req, res, next) {
+// POST /apk/faces/self-enroll — the employee's own phone runs FaceLiveness.capture()
+// (raw photos never leave the device) and uploads only the derived 192-dim
+// embedding here. No role restriction beyond being a logged-in APK employee, and
+// always writes to the caller's own empId (from the JWT, never a body/param the
+// client could spoof) — this is deliberately the primary enrollment path per
+// client direction: self-capture on-device, HR only ever checks status from
+// EDGE desktop (GET /api/v1/faces/:id/status), never captures on someone's
+// behalf. Creates the face_enrollments row if this is the employee's first
+// enrollment of any kind; if a row already exists (e.g. desktop already has
+// some office-machine angle photos), only embedding_json/embedding_enrolled_at
+// are touched — angle_front/right/left, status, enrolled_by are untouched, so
+// this can never corrupt the desktop's own photo-enrollment bookkeeping.
+function selfEnrollFaceHandler(req, res, next) {
   try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
     const { embedding } = req.body || {};
     // 192, not the more common 128 — the actual MobileFaceNet.tflite we ship is a
     // pairwise-export model ([2,112,112,3] -> [2,192]); see FaceEmbeddingEngine.kt.
@@ -562,14 +590,40 @@ function saveEmbeddingHandler(req, res, next) {
     }
 
     const db = getDb();
-    const row = db.prepare('SELECT status FROM face_enrollments WHERE emp_id = ?').get(req.params.empId);
-    if (!row) throw createHttpError(404, 'No face enrollment found. Enroll photos first via /faces/:id/enroll');
+    const existing = db.prepare('SELECT emp_id FROM face_enrollments WHERE emp_id = ?').get(empId);
 
-    db.prepare(
-      `UPDATE face_enrollments SET embedding_json = ?, updated_at = CURRENT_TIMESTAMP WHERE emp_id = ?`,
-    ).run(JSON.stringify(embedding), req.params.empId);
+    if (existing) {
+      db.prepare(
+        `UPDATE face_enrollments SET embedding_json = ?, embedding_enrolled_at = CURRENT_TIMESTAMP WHERE emp_id = ?`,
+      ).run(JSON.stringify(embedding), empId);
+    } else {
+      db.prepare(
+        `INSERT INTO face_enrollments (emp_id, embedding_json, embedding_enrolled_at) VALUES (?, ?, CURRENT_TIMESTAMP)`,
+      ).run(empId, JSON.stringify(embedding));
+    }
 
-    return sendOk(res, { empId: req.params.empId, saved: true });
+    const row = db.prepare('SELECT embedding_enrolled_at FROM face_enrollments WHERE emp_id = ?').get(empId);
+    return sendOk(res, { empId, saved: true, embeddingEnrolledAt: row.embedding_enrolled_at });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /apk/faces/self-enroll — the employee's own Profile screen checks this to
+// show "Face ID set up ✓" vs. a prompt to enroll. Deliberately never returns the
+// raw embedding vector to the UI layer — that's biometric data with no reason to
+// ever reach JS beyond the capture screen that generated it.
+function getMyFaceEnrollStatusHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const db = getDb();
+    const row = db.prepare('SELECT embedding_enrolled_at FROM face_enrollments WHERE emp_id = ?').get(empId);
+    return sendOk(res, {
+      enrolled: Boolean(row?.embedding_enrolled_at),
+      enrolledAt: row?.embedding_enrolled_at || null,
+    });
   } catch (err) {
     return next(err);
   }
@@ -864,7 +918,8 @@ module.exports = {
   deleteAlertSubscriptionHandler,
   getOfficesHandler,
   getEmbeddingHandler,
-  saveEmbeddingHandler,
+  selfEnrollFaceHandler,
+  getMyFaceEnrollStatusHandler,
   broadcastHandler,
   getEmployeesHandler,
   patchEmployeeHandler,

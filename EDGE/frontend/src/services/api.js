@@ -58,6 +58,8 @@ export const getAnnouncement   = ()       => http.get('/license/announcement')
 export const login          = (email, password) => http.post('/auth/login', { email, password })
 export const getAuthStatus  = ()                => http.get('/auth/status')
 export const setupAdmin     = (email, password) => http.post('/auth/setup', { email, password })
+export const resetWithRecoveryCode = (email, recoveryCode, newPassword) =>
+  http.post('/auth/reset-with-recovery-code', { email, recoveryCode, newPassword })
 
 // ── Employees ─────────────────────────────────────────────────────────────────
 export const getEmployees        = (params)     => http.get('/employees', { params })
@@ -72,6 +74,10 @@ export const updateCustomField   = (id, data)   => http.put(`/employees/fields/$
 export const deleteCustomField   = (id)         => http.delete(`/employees/fields/${id}`)
 export const getEmployeeCustomValues  = (id)    => http.get(`/employees/${id}/custom-values`)
 export const setEmployeeCustomValues  = (id, data) => http.post(`/employees/${id}/custom-values`, data)
+// Face ID — read-only status check. Capture only ever happens on the
+// employee's own phone (self-enroll); there is deliberately no way to trigger
+// or upload a capture from here.
+export const getFaceStatus       = (id)         => http.get(`/faces/${id}/status`)
 
 // ── Attendance ────────────────────────────────────────────────────────────────
 export const getAttendance        = (params) => http.get('/attendance', { params })
@@ -158,6 +164,8 @@ export const pullFromMachine       = (data) => http.post('/machines/pull', data,
 export const machineImportAlog    = (data) => http.post('/attendance/machine-import/alog',  data, { timeout: 60000 })
 export const machineImportJenix   = (data) => http.post('/attendance/machine-import/jenix', data, { timeout: 60000 })
 export const getMachineImportBatches  = ()         => http.get('/attendance/machine-import/batches')
+export const getMachineImportRecords  = (params)   => http.get('/attendance/machine-import/records', { params })
+export const deleteMachineImportBatch = (batchId)  => http.delete(`/attendance/machine-import/batches/${batchId}`)
 export const getMachineImportUnmapped = ()         => http.get('/attendance/machine-import/unmapped')
 export const getMachineImportMappings = ()         => http.get('/attendance/machine-import/mappings')
 export const saveMachineImportMappings   = (data)  => http.post('/attendance/machine-import/mappings', data)

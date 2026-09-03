@@ -1411,7 +1411,7 @@ export const SettingsPage = () => {
     address: '', city: '', state: '', country: '', pincode: '', website: '',
   })
   const [hours, setHours] = useState({
-    startTime: '09:00', endTime: '18:00', breakDuration: 60, daysPerWeek: 5, hoursPerDay: 8,
+    startTime: '09:00', endTime: '18:00', breakDuration: 60, daysPerWeek: 5, hoursPerDay: 8, weeklyOffDays: [0, 6],
   })
   const [syncStatus, setSyncStatus]  = useState(null)
   const [backups, setBackups]        = useState([])
@@ -1670,6 +1670,32 @@ export const SettingsPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input label="Working Days / Week" type="number" value={hours.daysPerWeek ?? 5}  onChange={(e) => setHours({ ...hours, daysPerWeek: Number(e.target.value) })} />
                   <Input label="Hours / Day"         type="number" value={hours.hoursPerDay ?? 8}  onChange={(e) => setHours({ ...hours, hoursPerDay: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-400 mb-2 block">Weekly Off Day(s)</label>
+                  <p className="text-xs text-slate-500 mb-2">
+                    Used for automatic Loss-of-Pay detection in Payroll — a missing punch on a day
+                    NOT selected here (and not a holiday) counts as an unpaid absence.
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label, dayIdx) => {
+                      const isOff = (hours.weeklyOffDays || []).includes(dayIdx)
+                      return (
+                        <button key={dayIdx} type="button"
+                          onClick={() => setHours((h) => {
+                            const current = h.weeklyOffDays || []
+                            const next = isOff ? current.filter((d) => d !== dayIdx) : [...current, dayIdx].sort()
+                            return { ...h, weeklyOffDays: next }
+                          })}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            isOff ? 'bg-sky-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
                 <div className="flex gap-2 pt-4">
                   <Button variant="secondary" onClick={fetchAll}>Discard</Button>

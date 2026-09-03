@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FaceLiveness, cosineSimilarity, matchesFace } from '@jenix/cap-face-liveness';
 import { Location } from '@jenix/cap-location';
 import { apiGet, apiPost, ApiError } from '../lib/api';
@@ -13,7 +14,6 @@ interface EmbeddingResponse {
   empId: string;
   embedding: number[];
   updatedAt: string;
-  status: string;
 }
 
 interface AttendanceResponse {
@@ -28,12 +28,14 @@ type Step =
   | { kind: 'locating' }
   | { kind: 'submitting' }
   | { kind: 'done'; alreadyMarked: boolean }
+  | { kind: 'not-enrolled' }
   | { kind: 'error'; message: string };
 
 // Mirrors APK/android's AttendanceViewModel.onCapturedFrame flow: fetch reference
 // embedding → native liveness+embedding capture → cosine match → GPS → POST.
 export default function AttendancePage({ workType, onBack }: Props) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>({ kind: 'idle' });
 
   async function handleStart() {
@@ -43,7 +45,7 @@ export default function AttendancePage({ workType, onBack }: Props) {
       setStep({ kind: 'checking-face' });
       const reference = await apiGet<EmbeddingResponse>(`/faces/${user.empId}/embedding`).catch((err) => {
         if (err instanceof ApiError && err.code === 'NOT_ENROLLED') {
-          throw new Error('Your face isn’t enrolled yet. Contact HR.');
+          throw { notEnrolled: true };
         }
         throw new Error('Could not load your enrolled face data.');
       });
@@ -99,6 +101,10 @@ export default function AttendancePage({ workType, onBack }: Props) {
 
       setStep({ kind: 'done', alreadyMarked: res.alreadyMarked });
     } catch (err) {
+      if (err && typeof err === 'object' && 'notEnrolled' in err) {
+        setStep({ kind: 'not-enrolled' });
+        return;
+      }
       setStep({ kind: 'error', message: err instanceof Error ? err.message : 'Something went wrong.' });
     }
   }
@@ -132,6 +138,15 @@ export default function AttendancePage({ workType, onBack }: Props) {
           </p>
           <button onClick={onBack} className="mt-3 text-sm text-brand-500 underline">
             Done
+          </button>
+        </div>
+      )}
+
+      {step.kind === 'not-enrolled' && (
+        <div className="rounded-lg border border-danger bg-surface p-4">
+          <p className="text-slate-100">Face ID isn&rsquo;t set up on this account yet.</p>
+          <button onClick={() => navigate('/profile/face-id')} className="mt-3 text-sm text-brand-500 underline">
+            Set up Face ID
           </button>
         </div>
       )}

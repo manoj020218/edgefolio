@@ -2,6 +2,7 @@ const express = require('express');
 const {
   loginHandler,
   forgotPasswordHandler,
+  resetWithRecoveryCodeHandler,
   listResetRequestsHandler,
   approveResetRequestHandler,
   changePasswordHandler,
@@ -17,6 +18,8 @@ router.get('/status',  statusHandler);
 router.post('/setup',  setupHandler);
 router.post('/login',  loginHandler);
 router.post('/forgot-password', forgotPasswordHandler);
+// Desktop admin's own self-service recovery — see resetWithRecoveryCodeHandler's comment.
+router.post('/reset-with-recovery-code', resetWithRecoveryCodeHandler);
 
 // Protected
 router.post('/change-password', requireAuth, changePasswordHandler);

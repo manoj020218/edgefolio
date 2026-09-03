@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
-import { ChevronRight, Contact, FileText, Headphones, KeyRound, LogOut, Wallet } from 'lucide-react';
+import { ChevronRight, Contact, FileText, Fingerprint, Headphones, KeyRound, LogOut, Wallet } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 
 const items = [
   { to: '/profile/detail', label: 'Detailed Profile', hint: 'Personal details, address, emergency contact', icon: Contact },
+  { to: '/profile/face-id', label: 'Face ID', hint: 'Set up face recognition for attendance', icon: Fingerprint },
   { to: '/profile/pay', label: 'Pay Settings', hint: 'Salary structure, payslips, attendance history', icon: Wallet },
   { to: '/profile/documents', label: 'Documents', hint: 'Appointment letter, ID card, certificates & more', icon: FileText },
   { to: '/profile/help', label: 'Help & Support', hint: 'Contact HR, IT support, raise a ticket', icon: Headphones },

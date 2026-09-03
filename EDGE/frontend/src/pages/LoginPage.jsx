@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Input } from '../components/atomic';
-import { Lock, User, ArrowRight, UserPlus } from 'lucide-react';
-import { login, getAuthStatus, setupAdmin } from '../services/api';
+import { Lock, User, ArrowRight, UserPlus, KeyRound, ShieldCheck, Copy, Check } from 'lucide-react';
+import { login, getAuthStatus, setupAdmin, resetWithRecoveryCode } from '../services/api';
 
 // ── Shared card wrapper ───────────────────────────────────────────────────────
 // Defined at module scope so React never re-creates the component type on
@@ -41,7 +41,7 @@ const CardShell = ({ title, subtitle, icon: Icon, children }) => (
 );
 
 export const LoginPage = ({ onLoginSuccess }) => {
-  // 'loading' | 'setup' | 'login'
+  // 'loading' | 'setup' | 'recovery-code' | 'login' | 'recover'
   const [mode, setMode] = useState('loading');
 
   // Login form state
@@ -56,6 +56,21 @@ export const LoginPage = ({ onLoginSuccess }) => {
   const [setupConfirm, setSetupConfirm] = useState('');
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupError, setSetupError] = useState('');
+
+  // Recovery-code-shown-once step (right after setup)
+  const [pendingLogin, setPendingLogin] = useState(null) // { user, token } — held until they confirm they saved the code
+  const [shownRecoveryCode, setShownRecoveryCode] = useState('');
+  const [recoveryCopied, setRecoveryCopied] = useState(false);
+  const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
+
+  // Forgot-password (recovery code) form state
+  const [recoverEmail, setRecoverEmail] = useState('');
+  const [recoverCode, setRecoverCode] = useState('');
+  const [recoverNewPassword, setRecoverNewPassword] = useState('');
+  const [recoverConfirm, setRecoverConfirm] = useState('');
+  const [recoverLoading, setRecoverLoading] = useState(false);
+  const [recoverError, setRecoverError] = useState('');
+  const [recoverSuccess, setRecoverSuccess] = useState('');
 
   // On mount, check whether first-admin setup is needed
   useEffect(() => {
@@ -100,12 +115,55 @@ export const LoginPage = ({ onLoginSuccess }) => {
     setSetupLoading(true);
     try {
       const res = await setupAdmin(setupEmail, setupPassword);
-      const { token, user } = res.data;
-      onLoginSuccess?.(user, token);
+      const { token, user, recoveryCode } = res.data;
+      // Hold off on actually logging in — this is the ONLY time the recovery
+      // code will ever be shown. Force it onto its own screen with an
+      // explicit confirmation before letting them into the app.
+      setShownRecoveryCode(recoveryCode);
+      setPendingLogin({ user, token });
+      setMode('recovery-code');
     } catch (err) {
       setSetupError(err.message || 'Setup failed. Please try again.');
     } finally {
       setSetupLoading(false);
+    }
+  };
+
+  const handleConfirmRecoveryCode = () => {
+    if (pendingLogin) onLoginSuccess?.(pendingLogin.user, pendingLogin.token);
+  };
+
+  const handleCopyRecoveryCode = () => {
+    navigator.clipboard?.writeText(shownRecoveryCode).then(() => {
+      setRecoveryCopied(true);
+      setTimeout(() => setRecoveryCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  const handleRecover = async (e) => {
+    e.preventDefault();
+    setRecoverError(''); setRecoverSuccess('');
+
+    if (recoverNewPassword !== recoverConfirm) {
+      setRecoverError('Passwords do not match');
+      return;
+    }
+    if (recoverNewPassword.length < 8) {
+      setRecoverError('Password must be at least 8 characters');
+      return;
+    }
+
+    setRecoverLoading(true);
+    try {
+      await resetWithRecoveryCode(recoverEmail, recoverCode, recoverNewPassword);
+      setRecoverSuccess('Password reset. You can sign in now with your new password.');
+      setEmail(recoverEmail);
+      setPassword('');
+      setRecoverCode(''); setRecoverNewPassword(''); setRecoverConfirm('');
+    } catch (err) {
+      setRecoverError(err.message || 'Reset failed. Check your email and recovery code.');
+    } finally {
+      setRecoverLoading(false);
     }
   };
 
@@ -177,6 +235,145 @@ export const LoginPage = ({ onLoginSuccess }) => {
     );
   }
 
+  // ── Recovery code shown once, right after setup ──────────────────────────
+  if (mode === 'recovery-code') {
+    return (
+      <CardShell
+        title="Save Your Recovery Code"
+        subtitle="This is the only way back in if you ever forget your password"
+        icon={ShieldCheck}
+      >
+        <div className="space-y-5">
+          <div className="p-4 bg-amber-900/20 border border-amber-700/40 rounded-lg text-amber-300 text-sm">
+            EDGEFOLIO runs offline, so there's no "email me a reset link." This code is the
+            <strong> only</strong> way to get back into your admin account if you forget your
+            password — it will never be shown again. Save it somewhere safe (a password manager,
+            a printed copy) before continuing.
+          </div>
+
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 flex items-center justify-between gap-3">
+            <code className="text-xl font-mono tracking-wider text-sky-400 select-all">{shownRecoveryCode}</code>
+            <button
+              type="button"
+              onClick={handleCopyRecoveryCode}
+              className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 flex-shrink-0"
+            >
+              {recoveryCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {recoveryCopied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+
+          <label className="flex items-start gap-2.5 text-sm text-slate-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={recoveryConfirmed}
+              onChange={(e) => setRecoveryConfirmed(e.target.checked)}
+              className="mt-0.5"
+            />
+            I've saved this recovery code somewhere safe
+          </label>
+
+          <Button
+            isFullWidth
+            disabled={!recoveryConfirmed}
+            icon={ArrowRight}
+            iconPosition="right"
+            onClick={handleConfirmRecoveryCode}
+          >
+            Continue to EDGEFOLIO
+          </Button>
+        </div>
+      </CardShell>
+    );
+  }
+
+  // ── Forgot Password (recovery code) ───────────────────────────────────────
+  if (mode === 'recover') {
+    return (
+      <CardShell
+        title="Reset Password"
+        subtitle="Use the recovery code you saved during setup"
+        icon={KeyRound}
+      >
+        {recoverError && (
+          <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+            {recoverError}
+          </div>
+        )}
+        {recoverSuccess && (
+          <div className="mb-4 p-3 bg-green-900/30 border border-green-700 rounded-lg text-green-300 text-sm">
+            {recoverSuccess}
+          </div>
+        )}
+
+        <form onSubmit={handleRecover} className="space-y-5">
+          <Input
+            type="email"
+            label="Email Address"
+            placeholder="your@email.com"
+            icon={User}
+            value={recoverEmail}
+            onChange={(e) => setRecoverEmail(e.target.value)}
+            required
+          />
+
+          <Input
+            type="text"
+            label="Recovery Code"
+            placeholder="XXXX-XXXX-XXXX-XXXX"
+            icon={KeyRound}
+            value={recoverCode}
+            onChange={(e) => setRecoverCode(e.target.value)}
+            required
+          />
+
+          <Input
+            type="password"
+            label="New Password"
+            placeholder="Min. 8 characters"
+            icon={Lock}
+            value={recoverNewPassword}
+            onChange={(e) => setRecoverNewPassword(e.target.value)}
+            required
+          />
+
+          <Input
+            type="password"
+            label="Confirm New Password"
+            placeholder="Re-enter your new password"
+            icon={Lock}
+            value={recoverConfirm}
+            onChange={(e) => setRecoverConfirm(e.target.value)}
+            required
+          />
+
+          <Button
+            type="submit"
+            isFullWidth
+            isLoading={recoverLoading}
+            icon={ArrowRight}
+            iconPosition="right"
+          >
+            {recoverLoading ? 'Resetting...' : 'Reset Password'}
+          </Button>
+
+          <button
+            type="button"
+            onClick={() => { setMode('login'); setRecoverError(''); setRecoverSuccess(''); }}
+            className="w-full text-center text-sm text-slate-400 hover:text-slate-200"
+          >
+            ← Back to Sign In
+          </button>
+        </form>
+
+        <p className="mt-5 text-xs text-slate-500 text-center">
+          Lost your recovery code too? Contact support — WhatsApp +91 72402 26566 or
+          iotsoft.in@gmail.com.
+        </p>
+      </CardShell>
+    );
+  }
+
   // ── Normal Login ──────────────────────────────────────────────────────────
   return (
     <CardShell
@@ -218,6 +415,14 @@ export const LoginPage = ({ onLoginSuccess }) => {
         >
           {isLoading ? 'Signing in...' : 'Sign In'}
         </Button>
+
+        <button
+          type="button"
+          onClick={() => { setMode('recover'); setRecoverEmail(email); setError(''); }}
+          className="w-full text-center text-sm text-sky-400 hover:text-sky-300"
+        >
+          Forgot password?
+        </button>
       </form>
     </CardShell>
   );

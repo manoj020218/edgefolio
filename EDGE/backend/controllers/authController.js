@@ -11,6 +11,19 @@ function verifyPassword(input, stored) {
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), derived);
 }
 
+function hashSecret(value) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${crypto.scryptSync(value, salt, 64).toString('hex')}`;
+}
+
+// XXXX-XXXX-XXXX-XXXX, uppercase hex — easy to read back over a phone call if
+// support ever needs to, but generated locally, never sent anywhere.
+function generateRecoveryCode() {
+  const groups = [];
+  for (let i = 0; i < 4; i++) groups.push(crypto.randomBytes(2).toString('hex').toUpperCase());
+  return groups.join('-');
+}
+
 function loginHandler(req, res, next) {
   try {
     const { email, password } = req.body || {};
@@ -193,6 +206,7 @@ function setupHandler(req, res, next) {
     }
 
     const db = getDb();
+    const recoveryCode = generateRecoveryCode();
 
     // Race-safe: count + insert in one transaction
     const result = db.transaction(() => {
@@ -205,8 +219,8 @@ function setupHandler(req, res, next) {
       const id = randomUUID();
 
       db.prepare(
-        'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
-      ).run(id, String(email).trim().toLowerCase(), passwordHash, 'admin');
+        'INSERT INTO users (id, email, password_hash, role, recovery_code_hash) VALUES (?, ?, ?, ?, ?)',
+      ).run(id, String(email).trim().toLowerCase(), passwordHash, 'admin', hashSecret(recoveryCode));
 
       return { id, email: String(email).trim().toLowerCase(), role: 'admin' };
     })();
@@ -221,7 +235,44 @@ function setupHandler(req, res, next) {
       { expiresIn: '24h' },
     );
 
-    return sendOk(res, { token, user: { id: result.id, email: result.email, role: result.role } });
+    // Returned exactly once — this is the only time the plaintext code ever
+    // exists outside the hash. The frontend must show it and get explicit
+    // confirmation before letting the admin past this screen.
+    return sendOk(res, { token, user: { id: result.id, email: result.email, role: result.role }, recoveryCode });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// POST /auth/reset-with-recovery-code — public; self-service recovery for the
+// desktop admin login itself, the one account forgot-password never covered
+// (that flow is for APK employees and requires an already-logged-in admin to
+// approve — no path back in if the sole admin is the one locked out).
+function resetWithRecoveryCodeHandler(req, res, next) {
+  try {
+    const { email, recoveryCode, newPassword } = req.body || {};
+    if (!email || !recoveryCode || !newPassword) {
+      throw createHttpError(400, 'email, recoveryCode and newPassword are required');
+    }
+    if (String(newPassword).length < 8) {
+      throw createHttpError(400, 'Password must be at least 8 characters');
+    }
+
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(String(email).trim());
+    // Same error either way — don't reveal whether the email exists or the
+    // code was wrong, same reasoning as a normal login's "Invalid email or
+    // password".
+    if (!user || !user.recovery_code_hash || !verifyPassword(String(recoveryCode).trim().toUpperCase(), user.recovery_code_hash)) {
+      throw createHttpError(401, 'Invalid email or recovery code');
+    }
+
+    db.prepare(
+      `UPDATE users SET password_hash = ?, temp_password_hash = NULL, password_must_change = 0, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(hashSecret(String(newPassword)), user.id);
+
+    return sendOk(res, { message: 'Password reset. Sign in with your new password.' });
   } catch (err) {
     return next(err);
   }
@@ -229,6 +280,7 @@ function setupHandler(req, res, next) {
 
 module.exports = {
   loginHandler,
+  resetWithRecoveryCodeHandler,
   forgotPasswordHandler,
   listResetRequestsHandler,
   approveResetRequestHandler,

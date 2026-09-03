@@ -165,6 +165,15 @@ function stagingBatchesHandler(req, res, next) {
   }
 }
 
+function stagingDeleteBatchHandler(req, res, next) {
+  try {
+    const { deleteBatch } = require('../models/machineImportModel');
+    return sendOk(res, deleteBatch(req.params.batchId));
+  } catch (error) {
+    return next(error);
+  }
+}
+
 function stagingUnmappedHandler(req, res, next) {
   try {
     const { listUnmappedIds } = require('../models/machineImportModel');
@@ -237,13 +246,18 @@ function stagingSummaryHandler(req, res, next) {
 
 function stagingRecordsHandler(req, res, next) {
   try {
-    const { batchId, machineEmpId, status, page = 1, limit = 200 } = req.query;
+    const { batchId, machineEmpId, employeeId, date, status, page = 1, limit = 200 } = req.query;
     const db = require('../config/database').getDb();
     const conditions = [];
     const params = [];
-    if (batchId)      { conditions.push('import_batch = ?');    params.push(batchId); }
-    if (machineEmpId) { conditions.push('machine_emp_id = ?');  params.push(machineEmpId); }
-    if (status)       { conditions.push('status = ?');          params.push(status); }
+    if (batchId)      { conditions.push('import_batch = ?');       params.push(batchId); }
+    if (machineEmpId) { conditions.push('machine_emp_id = ?');     params.push(machineEmpId); }
+    // Raw per-punch detail for one employee (any device/machine ID they're
+    // mapped from) — "Detail Punch Record" lookup from the Attendance Register,
+    // to see everything that fed into a first-in/last-out check-in/check-out.
+    if (employeeId)   { conditions.push('mapped_employee_id = ?'); params.push(employeeId); }
+    if (date)         { conditions.push('punch_date = ?');         params.push(date); }
+    if (status)       { conditions.push('status = ?');             params.push(status); }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
     const rows = db.prepare(
@@ -300,6 +314,7 @@ module.exports = {
   machineImportAlogHandler,
   machineImportJenixHandler,
   stagingBatchesHandler,
+  stagingDeleteBatchHandler,
   stagingUnmappedHandler,
   stagingGetMappingsHandler,
   stagingSaveMappingsHandler,

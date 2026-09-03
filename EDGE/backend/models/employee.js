@@ -17,6 +17,16 @@ function findEmployeeById(id) {
   return db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
 }
 
+function assertValidSalary(value) {
+  const n = Number(value);
+  if (Number.isNaN(n) || n < 0) {
+    const err = new Error('Salary must be a positive number');
+    err.statusCode = 400;
+    throw err;
+  }
+  return n;
+}
+
 function createEmployee(payload) {
   const db = getDb();
   const id = payload.id || randomUUID();
@@ -31,7 +41,7 @@ function createEmployee(payload) {
     department: payload.department,
     designation: payload.designation || null,
     joining_date: payload.joiningDate || payload.joining_date || null,
-    salary: Number(payload.salary || 0),
+    salary: assertValidSalary(payload.salary || 0),
     status: payload.status || 'active',
     avatar: payload.avatar || null,
     work_type: payload.workType || payload.work_type || 'office',
@@ -66,7 +76,7 @@ function updateEmployee(id, payload) {
     department: payload.department ?? existing.department,
     designation: payload.designation ?? existing.designation,
     joining_date: payload.joiningDate ?? payload.joining_date ?? existing.joining_date,
-    salary: Number(payload.salary ?? existing.salary ?? 0),
+    salary: assertValidSalary(payload.salary ?? existing.salary ?? 0),
     status: payload.status ?? existing.status,
     avatar: payload.avatar ?? existing.avatar,
     work_type: payload.workType ?? payload.work_type ?? existing.work_type ?? 'office',

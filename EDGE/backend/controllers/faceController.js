@@ -36,6 +36,13 @@ function getFaceStatusHandler(req, res, next) {
     status,
     enrolledBy: row?.enrolled_by || null,
     updatedAt: row?.updated_at || null,
+    // Separate subsystem: the employee's own phone self-enrolls a MobileFaceNet
+    // embedding for app attendance (POST /apk/faces/self-enroll) — independent
+    // of the 3-angle office-machine photos above. HR checks this from here;
+    // there is no desktop action to trigger it, by design (client direction:
+    // capture stays on the employee's phone, HR only ever views status).
+    embeddingEnrolled: Boolean(row?.embedding_json),
+    embeddingEnrolledAt: row?.embedding_enrolled_at || null,
   });
 }
 

@@ -12,6 +12,7 @@ const {
   machineImportAlogHandler,
   machineImportJenixHandler,
   stagingBatchesHandler,
+  stagingDeleteBatchHandler,
   stagingUnmappedHandler,
   stagingGetMappingsHandler,
   stagingSaveMappingsHandler,
@@ -41,6 +42,7 @@ router.post('/machine-import/jenix', validateBody(['fileData']), machineImportJe
 
 // Step 2: See what came in
 router.get('/machine-import/batches',       stagingBatchesHandler);
+router.delete('/machine-import/batches/:batchId', stagingDeleteBatchHandler);
 router.get('/machine-import/summary',       stagingSummaryHandler);   // ?batchId=
 router.get('/machine-import/records',       stagingRecordsHandler);   // ?batchId=&machineEmpId=&status=&page=&limit=
 router.get('/machine-import/unmapped',      stagingUnmappedHandler);  // machine IDs with no mapping yet

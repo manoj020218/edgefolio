@@ -257,9 +257,39 @@ function runMigrations(db) {
   if (!columnExists(db, 'employees', 'fcm_token')) {
     db.exec('ALTER TABLE employees ADD COLUMN fcm_token TEXT');
   }
+  // Only meaningful when status='leave' — distinguishes paid leave from
+  // leave-without-pay for a day an employee didn't punch. NULL for
+  // present/absent rows and for leave marked before this column existed.
+  if (!columnExists(db, 'attendance_records', 'leave_type')) {
+    db.exec("ALTER TABLE attendance_records ADD COLUMN leave_type TEXT");
+  }
+  // JSON array of day-of-week ints, JS Date.getDay() convention (0=Sunday..6=
+  // Saturday) — e.g. '[0]' for a 6-day week with just Sunday off, '[0,6]' for
+  // a 5-day week. Distinct from the pre-existing days_per_week (a plain count,
+  // never specified WHICH day) — this is what makes it safe to auto-detect a
+  // missing punch as an unpaid absence instead of always requiring HR to mark
+  // it by hand. Default matches days_per_week's own default of 5 with a
+  // Sat+Sun weekend, the most common convention if nobody's configured it yet.
+  if (!columnExists(db, 'working_hours', 'weekly_off_days')) {
+    db.exec("ALTER TABLE working_hours ADD COLUMN weekly_off_days TEXT NOT NULL DEFAULT '[0,6]'");
+  }
+  // Offline-first self-service account recovery: without this, a desktop
+  // admin who forgets their password has NO way back in — forgot-password
+  // only ever covered employees (APK users), and approving any reset
+  // requires already being logged in as admin, a real lockout with no code
+  // path out. Shown once at setup time, hashed here like a password.
+  if (!columnExists(db, 'users', 'recovery_code_hash')) {
+    db.exec('ALTER TABLE users ADD COLUMN recovery_code_hash TEXT');
+  }
   // face_enrollments: store computed 192-dim embedding (uploaded by Admin APK after TFLite inference)
   if (!columnExists(db, 'face_enrollments', 'embedding_json')) {
     db.exec('ALTER TABLE face_enrollments ADD COLUMN embedding_json TEXT');
+  }
+  // Separate timestamp from the desktop-side `updated_at` (which tracks the
+  // office-machine's 3-angle photo enrollment, a different subsystem sharing
+  // this table) — set only by the employee's own phone self-enroll.
+  if (!columnExists(db, 'face_enrollments', 'embedding_enrolled_at')) {
+    db.exec('ALTER TABLE face_enrollments ADD COLUMN embedding_enrolled_at TEXT');
   }
   // HR sets tour/WFH date ranges per employee — APK gates mobile attendance on this
   db.exec(`

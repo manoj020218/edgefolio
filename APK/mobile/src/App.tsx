@@ -26,6 +26,7 @@ import DetailProfilePage from './pages/employee/DetailProfilePage';
 import PaySettingsPage from './pages/employee/PaySettingsPage';
 import DocumentsPage from './pages/employee/DocumentsPage';
 import HelpSupportPage from './pages/employee/HelpSupportPage';
+import FaceEnrollPage from './pages/employee/FaceEnrollPage';
 
 function ChangePasswordRoute() {
   const navigate = useNavigate();
@@ -107,6 +108,7 @@ export default function App() {
       <Route path="/work/new-visit" element={user && !isAdmin ? <NewVisitPage /> : <Navigate to="/" replace />} />
       <Route path="/work/visits/:id" element={user && !isAdmin ? <VisitDetailPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/detail" element={user && !isAdmin ? <DetailProfilePage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/face-id" element={user && !isAdmin ? <FaceEnrollPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/pay" element={user && !isAdmin ? <PaySettingsPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/documents" element={user && !isAdmin ? <DocumentsPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/help" element={user && !isAdmin ? <HelpSupportPage /> : <Navigate to="/" replace />} />

@@ -692,3 +692,346 @@ remembering next time it looks like a real regression: retry once before
 assuming a bug was introduced, and if it recurs often it may be worth
 investigating on its own (AV scan interference is the leading suspect, never
 confirmed).
+
+### 2026-09-02, later still — self-enroll face capture endpoint; real client-driven Machine Import redesign
+
+**Self-enroll face capture, designed and built.** Picks up the enrollment gap
+flagged two entries back. Client's direction: capture stays on the employee's
+own phone (raw photos never leave the device — only the derived embedding
+does, already true of the existing TFLite pipeline), HR only ever *checks*
+status from EDGE desktop, never captures on someone's behalf.
+
+- New DB column `face_enrollments.embedding_enrolled_at`, deliberately
+  separate from the desktop's own `updated_at`/`status`/`angle_*` columns
+  (those belong to a **different, pre-existing subsystem** — the office
+  biometric machine's 3-angle photo enrollment, `faceController.js`, which
+  happens to share this table). Self-enroll never touches those columns.
+- `POST /apk/faces/self-enroll` (new, no role gate beyond being a logged-in
+  APK employee, always writes to the caller's own `empId` from the JWT) —
+  creates the `face_enrollments` row if this is the employee's first
+  enrollment of any kind, or just updates `embedding_json`/
+  `embedding_enrolled_at` if a row already exists from the desktop side.
+- `GET /apk/faces/self-enroll` — own status only (`{enrolled, enrolledAt}`),
+  deliberately never returns the raw embedding vector to a UI layer.
+- Fixed two real bugs in the existing `GET /apk/faces/:empId/embedding` found
+  while doing this: it gated readiness on the desktop's photo `status`
+  (`complete`), which would have permanently blocked a phone-only-enrolled
+  employee's own attendance capture forever since photo status has nothing to
+  do with the phone embedding; and it had **no ownership check at all** — any
+  authenticated APK employee could read any other employee's biometric
+  embedding by changing the URL param. Both fixed: readiness now checks
+  `embedding_json` directly, and a non-owner request now needs hr-admin/owner.
+- Desktop's `GET /api/v1/faces/:id/status` (`faceController.js`) extended
+  additively with `embeddingEnrolled`/`embeddingEnrolledAt` — the angle/status
+  fields are completely unchanged. **Not yet done:** no desktop UI actually
+  surfaces this anywhere (confirmed by grep — `faceController.js`'s endpoints
+  have zero frontend callers, always have). HR currently has no on-screen way
+  to see it; adding a "Face ID" tab to `EmployeeDrawer.jsx` is the natural next
+  step, not built this session.
+- Mobile: new `pages/employee/FaceEnrollPage.tsx` (linked from Profile → "Face
+  ID"), and `AttendancePage.tsx`'s dead-end "contact HR" message on
+  `NOT_ENROLLED` now links to it instead. `tsc -b`/`vite build` pass.
+- Verified the migration against a scratch copy of the real DB (established
+  pattern this session) — `embedding_enrolled_at` column confirmed added
+  cleanly.
+
+**Real client feedback reshaped Machine Import significantly, same session:**
+
+1. Client (real user testing, not hypothetical): "why do I have to
+   double-enter a name the machine already sent me" → built name-based
+   auto-match (previous entry) — but then reported it wasn't showing anything
+   at all on a real device file. Debugged with hard numbers against their
+   *live* production DB (checkpointed the real WAL directly, not a guess):
+   `employees` = 0 rows, `attendance_records` = 0, `machine_import_staging` =
+   3,918 (their file staged 6 times while retesting). **Root cause: they
+   hadn't added any employees to EDGEFOLIO yet** — auto-match had nothing to
+   match against, which is correct behavior, not a bug. Also separately
+   diagnosed and explained: they were looking at a **stale already-open
+   EDGEFOLIO window** from before an earlier rebuild — Electron doesn't
+   hot-reload, a window needs a full close+reopen to pick up a new install.
+2. Client's real follow-up, and a legitimate product point: don't force HR to
+   pre-create every employee by hand when the machine already sent the name —
+   only ask for what's actually still missing. Landed on, after iterating live
+   with the client on the exact shape: a "Create Employees & Map Remaining"
+   button in Machine Import that opens an **inline editable grid** (name
+   pre-filled from the machine, editable; department + salary — the only two
+   fields the backend actually requires, `ensureRequired(['name','department',
+   'salary'])`) for every still-unmapped row, then creates + maps all of them
+   in one save via the existing `POST /employees` + mappings endpoints — no
+   backend changes needed for this part, pure frontend reuse. Everything else
+   (bank details, designation, etc.) stays for HR to fill in later from
+   Employees, same import-then-enrich idea.
+3. Added a delete button for staged batches (`DELETE
+   /attendance/machine-import/batches/:batchId`, new `deleteBatch()` in
+   `machineImportModel.js`, only touches staging rows, never
+   `attendance_records`) — client pointed out people will naturally re-upload
+   when a first attempt doesn't look right (exactly what happened above:
+   6 duplicate batches), and there was no way to clean those up.
+4. Renamed "ALOG (Realtime)" → "ALOG/AGL (Realtime)" throughout the modal
+   (tab label, subtitle, dropzone hint, plugin registry entry) — the real
+   file was `AGL_001.TXT`, not obviously "ALOG" to someone looking for their
+   file format by name. Also corrected the "Expected ALOG columns" hint,
+   which named a fixed column list that doesn't match how the parser actually
+   works anymore (header-name matching, not fixed position — previous entry).
+
+**Also found and fixed while committing self-enroll work:** `.gitignore` had
+`ImportModal.jsx` on its own line under a stray, unrelated `#contact info`
+comment — confirmed via `git log --all` / `git ls-files` that this file (the
+entire attendance-import UI, ~780 lines at the time) had **never once been
+committed**, for the whole time it's existed. Removed the bad rule, added the
+file. Anyone who re-cloned this repo before today would have been missing
+this file entirely.
+
+**Deployed:** rebuilt and silently reinstalled multiple times this session as
+each piece landed (self-enroll backend, bulk-create-employees grid, ALOG/AGL
+labels) — confirmed clean restart each time via `/health`. Not yet
+re-published to the marketing site (`edgefolio.iotsoft.in`) or version-bumped
+past `1.0.1` — this round hasn't been asked to ship externally yet, unlike the
+ALOG parser fix which was.
+
+### 2026-09-02, later still — Face ID drawer tab; Attendance Register redesign; first attendance-based payroll rule
+
+**Face ID tab added to `EmployeeDrawer.jsx`** (desktop, Employees page) — the
+piece flagged as missing two entries back. Lazy-fetches `GET /api/v1/faces/:id/
+status` only when the tab is opened. Read-only by design (no footer button —
+falls through the existing `tab === 'basic' || 'bank'` / `'custom'` footer
+conditions, matches nothing) — shows both the phone self-enroll status and the
+office-machine 3-angle photo status side by side, since they're genuinely
+separate subsystems sharing one table.
+
+**Real client feedback (live testing) drove a large Attendance page
+redesign**, in order:
+
+1. **Machine Import**: department field is now a real `<select>` (was a
+   free-text+datalist input) with a "+ Create New Department" option that
+   creates it via the real `departments` table (`POST /departments`) inline,
+   not just as a string on one employee — so it shows up in every other
+   department dropdown afterward too.
+2. Salary can't be negative — fixed at both layers: backend
+   (`models/employee.js`'s new `assertValidSalary()`, used by both create and
+   update, throws 400) is the real guard; `min="0"` added to all three salary
+   inputs in the app (Add Employee, Edit Employee, bulk-create grid) is just
+   the UX hint.
+3. The Commit button now gets a visible green highlight + glow once every
+   machine ID is mapped, so it's obvious where to go next instead of hunting
+   for it.
+4. **"Daily Attendance Register" → "Attendance Register" with Daily / Monthly
+   / Date Range tabs**, plus an optional Employee filter that applies across
+   all three. Client's own framing, verbatim: "if employee selected then show
+   its attendance for specific day, month or date range" — so selecting an
+   employee switches Monthly from the whole-company roll-up (present/absent/
+   leave day counts per employee) to that one employee's own day-by-day list,
+   which is what they actually meant by "confusing" — a monthly view that
+   could only ever show everyone's totals, never one person's daily history.
+5. **Real bug/gap found via a real question** ("17 present on Aug 18 but
+   Absent tab shows nobody?"): `attendance_records` only ever gets a row for
+   someone who punched — a machine-imported dataset never creates an explicit
+   `status='absent'` row for someone who didn't show up, so the backend's
+   `attendanceStatsByDate` absent count (`SUM(status='absent')`) is
+   structurally always 0 for this data, and the register's "Absent" filter
+   had nothing to show. Fixed **client-side, additively**: Daily view now
+   diffs the full employee list against that day's records and synthesizes
+   display-only "Absent" rows for anyone missing (`isDerived: true`, never
+   written to the DB) — `dailyStats` recomputes present/absent/leave from
+   this merged list instead of trusting the backend's always-0 absent count.
+6. **Holidays now visibly marked** on the Daily register — fetches the
+   existing (previously orphaned-from-Attendance) `holidays` table once on
+   mount. If the selected date is a holiday, derived-absent rows get status
+   `'holiday'` (blue badge) instead of red `'Absent'`, and a banner shows the
+   holiday name. This existed as a fully-built feature (schema, API, Settings
+   UI) with zero connection to Attendance before this.
+7. **Mark Paid/Unpaid Leave** buttons on derived-absent rows — new
+   `attendance_records.leave_type` column (`'paid'|'unpaid'`, only meaningful
+   when `status='leave'`, cleared back to null on any non-leave write so it
+   can't go stale). Reuses the existing `POST /attendance/event` endpoint
+   (`upsertAttendanceEvent` already took a `status` override, just needed to
+   also persist `leaveType`) — no new endpoint needed.
+8. **"Detail Punch Record" modal** — every raw punch behind a first-in/
+   last-out row is still sitting in `machine_import_staging` after commit
+   (commit only marks rows `'committed'`, never deletes). Extended
+   `GET /attendance/machine-import/records` with `employeeId`
+   (→ `mapped_employee_id`) and `date` (→ `punch_date`) filters — the
+   endpoint already existed for the Machine Import batch-review UI, this just
+   gave it a second caller. New "Punches" button on Daily and Range rows
+   opens it.
+
+**First attendance-based payroll rule, actually wired into real payslip
+generation** (`createPayrollRun`, not just the `previewPayrollFromSalary`
+demo function) — client asked directly "how do big businesses do this,"
+confirmed: per-day rate = Basic ÷ **actual days in that month** (not a flat
+30), LOP (Loss of Pay) days reduce pay via one explicit "Loss of Pay (Xd)"
+deduction line, computed at `perDayRate × lopDays`.
+
+**Deliberately scoped to be safe, not maximal**: `getLopDaysCount()`
+(`models/attendance.js`) counts *only* days HR explicitly marked
+`status='absent'` or `status='leave'` + `leave_type='unpaid'` — it does
+**not** treat "no punch that day" as automatic LOP. Reason, found by actually
+checking the schema before writing the calculation: `working_hours` only
+stores `days_per_week` as a **count** (e.g. `6`), never *which* weekday is
+the off day. Auto-deducting every unpunched day would silently and
+incorrectly dock pay for every weekly off (Sundays etc.) — a real, harmful
+payroll bug, not a hypothetical one. Until weekly-off days are tracked
+explicitly (not built), LOP only fires when HR consciously clicks "Unpaid
+Leave" in the register — safe by construction, but not yet the fully
+automatic "missing day = deducted" flow the client originally asked about.
+**Flag this clearly to whoever picks up payroll work next**, and see if the
+client wants weekly-off-day configuration built before relying on this for
+real payroll runs.
+
+**Verified:** migration checked against a scratch copy of the real DB
+(`leave_type` column confirmed added cleanly) before deploying, same
+established pattern as every other schema change this session. Rebuilt and
+redeployed; confirmed clean restart via `/health`.
+
+### 2026-09-02, later still — weekly-off-day config unlocks full automatic LOP; register/payroll button parity fixes
+
+**Weekly-off-day configuration, closing the gap flagged in the previous
+entry.** New `working_hours.weekly_off_days` column — JSON array of
+day-of-week ints (`Date.getDay()` convention, 0=Sunday), distinct from the
+pre-existing `days_per_week` (always just a count, never which day).
+Settings → Working Hours gets a Sun–Sat toggle row. Default `[0,6]`
+(Sat+Sun) if nobody's configured it, matching `days_per_week`'s existing
+default of 5.
+
+This makes `getLopDaysCount()` (`models/attendance.js`) safe to fully
+automate — now that weekly-offs are known precisely, a day with **no
+attendance record at all** can finally be treated as a genuine no-show
+(previously impossible to tell apart from a normal off day, so LOP only
+ever counted explicit HR-marked absences/unpaid-leave). Both weekly-offs and
+holidays are excluded from LOP regardless of whether a record exists.
+
+**One important safety guard added**: if an employee has **zero**
+attendance records at all in the payroll month (e.g. a payroll run for a
+month before EDGEFOLIO was adopted, or before that employee's first import),
+`getLopDaysCount()` returns 0 rather than treating every working day as a
+no-show — with no data, "unknown" must never become "assume the worst,"
+since that would silently zero out someone's entire pay. Only kicks in once
+there's at least one real record in the range, proving attendance was
+actually being tracked that month.
+
+The Attendance Register also now visually marks weekly-offs the same way as
+holidays (grey "Weekly Off" badge instead of red "Absent", a note under the
+date picker) — fetches `GET /settings/working-hours` once on mount.
+
+**Register/payroll parity fixes, from real usage during this same
+session:**
+1. Monthly and Date Range views, once a specific employee is selected, now
+   get the same day-by-day derivation Daily already had (missing days shown
+   as Absent/Holiday/Weekly Off, not silently absent from the list) — a new
+   shared `deriveDaySpan()` helper, plus the same Mark Paid/Unpaid Leave and
+   Detail Punch Record actions Daily already had. Previously these only
+   existed for Daily.
+2. The All/Present/Absent/Leave filter row was missing whenever Monthly had
+   an employee selected (the row's visibility was gated on
+   `viewMode !== 'monthly'`, not accounting for the now-possible
+   employee-specific flat-list case) — fixed.
+3. Found and fixed a real bug while wiring the leave-marking refetch for
+   Monthly: it was passing `monthValue` (e.g. `"2026-08"`) as a `toDate`
+   argument expecting a full `YYYY-MM-DD` string, silently fetching the
+   wrong span after marking a leave day in Monthly view.
+
+**Real bug found and fixed in the manual "Record Attendance" Check In/Check
+Out buttons**, from a direct client question ("why don't these follow
+first-punch/last-punch like machine import?"). Answer: they're a completely
+separate manual mechanism — each click just stamps the *server's current
+clock time*, not derived from any punch data. That's fine and intentional
+(a fallback for marking someone with no machine data). What wasn't
+intentional: `upsertCheckOut()` silently called `upsertCheckIn()` first, so
+clicking "Check Out" for someone with zero records that day fabricated a
+same-instant check-in **and** check-out (0 hours, no warning). Fixed:
+`upsertCheckOut()` now refuses with a clear 400 ("No check-in recorded for
+this employee today — check in first") instead of fabricating one. Also
+added a live status line to the Record Attendance card — once an employee
+is picked, it now shows their actual check-in/check-out state for the
+selected date right there, instead of the card being a blind pair of action
+buttons with no visible current state.
+
+**Deployed:** migration verified against a scratch copy of the real DB
+(`working_hours.weekly_off_days` confirmed added with the `[0,6]` default)
+before deploying, same pattern as every prior schema change. Rebuilt,
+reinstalled, confirmed clean restart via `/health`.
+
+### 2026-09-03 — desktop admin account recovery (client literally locked themselves out)
+
+Client forgot their own EDGEFOLIO desktop login while testing. Traced the
+actual code: `forgot-password` only ever handled **employees** (APK users);
+approving any reset requires an already-authenticated admin — a genuine,
+total lockout with **no code path back in** if the sole admin forgets their
+password. Same risk applies to any real client, not just this dev machine.
+Unblocked the client immediately by hand (direct DB password reset, same
+scrypt hash format `loginHandler` expects, verified before writing), then
+built the real fix:
+
+1. **Recovery code, self-service, fully offline.** New
+   `users.recovery_code_hash` column. `setupHandler` now generates a
+   `XXXX-XXXX-XXXX-XXXX` code at first-run setup, returns it **exactly
+   once** in the setup response, and the frontend (`LoginPage.jsx`) forces
+   it onto its own screen — copy button, explicit "I've saved this"
+   checkbox — before letting the admin into the app at all, holding the
+   login token pending until they confirm. New public endpoint
+   `POST /auth/reset-with-recovery-code` (`email` + `recoveryCode` +
+   `newPassword`) verifies against the hash and resets the password — no
+   admin session, no internet, no employee record required. New "Forgot
+   password?" link on the sign-in screen opens this flow. Same
+   generic-error pattern as normal login (doesn't reveal whether the email
+   exists or the code was wrong).
+2. **Fallback for when the recovery code is *also* lost** — a support-side
+   tool, not self-service. `EDGE/scripts/reset-admin-password.js` (bundled
+   inside `app.asar` via `files`, so `require('better-sqlite3')` resolves
+   through the same `asarUnpack`'d native module every other backend code
+   uses — proven pattern, same as running `backend/index.js` directly
+   earlier this session) + `RESET-ADMIN-PASSWORD.bat` (bundled via
+   `extraResources` as a **loose file outside the asar**, specifically so
+   it's a real double-clickable file at
+   `C:\Program Files\EDGEFOLIO\resources\RESET-ADMIN-PASSWORD.bat` — asar
+   contents aren't directly runnable from Explorer). Prompts for the
+   admin's email, sets `ELECTRON_RUN_AS_NODE=1`, runs the script through the
+   client's own installed `EDGEFOLIO.exe` (guarantees native-module ABI
+   match — a separately-distributed Node build would almost certainly
+   mismatch), prints a random new password to share with the client over
+   the phone/WhatsApp during a support session.
+
+**Verified for real, not just "should work":** ran the actual bundled
+`.bat`'s underlying command against the real installed app
+(`resources\app.asar\scripts\reset-admin-password.js`) — it found the real
+`users` table, reset the password, and a follow-up `POST /auth/login` with
+the new password returned a real `200` with a valid JWT. Also re-verified
+the `recovery_code_hash` migration against a scratch copy of the real DB
+before deploying.
+
+**Not yet done:** rate-limiting on `POST /auth/reset-with-recovery-code`
+(the code is a 64-bit random secret, cryptographically fine, but there's no
+brute-force throttle — low priority for a local/offline app, worth
+revisiting if this ever gets exposed beyond localhost).
+
+### 2026-09-03, later — real Run Payroll bug: always ran the wrong month
+
+Client asked directly how to actually run payroll for August, now that its
+attendance data is corrected — surfaced a genuine bug. `handleRunPayroll` in
+`PayrollPage.jsx` always used `new Date().toISOString().slice(0,7)` — **the
+current calendar month**, no way to pick another one. Run on any day in
+September, "Run Payroll" would process September (3 days in, no meaningful
+attendance yet), never August, which is what the normal real-world workflow
+actually needs (payroll for the month that just ended, run at the start of
+the next month — confirmed this is standard practice earlier in this same
+session when the client asked how professional payroll systems handle it).
+
+Fixed: "Run Payroll" now opens a month picker, defaulting to **last month**
+(the just-completed one) instead of the current one. Explicit warning if the
+current, still-in-progress month is selected (LOP would be wrong — the
+month isn't over). Also warns if the chosen month was already run, since
+`createPayrollRun` is write-once per `monthKey` — running it again returns
+the existing run as-is, it does **not** reprocess or pick up attendance
+corrections made since. No backend change needed — `runMonthlyPayroll`
+already accepted any `monthKey`, the frontend just never gave the user a
+way to choose one.
+
+**Known limitation, flagged not fixed:** no way to force a recompute of an
+already-run month if attendance gets corrected afterward. Not an issue for
+this client's August run (never successfully run before today, since there
+was no way to target August at all) but worth building if corrections after
+a run turn out to be a real recurring need — would need a delete-and-rerun
+or explicit "reprocess" action, since the current one-shot design doesn't
+support it.
+
+**Deployed:** rebuilt, reinstalled, confirmed clean restart via `/health`.

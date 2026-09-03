@@ -259,6 +259,17 @@ function listBatches() {
   `).all();
 }
 
+// Removes a staged batch entirely — for duplicate/accidental re-uploads (people
+// retry when a first attempt doesn't look right, same file staged repeatedly).
+// Only removes staging rows, never touches attendance_records — a batch whose
+// records were already committed leaves the real attendance data untouched,
+// this just cleans up the now-redundant staging bookkeeping for it.
+function deleteBatch(batchId) {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM machine_import_staging WHERE import_batch = ?').run(batchId);
+  return { batchId, deleted: result.changes };
+}
+
 module.exports = {
   stageRecords,
   listUnmappedIds,
@@ -268,4 +279,5 @@ module.exports = {
   commitMappedRecords,
   getStagingSummary,
   listBatches,
+  deleteBatch,
 };

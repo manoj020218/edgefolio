@@ -33,6 +33,7 @@ function serializeAttendance(row) {
     checkIn: row.check_in,
     checkOut: row.check_out,
     status: row.status,
+    leaveType: row.leave_type || null,
     hoursWorked: Number(row.hours_worked || 0),
     faceMatch: Number(row.face_match || 0),
     employeeName: row.employeeName || row.employee_name || null,

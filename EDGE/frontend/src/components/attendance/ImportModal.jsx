@@ -12,24 +12,24 @@ import React, { useState, useRef, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   X, Upload, Wifi, Puzzle, ChevronRight, AlertCircle,
-  CheckCircle, Loader2, Plug, RefreshCw, Database, ArrowRight,
+  CheckCircle, Loader2, Plug, RefreshCw, Database, ArrowRight, Trash2, UserPlus,
 } from 'lucide-react'
 import { Button } from '../atomic'
 import {
   importAttendance, testMachineConnection, pullFromMachine,
   getJenixSheets,
   machineImportAlog, machineImportJenix,
-  getMachineImportBatches, getMachineImportUnmapped,
+  getMachineImportBatches, deleteMachineImportBatch, getMachineImportUnmapped,
   getMachineImportMappings, saveMachineImportMappings,
   commitMachineImport,
-  getEmployees,
+  getEmployees, createEmployee, getDepartments, createDepartment,
 } from '../../services/api'
 
 // ─── Plugin Registry ──────────────────────────────────────────────────────────
 const PLUGINS = [
   { id: 'zkteco',    name: 'ZK Teco / ZKSoftware',    models: 'F18, F22, K40, K20, ZK100, ZK200, MA300, MB10, iClock…', emoji: '🔵', fileFormats: ['xls','xlsx','csv','dat','txt'], network: true,  networkNote: 'Built-in — no extra software needed', status: 'official' },
   { id: 'jenix',     name: 'Jenix OEM Devices',        models: 'All Jenix-branded attendance machines with XLS export',   emoji: '🟢', fileFormats: ['xls','xlsx'],                   network: false, networkNote: 'XLS import → stage → map IDs',        status: 'official' },
-  { id: 'realtime',  name: 'Realtime Biometrics',      models: 'M3, M5, S922, T12 — ALOG export',                        emoji: '🟠', fileFormats: ['txt'],                          network: false, networkNote: 'ALOG TXT → stage → map IDs',          status: 'official' },
+  { id: 'realtime',  name: 'Realtime Biometrics',      models: 'M3, M5, S922, T12 — ALOG/AGL export',                     emoji: '🟠', fileFormats: ['txt'],                          network: false, networkNote: 'ALOG/AGL TXT → stage → map IDs',      status: 'official' },
   { id: 'essl',      name: 'ESSL Security',            models: 'E9C, E21, E990, iFace series',                            emoji: '🟠', fileFormats: ['csv','txt'], network: false, status: 'coming' },
   { id: 'matrix',    name: 'Matrix Cosec',             models: 'COSEC DOOR, COSEC VEGA',                                  emoji: '🟣', fileFormats: ['csv'],       network: false, status: 'coming' },
   { id: 'hikvision', name: 'Hikvision',                models: 'DS-K1T671, DS-K1T804, face devices',                     emoji: '🔴', fileFormats: ['csv','xlsx'], network: false, status: 'coming' },
@@ -484,16 +484,16 @@ function AlogImportPanel({ onGoToMachineImport }) {
       <ErrBox msg={err} />
       {!result ? (
         <div className="space-y-3">
-          <p className="text-slate-400 text-sm">Upload an <strong>ALOG TXT</strong> file exported from a <strong>Realtime Biometrics</strong> machine (tab-delimited, UTF-16 LE). Records are staged safely — no FK errors.</p>
+          <p className="text-slate-400 text-sm">Upload an <strong>ALOG/AGL TXT</strong> file exported from a <strong>Realtime Biometrics</strong> machine (tab-delimited). Records are staged safely — no FK errors.</p>
           <div onClick={() => fileRef.current?.click()} className="border-2 border-dashed border-slate-600 hover:border-orange-500 rounded-xl p-10 text-center cursor-pointer transition-colors">
             {staging ? <Loader2 className="w-8 h-8 text-slate-400 mx-auto animate-spin" /> : <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />}
-            <p className="text-slate-300 font-medium">{staging ? 'Staging records…' : 'Click to select ALOG TXT file'}</p>
-            <p className="text-slate-500 text-xs mt-1">Realtime_Alog_xxx.txt</p>
+            <p className="text-slate-300 font-medium">{staging ? 'Staging records…' : 'Click to select ALOG/AGL TXT file'}</p>
+            <p className="text-slate-500 text-xs mt-1">e.g. Realtime_Alog_xxx.txt or AGL_001.TXT</p>
             <input ref={fileRef} type="file" accept=".txt,.log,.dat" className="hidden" onChange={handleFile} disabled={staging} />
           </div>
           <div className="p-3 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-400 space-y-1">
-            <p className="text-slate-300 font-semibold">Expected ALOG columns:</p>
-            <p>No · TMNo · <strong className="text-sky-400">EnNo</strong> · Name · GMNo · Mode · In/Out · Antipass · ProxyWork · <strong className="text-sky-400">DateTime</strong></p>
+            <p className="text-slate-300 font-semibold">Columns are matched by header name, so layout varies by device:</p>
+            <p>Needs at minimum <strong className="text-sky-400">EnNo</strong> and <strong className="text-sky-400">DateTime</strong> columns — Name, TMNo and an In/Out/Mode column are used when present.</p>
           </div>
         </div>
       ) : (
@@ -541,6 +541,14 @@ function MachineImportTab({ onImported }) {
   const [err, setErr]             = useState('')
   const [success, setSuccess]     = useState('')
   const [selectedBatch, setSelectedBatch] = useState(null)
+  const [deletingBatch, setDeletingBatch] = useState(null)
+  const [departments, setDepartments] = useState([])
+  const [newDeptForRow, setNewDeptForRow] = useState(null) // machineEmpId currently entering a new department name
+  const [newDeptName, setNewDeptName] = useState('')
+  const [creatingDept, setCreatingDept] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkRows, setBulkRows] = useState([])   // [{machineEmpId, name, department, salary}]
+  const [savingBulk, setSavingBulk] = useState(false)
 
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -585,6 +593,90 @@ function MachineImportTab({ onImported }) {
     finally { setSaving(false) }
   }
 
+  // The machine already sends the employee's name — there's no reason to make
+  // HR pre-create every employee by hand before import can proceed. Opens an
+  // editable grid (one row per still-unmapped machine ID, name pre-filled from
+  // the machine) for the two fields the backend actually requires — department
+  // and salary — then creates + maps all of them in one save. Anything already
+  // selected (manual pick or an existing-employee auto match) is left alone —
+  // this only covers the gaps. Everything else (bank details, designation…)
+  // stays editable from Employees afterwards, same as any import-then-enrich
+  // flow — this grid is deliberately just the two compulsory fields.
+  const handleOpenBulkCreate = async () => {
+    const rowsNeedingNewEmployee = unmapped.filter((row) => !mappings[row.machine_emp_id])
+    if (!rowsNeedingNewEmployee.length) {
+      setErr('Everything is already mapped to an existing employee.')
+      return
+    }
+    setErr('')
+    if (!departments.length) {
+      try { const dRes = await getDepartments(); setDepartments(dRes.data || []) } catch { /* datalist is optional */ }
+    }
+    setBulkRows(rowsNeedingNewEmployee.map((row) => ({
+      machineEmpId: row.machine_emp_id,
+      name: (row.machine_name || '').trim() || `Machine ID ${row.machine_emp_id}`,
+      department: '',
+      salary: '',
+    })))
+    setBulkOpen(true)
+  }
+
+  const updateBulkRow = (machineEmpId, field, value) => {
+    setBulkRows((rows) => rows.map((r) => (r.machineEmpId === machineEmpId ? { ...r, [field]: value } : r)))
+  }
+
+  // Registers the new department properly (Settings → Departments, and every
+  // other department dropdown in the app) rather than leaving it as a free-text
+  // string that only exists on this one employee — so HR doesn't have to leave
+  // this screen to set up a department that doesn't exist yet.
+  const handleCreateDepartment = async (machineEmpId) => {
+    const name = newDeptName.trim()
+    if (!name) return
+    setCreatingDept(true); setErr('')
+    try {
+      const res = await createDepartment({ name })
+      setDepartments((d) => [...d, res.data])
+      updateBulkRow(machineEmpId, 'department', res.data.name)
+      setNewDeptForRow(null); setNewDeptName('')
+    } catch (e) { setErr(e.message) }
+    finally { setCreatingDept(false) }
+  }
+
+  const handleSaveBulkCreate = async () => {
+    const missing = bulkRows.filter((r) => !r.department.trim() || r.salary === '' || Number.isNaN(Number(r.salary)))
+    if (missing.length) { setErr(`Fill in department and salary for all ${bulkRows.length} rows before saving.`); return }
+    if (bulkRows.some((r) => Number(r.salary) < 0)) { setErr('Salary cannot be negative.'); return }
+    setSavingBulk(true); setErr(''); setSuccess('')
+    try {
+      const created = {}
+      for (const row of bulkRows) {
+        const res = await createEmployee({ name: row.name, department: row.department.trim(), salary: Number(row.salary) })
+        created[row.machineEmpId] = res.data.id
+      }
+      const allPairs = unmapped.map((row) => ({
+        machineEmpId: row.machine_emp_id,
+        employeeId: mappings[row.machine_emp_id] || created[row.machine_emp_id],
+      })).filter((p) => p.employeeId)
+      await saveMachineImportMappings({ mappings: allPairs })
+      setSuccess(`Created ${bulkRows.length} new employee${bulkRows.length !== 1 ? 's' : ''} from the machine data and mapped all ${allPairs.length} machine IDs.`)
+      setBulkOpen(false); setBulkRows([])
+      load(true)
+    } catch (e) { setErr(e.message) }
+    finally { setSavingBulk(false) }
+  }
+
+  const handleDeleteBatch = async (batchId) => {
+    if (!window.confirm(`Delete batch ${batchId}? This removes it from the import queue — it does not affect any attendance already committed from it.`)) return
+    setDeletingBatch(batchId); setErr(''); setSuccess('')
+    try {
+      await deleteMachineImportBatch(batchId)
+      if (selectedBatch === batchId) setSelectedBatch(null)
+      setSuccess('Batch deleted')
+      load(true)
+    } catch (e) { setErr(e.message) }
+    finally { setDeletingBatch(null) }
+  }
+
   const handleCommit = async () => {
     setCommitting(true); setErr(''); setSuccess('')
     try {
@@ -614,7 +706,7 @@ function MachineImportTab({ onImported }) {
           <Button size="sm" variant="secondary" icon={RefreshCw} onClick={() => load(true)}>Refresh</Button>
         </div>
         {batches.length === 0 ? (
-          <p className="text-slate-500 text-sm py-4 text-center">No batches yet. Import a Jenix or ALOG file first.</p>
+          <p className="text-slate-500 text-sm py-4 text-center">No batches yet. Import a Jenix or ALOG/AGL file first.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -629,10 +721,15 @@ function MachineImportTab({ onImported }) {
                     <td className="py-2 px-2 text-sky-400">{b.mapped}</td>
                     <td className="py-2 px-2 text-green-400">{b.committed}</td>
                     <td className="py-2 px-2 text-slate-500 text-xs">{b.imported_at?.slice(0,10)}</td>
-                    <td className="py-2 px-2 text-right">
+                    <td className="py-2 px-2 text-right whitespace-nowrap">
                       <button onClick={() => setSelectedBatch(b.import_batch === selectedBatch ? null : b.import_batch)}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${selectedBatch === b.import_batch ? 'border-sky-500 text-sky-400 bg-sky-900/20' : 'border-slate-600 text-slate-400 hover:border-slate-500'}`}>
                         {selectedBatch === b.import_batch ? 'Deselect' : 'Select'}
+                      </button>
+                      <button onClick={() => handleDeleteBatch(b.import_batch)} disabled={deletingBatch === b.import_batch}
+                        title="Delete this batch"
+                        className="ml-1.5 inline-flex items-center rounded border border-red-800/60 p-1 text-red-400 hover:bg-red-900/30 disabled:opacity-50">
+                        {deletingBatch === b.import_batch ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                       </button>
                     </td>
                   </tr>
@@ -655,6 +752,73 @@ function MachineImportTab({ onImported }) {
               )}
             </p>
           </div>
+
+          {!bulkOpen && unmapped.some((row) => !mappings[row.machine_emp_id]) && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-sky-700/40 bg-sky-900/10 p-3">
+              <UserPlus className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-slate-300 text-xs">
+                  The machine already sent a name for everyone below with no match — you don&rsquo;t have to add them to
+                  Employees by hand first. Fill in just department and salary (the only two required fields) for each,
+                  and they&rsquo;ll be created and mapped in one go.
+                </p>
+                <Button size="sm" variant="secondary" icon={UserPlus} onClick={() => void handleOpenBulkCreate()} className="mt-2">
+                  Create Employees &amp; Map Remaining
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {bulkOpen && (
+            <div className="rounded-lg border border-sky-700/40 bg-sky-900/10 p-3 space-y-3">
+              <p className="text-slate-300 text-xs font-semibold">
+                {bulkRows.length} new employee{bulkRows.length !== 1 ? 's' : ''} — department &amp; salary required
+              </p>
+              <div className="max-h-56 overflow-y-auto pr-1 space-y-2">
+                {bulkRows.map((row) => (
+                  <div key={row.machineEmpId} className="bg-slate-900/60 border border-slate-700 rounded-lg px-2.5 py-1.5 space-y-1.5">
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                      <input value={row.name} onChange={(e) => updateBulkRow(row.machineEmpId, 'name', e.target.value)}
+                        className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+                      <select
+                        value={newDeptForRow === row.machineEmpId ? '__new__' : row.department}
+                        onChange={(e) => {
+                          if (e.target.value === '__new__') { setNewDeptForRow(row.machineEmpId); setNewDeptName('') }
+                          else { setNewDeptForRow(null); updateBulkRow(row.machineEmpId, 'department', e.target.value) }
+                        }}
+                        className="w-36 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none"
+                      >
+                        <option value="">— Department —</option>
+                        {departments.map((d) => <option key={d.dept_id || d.name} value={d.name}>{d.name}</option>)}
+                        <option value="__new__">+ Create New Department</option>
+                      </select>
+                      <input type="number" min="0" placeholder="Salary" value={row.salary}
+                        onChange={(e) => updateBulkRow(row.machineEmpId, 'salary', e.target.value)}
+                        className="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+                    </div>
+                    {newDeptForRow === row.machineEmpId && (
+                      <div className="flex gap-2 items-center pl-0.5">
+                        <input autoFocus value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)}
+                          placeholder="New department name" onKeyDown={(e) => { if (e.key === 'Enter') handleCreateDepartment(row.machineEmpId) }}
+                          className="flex-1 bg-slate-800 border border-sky-600 rounded px-2 py-1.5 text-slate-100 text-sm focus:outline-none" />
+                        <Button size="sm" variant="primary" isLoading={creatingDept} onClick={() => handleCreateDepartment(row.machineEmpId)}>
+                          Add
+                        </Button>
+                        <button onClick={() => { setNewDeptForRow(null); setNewDeptName('') }}
+                          className="text-xs text-slate-400 hover:text-slate-200 px-1">Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={() => { setBulkOpen(false); setBulkRows([]) }}>Cancel</Button>
+                <Button size="sm" variant="primary" isLoading={savingBulk} onClick={handleSaveBulkCreate}>
+                  Save All ({bulkRows.length})
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {unmapped.map(row => (
               <div key={row.machine_emp_id} className="flex items-center gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
@@ -699,12 +863,18 @@ function MachineImportTab({ onImported }) {
       )}
 
       {unmapped.length === 0 && batches.length > 0 && (
-        <p className="text-green-400 text-sm text-center py-2">✓ All machine IDs are mapped.</p>
+        <p className="text-green-400 text-sm text-center py-2">
+          ✓ All machine IDs are mapped — commit below to write the attendance records. ↓
+        </p>
       )}
 
       {/* Commit */}
       {pendingBatches.length > 0 && (
-        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 space-y-3">
+        <div className={`bg-slate-900/50 rounded-lg p-4 space-y-3 transition-colors ${
+          unmapped.length === 0
+            ? 'border-2 border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.15)]'
+            : 'border border-slate-700'
+        }`}>
           <div>
             <h3 className="text-base font-semibold text-slate-200">Commit to Attendance Records</h3>
             <p className="text-slate-500 text-xs mt-0.5">
@@ -780,7 +950,7 @@ const TABS = [
   { id: 'file',          label: 'File Import',   icon: Upload   },
   { id: 'network',       label: 'Network Pull',  icon: Wifi     },
   { id: 'jenix',         label: 'Jenix OEM',     icon: Plug     },
-  { id: 'alog',          label: 'ALOG (Realtime)',icon: Upload   },
+  { id: 'alog',          label: 'ALOG/AGL (Realtime)', icon: Upload },
   { id: 'machine-import',label: 'Machine Import', icon: Database },
   { id: 'plugins',       label: 'Plugins',       icon: Puzzle   },
 ]
@@ -795,7 +965,7 @@ export function ImportModal({ onClose, onImported }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-100">Import Attendance</h2>
-            <p className="text-xs text-slate-400 mt-0.5">ZK Teco · Jenix OEM · Realtime ALOG · CSV / JSON / DAT</p>
+            <p className="text-xs text-slate-400 mt-0.5">ZK Teco · Jenix OEM · Realtime ALOG/AGL · CSV / JSON / DAT</p>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700"><X className="w-5 h-5" /></button>
         </div>

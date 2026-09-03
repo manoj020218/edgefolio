@@ -300,7 +300,7 @@ export const EmployeesPage = () => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input label="Phone" placeholder="+91-98765-43210" value={formData.phone} onChange={f('phone')} />
-            <Input label="Salary (₹) *" type="number" placeholder="30000" value={formData.salary} onChange={f('salary')} />
+            <Input label="Salary (₹) *" type="number" min="0" placeholder="30000" value={formData.salary} onChange={f('salary')} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Select label="Department *" value={formData.department} onChange={f('department')}

@@ -194,6 +194,18 @@ export const PayrollPage = () => {
   const [selectedSlip, setSelectedSlip] = useState(null);
   const [showDisputes, setShowDisputes] = useState(false);
 
+  // Run Payroll modal state — was previously always "today's month" with no
+  // way to choose, which is wrong for the normal real-world workflow (run
+  // payroll for the month that JUST ENDED, at the start of the next month —
+  // e.g. running this on Sep 3 should default to processing August, not the
+  // three days of September that have happened so far).
+  const lastMonthKey = (() => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  })();
+  const thisMonthKey = new Date().toISOString().slice(0, 7);
+  const [runModal, setRunModal] = useState({ open: false, monthKey: lastMonthKey });
+
   // Bank Payment modal state
   const [bankModal, setBankModal]     = useState({ open: false, step: 'setup', batch: null, records: [], loading: false, error: '' });
   const [bankTemplates, setBankTemplates] = useState([]);
@@ -326,11 +338,12 @@ export const PayrollPage = () => {
   }, [currentRun?.monthKey]);
 
   const handleRunPayroll = async () => {
-    const monthKey = new Date().toISOString().slice(0, 7);
+    const monthKey = runModal.monthKey;
     setIsProcessing(true); setError('');
     try {
       const res = await runPayroll(monthKey);
-      setSuccess(`Payroll processed! ${res.data?.totalEmployees || 0} employees.`);
+      setSuccess(`Payroll processed for ${formatMonth(monthKey)}! ${res.data?.totalEmployees || 0} employees.`);
+      setRunModal({ open: false, monthKey: lastMonthKey });
       fetchRuns();
     } catch (err) { setError(err.message); }
     finally { setIsProcessing(false); }
@@ -381,8 +394,8 @@ export const PayrollPage = () => {
           )}
           <Button icon={RefreshCw} variant="secondary" onClick={() => { fetchRuns(); fetchDisputes(); }}>Refresh</Button>
           <Button icon={Landmark} variant="secondary" onClick={openBankModal}>Bank Payment</Button>
-          <Button icon={Play} variant="primary" isLoading={isProcessing} onClick={handleRunPayroll}>
-            {isProcessing ? 'Processing...' : 'Run Payroll'}
+          <Button icon={Play} variant="primary" onClick={() => setRunModal({ open: true, monthKey: lastMonthKey })}>
+            Run Payroll
           </Button>
         </div>
       </div>
@@ -541,6 +554,51 @@ export const PayrollPage = () => {
           )}
         </div>
       </Card>
+
+      {/* ── Run Payroll Modal ── */}
+      <Modal isOpen={runModal.open} onClose={() => setRunModal((p) => ({ ...p, open: false }))} title="Run Payroll" size="md">
+        <div className="space-y-4">
+          <p className="text-slate-400 text-sm">
+            Choose the month to process. This should normally be the month that just
+            <strong className="text-slate-200"> ended</strong> — run it once attendance for that
+            month is fully entered/corrected, not while it's still in progress.
+          </p>
+
+          <div>
+            <label className="text-sm text-slate-400 mb-1 block">Month</label>
+            <input
+              type="month"
+              value={runModal.monthKey}
+              max={thisMonthKey}
+              onChange={(e) => setRunModal((p) => ({ ...p, monthKey: e.target.value }))}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"
+            />
+          </div>
+
+          {runModal.monthKey === thisMonthKey && (
+            <div className="p-3 bg-amber-900/20 border border-amber-700/40 rounded-lg text-amber-300 text-sm">
+              {formatMonth(thisMonthKey)} is still in progress — attendance for the rest of the
+              month isn't in yet, so Loss-of-Pay days will be wrong if you run it now. Usually
+              you want last month ({formatMonth(lastMonthKey)}) instead.
+            </div>
+          )}
+
+          {runs.some((r) => r.monthKey === runModal.monthKey) && (
+            <div className="p-3 bg-sky-900/20 border border-sky-700/40 rounded-lg text-sky-300 text-sm">
+              Payroll for {formatMonth(runModal.monthKey)} was already run. Running it again
+              won't reprocess or pick up any attendance corrections made since — it returns the
+              existing run as-is.
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setRunModal((p) => ({ ...p, open: false }))} isFullWidth>Cancel</Button>
+            <Button variant="primary" icon={Play} isLoading={isProcessing} onClick={handleRunPayroll} isFullWidth>
+              Run for {formatMonth(runModal.monthKey)}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Bank Payment Modal ── */}
       <Modal isOpen={bankModal.open} onClose={() => setBankModal((p) => ({ ...p, open: false }))} title="Bank Payment Advice" size="2xl">
