@@ -12,6 +12,8 @@ Current support:
 - USB connect/disconnect with Android permission handoff
 - Raw byte writes over BLE and USB with transport-specific chunking
 - ESC/POS helpers for text, feed, cut, cash drawer, QR, and CODE128 barcodes
+- Printer profile helpers for normalized BLE/USB device settings
+- Bounded BLE auto-reconnect with surfaced connection state and last error details
 - Connection state and error events
 
 Planned public API:
@@ -75,6 +77,29 @@ await ThermalPrinter.write({ data: receipt });
 await ThermalPrinter.printText({ text: 'Quick text path\n', alignment: 'center' });
 await ThermalPrinter.printQRCode({ data: 'https://jenix.example/receipt/123', alignment: 'center', size: 6 });
 await ThermalPrinter.printBarcode({ data: 'INV-123', format: 'code128', alignment: 'center', width: 3 });
+```
+
+Profile helper example:
+
+```ts
+import {
+  ThermalPrinter,
+  createPrinterProfile,
+  profileToConnectionOptions,
+} from '@jenix/cap-thermal-printer';
+
+const profile = createPrinterProfile(device, {
+  paperWidth: 58,
+  charsPerLine: 32,
+  autoReconnect: true,
+  reconnectAttempts: 2,
+  reconnectDelayMs: 1500,
+});
+
+await ThermalPrinter.connect(profileToConnectionOptions(profile));
+
+const status = await ThermalPrinter.getStatus();
+// status.connectionState: disconnected | connecting | connected | disconnecting | reconnecting
 ```
 
 `printImage` remains reserved for a later phase. QR and barcode helpers currently support ASCII-only payloads.

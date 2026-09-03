@@ -2,7 +2,8 @@ import type { PluginListenerHandle } from '@capacitor/core';
 
 export type PrinterTransportType = 'ble' | 'usb';
 export type PrinterAlignment = 'left' | 'center' | 'right';
-export type PrinterConnectionState = 'disconnected' | 'connecting' | 'connected' | 'disconnecting';
+export type PrinterConnectionState = 'disconnected' | 'connecting' | 'connected' | 'disconnecting' | 'reconnecting';
+export type PrinterPaperWidth = 58 | 80;
 export type ScanStopReason = 'manual' | 'timeout' | 'restarted' | 'failed';
 export type PrinterErrorCode =
   | 'PERMISSION_DENIED'
@@ -17,6 +18,11 @@ export type PrinterErrorCode =
   | 'USB_ENDPOINT_NOT_FOUND'
   | 'UNSUPPORTED_OPERATION'
   | 'INVALID_ARGUMENT';
+
+export interface PrinterConnectionIssue {
+  code: PrinterErrorCode;
+  message: string;
+}
 
 export interface PrinterDevice {
   id: string;
@@ -49,6 +55,9 @@ export interface BleConnectionOptions {
   serviceUuid?: string;
   writeCharacteristicUuid?: string;
   timeoutMs?: number;
+  autoReconnect?: boolean;
+  reconnectAttempts?: number;
+  reconnectDelayMs?: number;
 }
 
 export interface UsbConnectionOptions {
@@ -66,7 +75,38 @@ export interface PrinterStatus {
   transport?: PrinterTransportType;
   device?: PrinterDevice;
   connectionState?: PrinterConnectionState;
+  reconnectAttempt?: number;
+  reconnectMaxAttempts?: number;
+  lastError?: PrinterConnectionIssue;
 }
+
+interface BasePrinterProfile {
+  id: string;
+  name: string;
+  transport: PrinterTransportType;
+  paperWidth?: PrinterPaperWidth;
+  charsPerLine?: number;
+  timeoutMs?: number;
+}
+
+export interface BlePrinterProfile extends BasePrinterProfile {
+  transport: 'ble';
+  deviceId: string;
+  serviceUuid?: string;
+  writeCharacteristicUuid?: string;
+  autoReconnect?: boolean;
+  reconnectAttempts?: number;
+  reconnectDelayMs?: number;
+}
+
+export interface UsbPrinterProfile extends BasePrinterProfile {
+  transport: 'usb';
+  deviceId?: string;
+  vendorId?: number;
+  productId?: number;
+}
+
+export type PrinterProfile = BlePrinterProfile | UsbPrinterProfile;
 
 export interface ScanStoppedEvent {
   reason: ScanStopReason;

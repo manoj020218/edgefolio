@@ -26,6 +26,7 @@ export * from './bytes';
 export * from './definitions';
 export * from './escpos';
 export * from './errors';
+export * from './profile';
 export * from './transport';
 
 class ThermalPrinterClient implements ThermalPrinterPlugin {

@@ -22,6 +22,7 @@ class UsbPrinterConnection(
     private var device: UsbPrinterDevice? = null
     private var usbConnection: UsbDeviceConnection? = null
     private var resolvedChannel: UsbResolvedChannel? = null
+    private var lastError: PrinterConnectionIssue? = null
     private var state = "disconnected"
 
     fun status() = synchronized(lock) {
@@ -29,6 +30,7 @@ class UsbPrinterConnection(
             connected = state == "connected" && usbConnection != null && resolvedChannel != null,
             connectionState = state,
             device = device,
+            lastError = lastError,
         )
     }
 
@@ -60,6 +62,8 @@ class UsbPrinterConnection(
             return
         }
         synchronized(lock) {
+            device = selectedDevice.copy(connected = false, permissionGranted = true)
+            lastError = null
             state = "connecting"
         }
         val resolved = resolveUsbChannel(usbDevice)
@@ -83,8 +87,9 @@ class UsbPrinterConnection(
             usbConnection = openedConnection
             resolvedChannel = channel
             device = selectedDevice.copy(connected = true, permissionGranted = true)
+            lastError = null
             state = "connected"
-            UsbConnectionSnapshot(true, "connected", device)
+            UsbConnectionSnapshot(true, "connected", device, lastError)
         }
         onSuccess(snapshot)
         listener.onConnected(snapshot)
@@ -93,14 +98,15 @@ class UsbPrinterConnection(
     fun disconnect(onComplete: () -> Unit) {
         val snapshot = synchronized(lock) {
             val wasConnected = state == "connected"
-            val disconnectedDevice = device?.copy(connected = false)
+            device = device?.copy(connected = false)
+            lastError = null
             state = "disconnecting"
             releaseConnectionLocked()
             state = "disconnected"
             if (!wasConnected) {
                 null
             } else {
-                UsbConnectionSnapshot(false, "disconnected", disconnectedDevice)
+                UsbConnectionSnapshot(false, "disconnected", device, lastError)
             }
         }
         snapshot?.let(listener::onDisconnected)
@@ -122,6 +128,9 @@ class UsbPrinterConnection(
                 .onFailure {
                     val message = it.message ?: "USB write failed."
                     val code = if (message.contains("connected", ignoreCase = true)) "NOT_CONNECTED" else "WRITE_FAILED"
+                    synchronized(lock) {
+                        lastError = PrinterConnectionIssue(code, message)
+                    }
                     onError(message, code)
                 }
         }
@@ -132,11 +141,12 @@ class UsbPrinterConnection(
             if (device?.id != deviceId || state != "connected") {
                 null
             } else {
-                val disconnectedDevice = device?.copy(connected = false, permissionGranted = false)
+                device = device?.copy(connected = false, permissionGranted = false)
+                lastError = PrinterConnectionIssue("CONNECTION_FAILED", "USB printer was detached.")
                 state = "disconnecting"
                 releaseConnectionLocked()
                 state = "disconnected"
-                UsbConnectionSnapshot(false, "disconnected", disconnectedDevice)
+                UsbConnectionSnapshot(false, "disconnected", device, lastError)
             }
         }
         if (snapshot == null) return
@@ -148,6 +158,8 @@ class UsbPrinterConnection(
         synchronized(lock) {
             state = "disconnected"
             releaseConnectionLocked()
+            device = null
+            lastError = null
         }
         executor.shutdownNow()
     }
@@ -182,6 +194,8 @@ class UsbPrinterConnection(
     private fun failConnect(message: String, code: String, onError: (String, String) -> Unit) {
         synchronized(lock) {
             state = "disconnected"
+            device = device?.copy(connected = false)
+            lastError = PrinterConnectionIssue(code, message)
             releaseConnectionLocked()
         }
         onError(message, code)
@@ -195,6 +209,5 @@ class UsbPrinterConnection(
         usbConnection?.close()
         usbConnection = null
         resolvedChannel = null
-        device = null
     }
 }

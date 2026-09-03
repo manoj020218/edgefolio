@@ -12,6 +12,7 @@ data class UsbConnectionSnapshot(
     val connected: Boolean,
     val connectionState: String,
     val device: UsbPrinterDevice?,
+    val lastError: PrinterConnectionIssue? = null,
 )
 
 data class UsbResolvedChannel(
@@ -59,6 +60,7 @@ fun buildUsbStatusPayload(snapshot: UsbConnectionSnapshot) = JSObject().apply {
     put("transport", "usb")
     put("connectionState", snapshot.connectionState)
     snapshot.device?.let { put("device", it.toJs()) }
+    putLastError(snapshot.lastError)
 }
 
 fun buildUsbStatusPayload(

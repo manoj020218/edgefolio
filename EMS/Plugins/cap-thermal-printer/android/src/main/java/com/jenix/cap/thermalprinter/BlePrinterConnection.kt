@@ -35,10 +35,12 @@ class BlePrinterConnection(
     private val handler = Handler(Looper.getMainLooper())
     private val disconnectCallbacks = mutableListOf<() -> Unit>()
     private val writeSession = BleWriteSession()
-    private val connectTimeout = Runnable { failConnect("BLE connection timed out.", "CONNECTION_TIMEOUT") }
+    private val connectTimeout = Runnable { failConnectionAttempt("BLE connection timed out.", "CONNECTION_TIMEOUT") }
     private val writeTimeout = Runnable { failActiveWrite("BLE write timed out.", "WRITE_FAILED") }
     private val disconnectTimeout = Runnable { finishDisconnect(notify = device?.connected == true) }
+    private val reconnectRunnable = Runnable { attemptReconnect() }
     private var activeConnect: PendingConnect? = null
+    private var sessionConfig: BleConnectConfig? = null
     private var connectConfig: BleConnectConfig? = null
     private var gatt: BluetoothGatt? = null
     private var device: BlePrinterDevice? = null
@@ -46,8 +48,17 @@ class BlePrinterConnection(
     private var disconnectRequested = false
     private var mtu = BLE_DEFAULT_MTU
     private var state = "disconnected"
+    private var reconnectAttempt = 0
+    private var lastError: PrinterConnectionIssue? = null
 
-    fun status() = BleConnectionSnapshot(connected = isConnected(), connectionState = state, device = device)
+    fun status() = BleConnectionSnapshot(
+        connected = isConnected(),
+        connectionState = state,
+        device = device,
+        reconnectAttempt = reconnectAttempt.takeIf { it > 0 },
+        reconnectMaxAttempts = sessionConfig?.takeIf { it.autoReconnect }?.reconnectAttempts,
+        lastError = lastError,
+    )
 
     fun isConnected(): Boolean = state == "connected" && gatt != null && writeCharacteristic != null
 
@@ -59,7 +70,8 @@ class BlePrinterConnection(
         onError: (String, String) -> Unit,
     ) {
         when {
-            state == "connecting" || state == "disconnecting" -> return onError("BLE connection already in progress.", "CONNECTION_FAILED")
+            state == "connecting" || state == "disconnecting" || state == "reconnecting" ->
+                return onError("BLE connection already in progress.", "CONNECTION_FAILED")
             state == "connected" && device?.id == config.deviceId -> return onSuccess(status())
             state == "connected" -> return onError("Disconnect the current printer before connecting another.", "CONNECTION_FAILED")
         }
@@ -74,17 +86,21 @@ class BlePrinterConnection(
             onError("deviceId is not a valid BLE address.", "INVALID_ARGUMENT")
             return
         }
+
         disconnectRequested = false
+        sessionConfig = config
         connectConfig = config
         activeConnect = PendingConnect(onSuccess, onError)
         device = scannedDevice?.copy(connected = false) ?: BlePrinterDevice(remoteDevice.address, remoteDevice.name, null, null)
         state = "connecting"
+        reconnectAttempt = 0
+        lastError = null
         mtu = BLE_DEFAULT_MTU
         writeCharacteristic = null
         cancelTimers()
         gatt = openGatt(remoteDevice)
         if (gatt == null) {
-            failConnect("BLE connection could not be started.", "CONNECTION_FAILED")
+            failInitialConnect("BLE connection could not be started.", "CONNECTION_FAILED")
             return
         }
         handler.postDelayed(connectTimeout, config.timeoutMs.toLong())
@@ -92,8 +108,14 @@ class BlePrinterConnection(
 
     @SuppressLint("MissingPermission")
     fun disconnect(onComplete: () -> Unit) {
+        if (state == "reconnecting") {
+            disconnectRequested = true
+            disconnectCallbacks += onComplete
+            finishDisconnect(notify = device != null, clearSessionConfig = true, clearLastError = true)
+            return
+        }
         if (state == "disconnected" || gatt == null) {
-            finishDisconnect(notify = false)
+            finishDisconnect(notify = false, clearSessionConfig = true, clearLastError = true)
             onComplete()
             return
         }
@@ -102,6 +124,7 @@ class BlePrinterConnection(
         state = "disconnecting"
         handler.removeCallbacks(connectTimeout)
         handler.removeCallbacks(writeTimeout)
+        handler.removeCallbacks(reconnectRunnable)
         gatt?.disconnect()
         handler.removeCallbacks(disconnectTimeout)
         handler.postDelayed(disconnectTimeout, BLE_DISCONNECT_TIMEOUT_MS)
@@ -114,9 +137,12 @@ class BlePrinterConnection(
         activeConnect = null
         closeGatt()
         device = null
+        sessionConfig = null
         connectConfig = null
         disconnectRequested = false
         state = "disconnected"
+        reconnectAttempt = 0
+        lastError = null
         mtu = BLE_DEFAULT_MTU
     }
 
@@ -138,17 +164,44 @@ class BlePrinterConnection(
         return device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
     }
 
-    private fun failConnect(message: String, code: String) {
+    private fun failConnectionAttempt(message: String, code: String) {
+        if (state == "reconnecting") {
+            failReconnectAttempt(message, code)
+            return
+        }
+        failInitialConnect(message, code)
+    }
+
+    private fun failInitialConnect(message: String, code: String) {
         cancelTimers()
         val pendingConnect = activeConnect.also { activeConnect = null }
         closeGatt()
         writeSession.clear()
         connectConfig = null
-        device = null
+        device = device?.copy(connected = false)
         disconnectRequested = false
         state = "disconnected"
+        reconnectAttempt = 0
+        lastError = PrinterConnectionIssue(code, message)
         mtu = BLE_DEFAULT_MTU
         pendingConnect?.onError(message, code)
+        listener.onConnectionError(message, code)
+    }
+
+    private fun failReconnectAttempt(message: String, code: String) {
+        cancelTimers()
+        closeGatt()
+        writeSession.rejectAll("Printer disconnected.", "NOT_CONNECTED")
+        connectConfig = null
+        device = device?.copy(connected = false)
+        disconnectRequested = false
+        state = "disconnected"
+        lastError = PrinterConnectionIssue(code, message)
+        mtu = BLE_DEFAULT_MTU
+        if (scheduleReconnect(message, code)) {
+            return
+        }
+        finishDisconnect(notify = true)
         listener.onConnectionError(message, code)
     }
 
@@ -156,18 +209,27 @@ class BlePrinterConnection(
         notify: Boolean,
         pendingConnectMessage: String = "BLE connection cancelled.",
         pendingConnectCode: String = "CONNECTION_FAILED",
+        clearSessionConfig: Boolean = false,
+        clearLastError: Boolean = false,
     ) {
         cancelTimers()
-        val snapshot = BleConnectionSnapshot(false, "disconnected", device?.copy(connected = false))
         writeSession.rejectAll("Printer disconnected.", "NOT_CONNECTED")
         activeConnect?.onError(pendingConnectMessage, pendingConnectCode)
         activeConnect = null
         closeGatt()
         connectConfig = null
-        device = null
+        device = device?.copy(connected = false)
         disconnectRequested = false
         state = "disconnected"
         mtu = BLE_DEFAULT_MTU
+        if (clearLastError) {
+            lastError = null
+        }
+        if (clearSessionConfig) {
+            sessionConfig = null
+            reconnectAttempt = 0
+        }
+        val snapshot = status()
         disconnectCallbacks.toList().forEach { it() }
         disconnectCallbacks.clear()
         if (notify) {
@@ -176,24 +238,85 @@ class BlePrinterConnection(
     }
 
     private fun handleConnected() {
-        connectConfig ?: return failConnect("BLE connection state was lost.", "CONNECTION_FAILED")
-        val activeGatt = gatt ?: return failConnect("BLE connection state was lost.", "CONNECTION_FAILED")
+        connectConfig ?: return failConnectionAttempt("BLE connection state was lost.", "CONNECTION_FAILED")
+        val activeGatt = gatt ?: return failConnectionAttempt("BLE connection state was lost.", "CONNECTION_FAILED")
         if (!activeGatt.requestMtu(BLE_REQUESTED_MTU) && !activeGatt.discoverServices()) {
-            failConnect("BLE service discovery could not start.", "CONNECTION_FAILED")
+            failConnectionAttempt("BLE service discovery could not start.", "CONNECTION_FAILED")
         }
     }
 
     private fun completeConnection(resolved: BleResolvedCharacteristic) {
         cancelTimers()
-        val pendingConnect = activeConnect ?: return
         writeCharacteristic = resolved.characteristic
         state = "connected"
-        device = device?.copy(connected = true, serviceUuid = resolved.serviceUuid, writeCharacteristicUuid = resolved.characteristic.uuid.toString())
+        device = device?.copy(
+            connected = true,
+            serviceUuid = resolved.serviceUuid,
+            writeCharacteristicUuid = resolved.characteristic.uuid.toString(),
+        )
         connectConfig = null
+        reconnectAttempt = 0
+        lastError = null
         val snapshot = status()
-        activeConnect = null
-        pendingConnect.onSuccess(snapshot)
+        val pendingConnect = activeConnect.also { activeConnect = null }
+        pendingConnect?.onSuccess(snapshot)
         listener.onConnected(snapshot)
+    }
+
+    private fun beginReconnect(message: String, code: String): Boolean {
+        cancelTimers()
+        writeSession.rejectAll("Printer disconnected.", "NOT_CONNECTED")
+        closeGatt()
+        connectConfig = null
+        device = device?.copy(connected = false)
+        disconnectRequested = false
+        state = "disconnected"
+        mtu = BLE_DEFAULT_MTU
+        return scheduleReconnect(message, code)
+    }
+
+    private fun scheduleReconnect(message: String, code: String): Boolean {
+        val config = sessionConfig ?: return false
+        if (!config.autoReconnect || reconnectAttempt >= config.reconnectAttempts) {
+            lastError = PrinterConnectionIssue(code, message)
+            return false
+        }
+        reconnectAttempt += 1
+        state = "reconnecting"
+        lastError = PrinterConnectionIssue(code, "$message Reconnecting ($reconnectAttempt/${config.reconnectAttempts}).")
+        listener.onConnectionError(lastError?.message ?: message, code)
+        handler.postDelayed(reconnectRunnable, config.reconnectDelayMs.toLong())
+        return true
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun attemptReconnect() {
+        if (state != "reconnecting") {
+            return
+        }
+        val config = sessionConfig ?: return finishDisconnect(notify = device != null)
+        val adapter = bluetoothManager?.adapter
+        if (adapter?.isEnabled != true) {
+            failReconnectAttempt("Bluetooth is disabled.", "UNSUPPORTED_OPERATION")
+            return
+        }
+        val remoteDevice = try {
+            adapter.getRemoteDevice(config.deviceId)
+        } catch (_: IllegalArgumentException) {
+            failReconnectAttempt("deviceId is not a valid BLE address.", "INVALID_ARGUMENT")
+            return
+        }
+        connectConfig = config
+        mtu = BLE_DEFAULT_MTU
+        writeCharacteristic = null
+        device = device?.copy(connected = false) ?: BlePrinterDevice(remoteDevice.address, remoteDevice.name, null, null)
+        closeGatt()
+        gatt = openGatt(remoteDevice)
+        if (gatt == null) {
+            failReconnectAttempt("BLE connection could not be restarted.", "CONNECTION_FAILED")
+            return
+        }
+        handler.postDelayed(connectTimeout, config.timeoutMs.toLong())
     }
 
     @SuppressLint("MissingPermission")
@@ -239,6 +362,7 @@ class BlePrinterConnection(
         handler.removeCallbacks(connectTimeout)
         handler.removeCallbacks(writeTimeout)
         handler.removeCallbacks(disconnectTimeout)
+        handler.removeCallbacks(reconnectRunnable)
     }
 
     fun onConnectionStateChanged(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -246,15 +370,27 @@ class BlePrinterConnection(
         when {
             status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED -> handleConnected()
             newState == BluetoothProfile.STATE_DISCONNECTED -> {
-                val wasConnected = state == "connected" || state == "disconnecting"
-                val unexpected = !disconnectRequested && state != "disconnected"
-                val message = if (status == BluetoothGatt.GATT_SUCCESS) "BLE printer disconnected." else "BLE connection failed with status $status."
-                finishDisconnect(
-                    notify = wasConnected,
-                    pendingConnectMessage = if (disconnectRequested) "BLE connection cancelled." else message,
-                    pendingConnectCode = "CONNECTION_FAILED",
-                )
-                if (unexpected) listener.onConnectionError(message, "CONNECTION_FAILED")
+                val message = if (status == BluetoothGatt.GATT_SUCCESS) {
+                    "BLE printer disconnected."
+                } else {
+                    "BLE connection failed with status $status."
+                }
+                when {
+                    disconnectRequested || state == "disconnecting" -> finishDisconnect(
+                        notify = device?.connected == true,
+                        clearSessionConfig = true,
+                        clearLastError = true,
+                    )
+                    state == "connected" -> {
+                        if (!beginReconnect(message, "CONNECTION_FAILED")) {
+                            lastError = PrinterConnectionIssue("CONNECTION_FAILED", message)
+                            finishDisconnect(notify = true)
+                            listener.onConnectionError(message, "CONNECTION_FAILED")
+                        }
+                    }
+                    state == "reconnecting" -> failReconnectAttempt(message, "CONNECTION_FAILED")
+                    state == "connecting" -> failInitialConnect(message, "CONNECTION_FAILED")
+                }
             }
         }
     }
@@ -262,18 +398,20 @@ class BlePrinterConnection(
     fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
         if (gatt != this.gatt) return
         this.mtu = if (status == BluetoothGatt.GATT_SUCCESS) mtu else BLE_DEFAULT_MTU
-        if (!gatt.discoverServices()) failConnect("BLE service discovery could not start.", "CONNECTION_FAILED")
+        if (!gatt.discoverServices()) {
+            failConnectionAttempt("BLE service discovery could not start.", "CONNECTION_FAILED")
+        }
     }
 
     fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
         if (gatt != this.gatt) return
         if (status != BluetoothGatt.GATT_SUCCESS) {
-            failConnect("BLE service discovery failed with status $status.", "CONNECTION_FAILED")
+            failConnectionAttempt("BLE service discovery failed with status $status.", "CONNECTION_FAILED")
             return
         }
-        val config = connectConfig ?: return failConnect("BLE connection state was lost.", "CONNECTION_FAILED")
+        val config = connectConfig ?: return failConnectionAttempt("BLE connection state was lost.", "CONNECTION_FAILED")
         val resolved = findBleWriteCharacteristic(gatt.services, config.serviceUuid, config.writeCharacteristicUuid)
-            ?: return failConnect("No writable BLE characteristic was found.", "NO_WRITABLE_CHARACTERISTIC")
+            ?: return failConnectionAttempt("No writable BLE characteristic was found.", "NO_WRITABLE_CHARACTERISTIC")
         completeConnection(resolved)
     }
 

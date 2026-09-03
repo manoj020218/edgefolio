@@ -33,21 +33,43 @@ class ThermalPrinterPlugin : Plugin() {
     private var activeScanCallId: String? = null
     private var pendingUsbPermissionCallId: String? = null
     private var pendingUsbPermissionDeviceId: String? = null
+    private var lastTransport: String? = null
 
     override fun load() {
         bleScanner = BlePrinterScanner(context)
         bleConnection = BlePrinterConnection(context, object : BleConnectionListener {
-            override fun onConnected(snapshot: BleConnectionSnapshot) = emitListenerEvent("connected", buildBleStatusPayload(snapshot))
-            override fun onDisconnected(snapshot: BleConnectionSnapshot) = emitListenerEvent("disconnected", buildBleStatusPayload(snapshot))
-            override fun onConnectionError(message: String, code: String) = emitListenerEvent("connectionError", buildConnectionErrorPayload(message, code, "ble"))
+            override fun onConnected(snapshot: BleConnectionSnapshot) {
+                lastTransport = "ble"
+                emitListenerEvent("connected", buildBleStatusPayload(snapshot))
+            }
+
+            override fun onDisconnected(snapshot: BleConnectionSnapshot) {
+                lastTransport = "ble"
+                emitListenerEvent("disconnected", buildBleStatusPayload(snapshot))
+            }
+
+            override fun onConnectionError(message: String, code: String) {
+                lastTransport = "ble"
+                emitListenerEvent("connectionError", buildConnectionErrorPayload(message, code, "ble"))
+            }
         })
         usbConnection = UsbPrinterConnection(
             context.getSystemService(UsbManager::class.java),
             object : UsbConnectionListener {
-                override fun onConnected(snapshot: UsbConnectionSnapshot) = emitListenerEvent("connected", buildUsbStatusPayload(snapshot))
-                override fun onDisconnected(snapshot: UsbConnectionSnapshot) = emitListenerEvent("disconnected", buildUsbStatusPayload(snapshot))
-                override fun onConnectionError(message: String, code: String) =
+                override fun onConnected(snapshot: UsbConnectionSnapshot) {
+                    lastTransport = "usb"
+                    emitListenerEvent("connected", buildUsbStatusPayload(snapshot))
+                }
+
+                override fun onDisconnected(snapshot: UsbConnectionSnapshot) {
+                    lastTransport = "usb"
+                    emitListenerEvent("disconnected", buildUsbStatusPayload(snapshot))
+                }
+
+                override fun onConnectionError(message: String, code: String) {
+                    lastTransport = "usb"
                     emitListenerEvent("connectionError", buildConnectionErrorPayload(message, code, "usb"))
+                }
             },
         )
         usbMonitor = UsbPrinterMonitor(context, object : UsbPrinterListener {
@@ -126,10 +148,10 @@ class ThermalPrinterPlugin : Plugin() {
     fun disconnect(call: PluginCall) {
         cancelPendingUsbPermissionRequest("USB permission request cancelled.", "CONNECTION_FAILED")
         if (usbConnection.status().connectionState != "disconnected") {
-            usbConnection.disconnect { call.resolve(buildDisconnectedStatusPayload()) }
+            usbConnection.disconnect { call.resolve(currentStatusPayload()) }
             return
         }
-        bleConnection.disconnect { call.resolve(buildDisconnectedStatusPayload()) }
+        bleConnection.disconnect { call.resolve(currentStatusPayload()) }
     }
 
     @PluginMethod
@@ -235,6 +257,7 @@ class ThermalPrinterPlugin : Plugin() {
     }
 
     private fun connectBle(call: PluginCall) {
+        lastTransport = "ble"
         cancelPendingUsbPermissionRequest("USB permission request cancelled.", "CONNECTION_FAILED")
         val usbStatus = usbConnection.status()
         if (usbStatus.connectionState != "disconnected") {
@@ -250,6 +273,7 @@ class ThermalPrinterPlugin : Plugin() {
     }
 
     private fun connectUsb(call: PluginCall) {
+        lastTransport = "usb"
         if (!usbMonitor.isSupported()) {
             call.reject("USB host is not available on this device.", "UNSUPPORTED_OPERATION")
             return
@@ -389,6 +413,32 @@ class ThermalPrinterPlugin : Plugin() {
         if (pendingUsbPermissionCallId != null) {
             return buildUsbStatusPayload(pendingUsbDevice, "connecting")
         }
+        when (lastTransport) {
+            "ble" -> {
+                if (hasBleStatusDetails(bleStatus)) {
+                    return buildBleStatusPayload(bleStatus)
+                }
+                if (hasUsbStatusDetails(usbStatus)) {
+                    return buildUsbStatusPayload(usbStatus)
+                }
+            }
+            "usb" -> {
+                if (hasUsbStatusDetails(usbStatus)) {
+                    return buildUsbStatusPayload(usbStatus)
+                }
+                if (hasBleStatusDetails(bleStatus)) {
+                    return buildBleStatusPayload(bleStatus)
+                }
+            }
+            else -> {
+                if (hasBleStatusDetails(bleStatus)) {
+                    return buildBleStatusPayload(bleStatus)
+                }
+                if (hasUsbStatusDetails(usbStatus)) {
+                    return buildUsbStatusPayload(usbStatus)
+                }
+            }
+        }
         return buildDisconnectedStatusPayload()
     }
 
@@ -475,5 +525,13 @@ class ThermalPrinterPlugin : Plugin() {
 
     private fun rejectNotReady(call: PluginCall, message: String) {
         call.reject(message, "UNSUPPORTED_OPERATION")
+    }
+
+    private fun hasBleStatusDetails(snapshot: BleConnectionSnapshot): Boolean {
+        return snapshot.device != null || snapshot.lastError != null || snapshot.reconnectMaxAttempts != null
+    }
+
+    private fun hasUsbStatusDetails(snapshot: UsbConnectionSnapshot): Boolean {
+        return snapshot.device != null || snapshot.lastError != null
     }
 }
