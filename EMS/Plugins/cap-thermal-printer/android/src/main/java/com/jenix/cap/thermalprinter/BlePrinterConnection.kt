@@ -184,7 +184,7 @@ class BlePrinterConnection(
         reconnectAttempt = 0
         lastError = PrinterConnectionIssue(code, message)
         mtu = BLE_DEFAULT_MTU
-        pendingConnect?.onError(message, code)
+        pendingConnect?.onError?.invoke(message, code)
         listener.onConnectionError(message, code)
     }
 
@@ -214,7 +214,7 @@ class BlePrinterConnection(
     ) {
         cancelTimers()
         writeSession.rejectAll("Printer disconnected.", "NOT_CONNECTED")
-        activeConnect?.onError(pendingConnectMessage, pendingConnectCode)
+        activeConnect?.onError?.invoke(pendingConnectMessage, pendingConnectCode)
         activeConnect = null
         closeGatt()
         connectConfig = null
@@ -259,7 +259,7 @@ class BlePrinterConnection(
         lastError = null
         val snapshot = status()
         val pendingConnect = activeConnect.also { activeConnect = null }
-        pendingConnect?.onSuccess(snapshot)
+        pendingConnect?.onSuccess?.invoke(snapshot)
         listener.onConnected(snapshot)
     }
 

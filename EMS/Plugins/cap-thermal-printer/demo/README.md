@@ -1,38 +1,66 @@
 # Thermal Printer Demo
 
-This demo keeps Phase 9 inside `cap-thermal-printer` and avoids touching any existing Jenix app.
+This folder contains the minimal Phase 9 demo UI for `@jenix/cap-thermal-printer`.
 
-Files:
+It is intentionally self-contained:
 
-- `index.html`
-- `demo.css`
-- `demo.js`
-- `receipt.js`
+- no React
+- no Vite dependency
+- no existing Jenix app routes
+- direct use of `window.Capacitor.Plugins.JenixThermalPrinter`
 
-How to use it:
+## Files
 
-1. Create a throwaway Android Capacitor shell app.
-2. Install this plugin into that shell app.
-3. Copy these demo files into the shell app web root.
-4. Load `index.html` as the app entry page.
-5. Run `npx cap sync android`.
-6. Open the shell app on an Android device with BLE or USB printers available.
+- `index.html`: single-screen demo layout
+- `demo.css`: mobile-friendly styling
+- `demo.js`: scan, connect, print, disconnect, and event-log behavior
+- `receipt.js`: sample receipt payload and helper formatting
 
-The page talks directly to `window.Capacitor.Plugins.JenixThermalPrinter`, so it does not depend on React, Vite, or any existing application routes.
+## What The Demo Covers
 
-What it covers:
+- scan BLE printers
+- stop scan
+- list USB printers
+- connect selected BLE printer
+- connect selected USB printer
+- print a test receipt
+- disconnect
+- inspect current status and event log
 
-- Scan BLE printers
-- Stop scan
-- List USB printers
-- Connect BLE
-- Connect USB
-- Print a test receipt
-- Disconnect
-- View status and event log
+## Expected Test Receipt
 
-Known limits:
+The demo prints a simple receipt containing:
 
-- Android only
-- Requires a Capacitor shell with this plugin installed
-- `printImage` is still not implemented in the plugin
+- `JENIX INDIA PVT LTD`
+- `THERMAL PRINTER TEST`
+- active transport
+- connection status
+- printer name or ID
+- timestamp
+- QR payload
+- CODE128 barcode payload
+
+## Running It In A Throwaway Capacitor Shell
+
+Use any Android Capacitor shell app that can load static web assets.
+
+Recommended setup:
+
+1. Install this plugin into the shell app.
+2. Copy the contents of `demo/` into the shell app web directory.
+3. Make `index.html` the loaded page for the shell app.
+4. Run `npx cap sync android`.
+5. Open the app on an Android device with a BLE or USB printer available.
+
+If your shell app uses a bundler:
+
+- place these files in a static/public folder
+- preserve the relative file names
+- keep `demo.js` loading `./receipt.js`
+
+## Notes
+
+- This is a manual verification surface, not a production UI.
+- The page expects the Capacitor plugin to be installed and registered as `JenixThermalPrinter`.
+- The demo does not mock printers.
+- `printImage` is still not implemented by the plugin.

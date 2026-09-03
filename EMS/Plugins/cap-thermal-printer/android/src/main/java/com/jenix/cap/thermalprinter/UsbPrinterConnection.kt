@@ -41,12 +41,12 @@ class UsbPrinterConnection(
         onSuccess: (UsbConnectionSnapshot) -> Unit,
         onError: (String, String) -> Unit,
     ) {
-        val snapshot = status()
+        val currentStatus = status()
         when {
-            snapshot.connectionState == "connecting" || snapshot.connectionState == "disconnecting" ->
+            currentStatus.connectionState == "connecting" || currentStatus.connectionState == "disconnecting" ->
                 return onError("USB connection already in progress.", "CONNECTION_FAILED")
-            snapshot.connected && snapshot.device?.id == selectedDevice.id -> return onSuccess(snapshot)
-            snapshot.connected -> return onError("Disconnect the current printer before connecting another.", "CONNECTION_FAILED")
+            currentStatus.connected && currentStatus.device?.id == selectedDevice.id -> return onSuccess(currentStatus)
+            currentStatus.connected -> return onError("Disconnect the current printer before connecting another.", "CONNECTION_FAILED")
         }
         if (!selectedDevice.permissionGranted) {
             onError("USB permission denied for the selected device.", "USB_PERMISSION_DENIED")
@@ -82,7 +82,7 @@ class UsbPrinterConnection(
             failConnect("USB printer interface could not be claimed.", "CONNECTION_FAILED", onError)
             return
         }
-        val snapshot = synchronized(lock) {
+        val connectedSnapshot = synchronized(lock) {
             releaseConnectionLocked()
             usbConnection = openedConnection
             resolvedChannel = channel
@@ -91,8 +91,8 @@ class UsbPrinterConnection(
             state = "connected"
             UsbConnectionSnapshot(true, "connected", device, lastError)
         }
-        onSuccess(snapshot)
-        listener.onConnected(snapshot)
+        onSuccess(connectedSnapshot)
+        listener.onConnected(connectedSnapshot)
     }
 
     fun disconnect(onComplete: () -> Unit) {

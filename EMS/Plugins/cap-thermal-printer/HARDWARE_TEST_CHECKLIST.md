@@ -1,34 +1,42 @@
 # Hardware Test Checklist
 
-BLE:
+Use the standalone demo in `demo/` or an equivalent throwaway Capacitor shell while running these checks.
 
-- Scan and confirm nearby printers appear once with stable device IDs.
-- Scan with `namePrefix` and confirm non-matching devices are filtered out.
-- Scan with `serviceUuid` and confirm matching devices are returned.
-- Stop scan manually and confirm `scanStopped` fires with discovered devices.
-- Connect to a scanned device by `deviceId` and confirm `connected` plus `getStatus()`.
+## BLE
+
+- Confirm Android grants the required BLE scan/connect permissions.
+- Start a scan and verify nearby printers appear once with stable device IDs.
+- Scan with `namePrefix` and verify non-matching devices are excluded.
+- Scan with `serviceUuid` and verify matching devices are returned.
+- Stop scan manually and verify `scanStopped` reports the discovered devices.
+- Connect by `deviceId` and verify `connected` plus `getStatus()`.
 - Connect with explicit `serviceUuid` and `writeCharacteristicUuid` when known.
-- Send a short raw receipt (`ESC @`, text, feed) and confirm the printer outputs it.
-- Send a long raw receipt that exceeds one BLE packet and confirm chunked printing succeeds.
-- Send `printText`, `feed`, `cut`, and `openCashDrawer` commands and confirm the helper APIs map to printer behavior.
-- Send `printQRCode` with ASCII content and confirm the printer renders a scannable QR code.
-- Send `printBarcode` with CODE128 data and confirm the barcode scans correctly.
-- Disconnect manually and confirm `disconnected` plus `isConnected() === false`.
-- Power off or move the printer out of range while connected and confirm disconnect/error events.
-- Deny permission and confirm the plugin returns `PERMISSION_DENIED`.
+- Print a short raw receipt and verify output starts immediately.
+- Print a long raw receipt that exceeds one BLE packet and verify chunked output stays ordered.
+- Print `printText`, `feed`, `cut`, and `openCashDrawer` and verify printer behavior.
+- Print `printQRCode` with ASCII content and verify it scans.
+- Print `printBarcode` with CODE128 data and verify it scans.
+- Disconnect manually and verify `disconnected` plus `isConnected() === false`.
+- Power off or move the printer out of range and verify disconnect/error events.
+- Enable auto reconnect and verify retries remain bounded and status counters update.
+- Deny permission and verify the plugin returns `PERMISSION_DENIED`.
 
-USB:
+## USB
 
-- Attach a USB printer and confirm enumeration returns vendor/product IDs.
-- Accept the USB permission prompt and confirm the device connects successfully.
-- Reject the USB permission prompt and confirm a stable permission error is returned.
+- Attach a USB printer and verify enumeration returns vendor/product IDs.
+- Accept the USB permission prompt and verify connection succeeds.
+- Reject the USB permission prompt and verify a stable `USB_PERMISSION_DENIED` error.
 - Connect by `deviceId` when multiple USB printers are attached.
-- Send a short raw receipt and confirm bulk OUT printing succeeds.
-- Send `printQRCode` and `printBarcode` through the USB transport and confirm the printed codes scan correctly.
-- Disconnect manually and confirm `disconnected` plus `isConnected() === false`.
-- Unplug the printer while connected and confirm `usbDetached` plus disconnect/error events.
+- Connect by `vendorId` and `productId` when `deviceId` is not convenient.
+- Print a short raw receipt and verify bulk OUT printing succeeds.
+- Print `printQRCode` and `printBarcode` and verify both scan correctly.
+- Disconnect manually and verify `disconnected` plus `isConnected() === false`.
+- Unplug while connected and verify `usbDetached` plus disconnect/error events.
 
-Shared:
+## Shared
 
-- Confirm cached device lists reset on a new scan and remain deduplicated.
-- Confirm write attempts without an active connection return `NOT_CONNECTED`.
+- Verify `getStatus()` exposes `connectionState`, current device details, and `lastError` when relevant.
+- Verify cached BLE device lists reset on a new scan and remain deduplicated.
+- Verify `write()` without an active connection returns `NOT_CONNECTED`.
+- Verify unsupported operations on web or non-Android shells fail cleanly.
+- Verify the demo receipt prints transport, printer, and timestamp fields as expected.

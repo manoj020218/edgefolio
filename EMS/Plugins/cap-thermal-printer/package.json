@@ -7,11 +7,13 @@
   "types": "dist/index.d.ts",
   "files": [
     "android/",
-    "dist/"
+    "dist/",
+    "demo/"
   ],
   "scripts": {
     "build": "rimraf dist && tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "node --check demo/demo.js && node --check demo/receipt.js && npm run build && npm run test"
   },
   "peerDependencies": {
     "@capacitor/core": ">=7.0.0"
