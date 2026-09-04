@@ -341,6 +341,31 @@ function runMigrations(db) {
     ins.run('geofence_radius_m', '200');
     ins.run('offline_buffer_days', '7');
   }
+  // Raw punch log for mobile check-in/out — a phone can punch in/out multiple
+  // times a day, same as the biometric machines. attendance_records stays the
+  // one-row-per-day payroll summary (first check_in, last check_out, hours
+  // between them — the same first-in/last-out convention machine imports use,
+  // see models/machineImportModel.js); this table is what "currently working"
+  // is derived from (the latest event of the day) and is never itself read by
+  // payroll.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mobile_punch_events (
+      id TEXT PRIMARY KEY,
+      member_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN ('in','out')),
+      time TEXT NOT NULL,
+      work_type TEXT,
+      face_match REAL NOT NULL DEFAULT 0,
+      location_json TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(member_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_mobile_punch_member_date
+    ON mobile_punch_events(member_id, date, created_at)
+  `);
 
   // M68 (WitEasy FK BS-protocol) device tables (v1.7.0)
   db.exec(`CREATE TABLE IF NOT EXISTS m68_devices (

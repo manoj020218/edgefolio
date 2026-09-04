@@ -10,6 +10,7 @@ interface TodayAttendance {
   checkOut: string | null;
   hoursWorked: number;
   status: string;
+  currentlyWorking: boolean;
 }
 
 interface TodayStatus {
@@ -70,6 +71,7 @@ export default function HomePage() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkOutError, setCheckOutError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [faceEnrolled, setFaceEnrolled] = useState<boolean | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -82,6 +84,7 @@ export default function HomePage() {
 
   useEffect(() => {
     refreshStatus();
+    apiGet<{ enrolled: boolean }>('/faces/self-enroll').then((r) => setFaceEnrolled(r.enrolled)).catch(() => {});
     apiGet<LeaveBalance>('/leave-balance').then(setLeave).catch(() => {});
     apiGet<RequestRow[]>('/requests', { status: 'pending' })
       .then((rows) => setPendingCount(rows.length))
@@ -107,7 +110,11 @@ export default function HomePage() {
   }, []);
 
   const att = status?.todayAttendance;
-  const isWorking = Boolean(att?.checkIn && !att?.checkOut);
+  // "Currently working" is the latest punch's direction, not just whether
+  // check_out is empty — the day's check_out holds the LAST checkout even
+  // after a re-check-in, so it alone can't tell an open cycle from a closed
+  // one (see backend/controllers/apkController.js getTodayStatusHandler).
+  const isWorking = Boolean(att?.currentlyWorking);
   const canMarkFromPhone = status?.workType === 'tour' || status?.workType === 'wfh';
 
   async function handleCheckOut() {
@@ -127,8 +134,24 @@ export default function HomePage() {
     <div className="flex min-h-full flex-col px-5 pb-4" style={{ paddingTop: '52px' }}>
       <div className="mb-3.5 flex items-center justify-between">
         <button onClick={() => navigate('/profile')} className="flex items-center gap-3 text-left">
-          <div className="flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[15px] font-bold text-white">
-            {user?.name?.[0] ?? '?'}
+          <div className="relative h-[42px] w-[42px] flex-shrink-0">
+            {faceEnrolled === true && (
+              <div
+                className="absolute -inset-[3px] animate-spin rounded-full"
+                style={{
+                  background: 'conic-gradient(from 0deg, transparent 0%, #38bdf8 12%, transparent 28%)',
+                  animationDuration: '2.4s',
+                }}
+              />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[15px] font-bold text-white ring-2 ring-surface-bg">
+              {user?.name?.[0] ?? '?'}
+            </div>
+            {faceEnrolled === false && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-400 ring-2 ring-surface-bg">
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+              </span>
+            )}
           </div>
           <div>
             <p className="text-xs text-slate-400">{greeting()}</p>
@@ -157,7 +180,7 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             <span className={`h-2 w-2 rounded-full ${isWorking ? 'bg-green-400' : 'bg-slate-300'}`} />
             <span className="text-xs font-bold text-white">
-              {att?.checkOut ? 'CHECKED OUT' : isWorking ? 'WORKING' : 'NOT CHECKED IN'}
+              {isWorking ? 'WORKING' : att?.checkOut ? 'CHECKED OUT' : 'NOT CHECKED IN'}
             </span>
           </div>
         </div>
@@ -181,12 +204,12 @@ export default function HomePage() {
                 : 'Mark attendance at the office machine.'}
           </p>
         )}
-        {canMarkFromPhone && !att?.checkIn && (
+        {canMarkFromPhone && !isWorking && (
           <button
             onClick={() => navigate('/attendance')}
             className="w-full rounded-xl bg-white py-3 text-sm font-bold text-brand-700"
           >
-            Mark Attendance
+            {att?.checkIn ? 'Check In Again' : 'Mark Attendance'}
           </button>
         )}
         {isWorking && (

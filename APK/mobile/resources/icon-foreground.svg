@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Geometric "E" mark, built from rounded bars (not <text>) so it renders
+       identically regardless of which fonts are installed on the host doing
+       the rasterizing. Bounding box kept inside the ~625px adaptive-icon safe
+       zone centered on (512,512). -->
+  <g fill="#ffffff">
+    <rect x="322" y="298" width="70" height="428" rx="14"/>
+    <rect x="322" y="298" width="380" height="70" rx="14"/>
+    <rect x="322" y="477" width="309" height="70" rx="14"/>
+    <rect x="322" y="656" width="380" height="70" rx="14"/>
+  </g>
+</svg>

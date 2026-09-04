@@ -134,7 +134,7 @@ export default function AttendancePage({ workType, onBack }: Props) {
       {step.kind === 'done' && (
         <div className="rounded-lg border border-success bg-surface p-4">
           <p className="font-medium text-slate-100">
-            {step.alreadyMarked ? 'Already marked for today.' : 'Attendance marked.'}
+            {step.alreadyMarked ? 'You are already checked in.' : 'Attendance marked.'}
           </p>
           <button onClick={onBack} className="mt-3 text-sm text-brand-500 underline">
             Done

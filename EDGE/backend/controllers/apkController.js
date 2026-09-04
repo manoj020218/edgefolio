@@ -146,8 +146,16 @@ function getTodayStatusHandler(req, res, next) {
     const record = db
       .prepare('SELECT check_in, check_out, hours_worked, status FROM attendance_records WHERE member_id = ? AND date = ?')
       .get(empId, today);
+    // check_in/check_out on the record are the day's first-in/last-out summary
+    // (payroll-facing) — they don't tell you whether the employee is mid a
+    // later re-check-in cycle after an earlier checkout today, so "currently
+    // working" is derived separately from the latest raw punch instead.
+    const lastPunch = db
+      .prepare('SELECT event_type FROM mobile_punch_events WHERE member_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1')
+      .get(empId, today);
+    const currentlyWorking = lastPunch?.event_type === 'in';
     const todayAttendance = record
-      ? { checkIn: record.check_in, checkOut: record.check_out, hoursWorked: record.hours_worked, status: record.status }
+      ? { checkIn: record.check_in, checkOut: record.check_out, hoursWorked: record.hours_worked, status: record.status, currentlyWorking }
       : null;
 
     const assignment = db
@@ -305,33 +313,58 @@ async function mobileAttendanceHandler(req, res, next) {
       });
     }
 
-    // Block double-marking
-    const existing = db
-      .prepare('SELECT event_id, check_in FROM attendance_records WHERE member_id = ? AND date = ?')
+    // Same punch-clock convention as the office biometric machines and the
+    // desktop manual flow (models/attendance.js upsertCheckIn/upsertCheckOut,
+    // models/machineImportModel.js's first-in/last-out grouping): any number
+    // of check-in/out cycles a day are allowed from the phone, but the day's
+    // attendance_records row keeps only the FIRST check-in and the LAST
+    // check-out (hours_worked = last out − first in). "Currently checked in"
+    // is tracked via the latest mobile_punch_events row instead, since an
+    // earlier finished cycle's check_out would otherwise be indistinguishable
+    // from a still-open one.
+    const lastPunch = db
+      .prepare('SELECT event_type, time FROM mobile_punch_events WHERE member_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1')
       .get(empId, today);
-    if (existing) {
-      return sendOk(res, { alreadyMarked: true, checkedInAt: existing.check_in });
+    if (lastPunch?.event_type === 'in') {
+      return sendOk(res, { alreadyMarked: true, checkedInAt: lastPunch.time });
     }
 
-    const eventId = randomUUID();
     const mode = workType === 'tour' ? 'mobile-tour' : 'mobile-wfh';
-
+    const punchId = randomUUID();
     db.prepare(
-      `INSERT INTO attendance_records
-         (event_id, member_id, date, check_in, status, hours_worked, face_match, location_json, attendance_mode, device_id, apk_source)
-       VALUES (?, ?, ?, ?, 'present', 0, ?, ?, ?, ?, 1)`,
-    ).run(
-      eventId, empId, today, checkIn,
-      Number(similarity || 0),
-      JSON.stringify(location),
-      mode,
-      deviceId || null,
-    );
+      `INSERT INTO mobile_punch_events (id, member_id, date, event_type, time, work_type, face_match, location_json)
+       VALUES (?, ?, ?, 'in', ?, ?, ?, ?)`,
+    ).run(punchId, empId, today, checkIn, workType, Number(similarity || 0), JSON.stringify(location));
+
+    const existing = db
+      .prepare('SELECT event_id FROM attendance_records WHERE member_id = ? AND date = ?')
+      .get(empId, today);
+
+    if (!existing) {
+      const eventId = randomUUID();
+      db.prepare(
+        `INSERT INTO attendance_records
+           (event_id, member_id, date, check_in, status, hours_worked, face_match, location_json, attendance_mode, device_id, apk_source)
+         VALUES (?, ?, ?, ?, 'present', 0, ?, ?, ?, ?, 1)`,
+      ).run(
+        eventId, empId, today, checkIn,
+        Number(similarity || 0),
+        JSON.stringify(location),
+        mode,
+        deviceId || null,
+      );
+    } else {
+      // Re-check-in after an earlier checkout today — check_in (first-in) is
+      // never overwritten; just refresh the latest face/location/mode on file.
+      db.prepare(
+        `UPDATE attendance_records SET face_match = ?, location_json = ?, attendance_mode = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ?`,
+      ).run(Number(similarity || 0), JSON.stringify(location), mode, existing.event_id);
+    }
 
     // Non-blocking FCM to watchers
     notifyWatchers(db, empId, emp.name, 'checkin', checkIn, workType).catch(() => {});
 
-    return sendOk(res, { eventId, alreadyMarked: false });
+    return sendOk(res, { eventId: punchId, alreadyMarked: false });
   } catch (err) {
     return next(err);
   }
@@ -351,16 +384,32 @@ async function mobileCheckoutHandler(req, res, next) {
     const { date: today, time: checkOutTime } = toIstParts(timestamp);
     const db = getDb();
 
+    // Must be mid an open check-in (see mobileAttendanceHandler) — mirrors
+    // desktop upsertCheckOut refusing a checkout with no check-in on file.
+    const lastPunch = db
+      .prepare('SELECT event_type FROM mobile_punch_events WHERE member_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1')
+      .get(empId, today);
+    if (lastPunch?.event_type !== 'in') {
+      throw createHttpError(404, 'No active check-in found for today');
+    }
+
     const record = db
-      .prepare('SELECT event_id, check_in, check_out, attendance_mode FROM attendance_records WHERE member_id = ? AND date = ?')
+      .prepare('SELECT event_id, check_in, attendance_mode FROM attendance_records WHERE member_id = ? AND date = ?')
       .get(empId, today);
     if (!record || !record.check_in) {
       throw createHttpError(404, 'No check-in found for today');
     }
-    if (record.check_out) {
-      return sendOk(res, { alreadyCheckedOut: true, checkedOutAt: record.check_out, hoursWorked: null });
-    }
 
+    const workType = record.attendance_mode?.replace('mobile-', '') || null;
+    const punchId = randomUUID();
+    db.prepare(
+      `INSERT INTO mobile_punch_events (id, member_id, date, event_type, time, work_type)
+       VALUES (?, ?, ?, 'out', ?, ?)`,
+    ).run(punchId, empId, today, checkOutTime, workType);
+
+    // hours_worked stays first-in → LATEST-out (record.check_in never changes
+    // once set — see mobileAttendanceHandler), so re-checking-in and out again
+    // extends the same day's total rather than starting a new count.
     const [inH, inM] = record.check_in.split(':').map(Number);
     const [outH, outM] = checkOutTime.split(':').map(Number);
     const hoursWorked = Number(Math.max(0, (outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2));
@@ -370,7 +419,6 @@ async function mobileCheckoutHandler(req, res, next) {
     ).run(checkOutTime, hoursWorked, record.event_id);
 
     const emp = db.prepare('SELECT name FROM employees WHERE id = ?').get(empId);
-    const workType = record.attendance_mode?.replace('mobile-', '') || null;
     if (emp) notifyWatchers(db, empId, emp.name, 'checkout', checkOutTime, workType).catch(() => {});
 
     return sendOk(res, { alreadyCheckedOut: false, checkedOutAt: checkOutTime, hoursWorked });
