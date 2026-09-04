@@ -124,6 +124,11 @@ export default function HomePage() {
       await apiPost('/attendance/checkout', { timestamp: new Date().toISOString() });
       refreshStatus();
     } catch (err) {
+      // The screen's WORKING/not-working state can go stale if attendance was
+      // changed elsewhere (desktop edit, another device) since the last
+      // fetch — re-sync now so the buttons reflect reality instead of
+      // repeating the same failing tap.
+      refreshStatus();
       setCheckOutError(err instanceof Error ? err.message : 'Check-out failed.');
     } finally {
       setCheckingOut(false);
