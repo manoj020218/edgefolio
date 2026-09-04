@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Bell, Calendar, Download, PartyPopper } from 'lucide-react';
+import { AlertTriangle, Bell, Calendar, CalendarDays, Download, PartyPopper } from 'lucide-react';
 import { apiGet, apiPost, rootApiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import AttendanceCalendarDrawer from '../../components/AttendanceCalendarDrawer';
 
 interface TodayAttendance {
   checkIn: string | null;
@@ -68,6 +69,7 @@ export default function HomePage() {
   const [now, setNow] = useState(new Date());
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkOutError, setCheckOutError] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -124,7 +126,7 @@ export default function HomePage() {
   return (
     <div className="flex min-h-full flex-col px-5 pb-4" style={{ paddingTop: '52px' }}>
       <div className="mb-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <button onClick={() => navigate('/profile')} className="flex items-center gap-3 text-left">
           <div className="flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[15px] font-bold text-white">
             {user?.name?.[0] ?? '?'}
           </div>
@@ -132,12 +134,20 @@ export default function HomePage() {
             <p className="text-xs text-slate-400">{greeting()}</p>
             <p className="text-base font-bold text-slate-100">{user?.name}</p>
           </div>
-        </div>
-        <div className="text-right">
-          <p className="text-sm font-bold tabular-nums text-slate-100">
-            {now.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
-          </p>
-          <p className="text-xs text-slate-400">{now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}</p>
+        </button>
+        <div className="flex items-center gap-2.5">
+          <div className="text-right">
+            <p className="text-sm font-bold tabular-nums text-slate-100">
+              {now.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+            </p>
+            <p className="text-xs text-slate-400">{now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}</p>
+          </div>
+          <button
+            onClick={() => setCalendarOpen(true)}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-surface-light bg-surface text-slate-300"
+          >
+            <CalendarDays size={16} />
+          </button>
         </div>
       </div>
 
@@ -237,6 +247,8 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      <AttendanceCalendarDrawer open={calendarOpen} onClose={() => setCalendarOpen(false)} />
     </div>
   );
 }

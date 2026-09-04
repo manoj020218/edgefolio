@@ -945,6 +945,30 @@ function getMyAttendanceHistoryHandler(req, res, next) {
   }
 }
 
+// GET /apk/attendance-calendar?month=YYYY-MM — own day-by-day records for one
+// month, for the Home page calendar drawer (green/red/orange status dots +
+// per-day check-in/out detail). Defaults to the current IST month.
+function getMyAttendanceCalendarHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : todayIST().slice(0, 7);
+
+    const rows = getDb()
+      .prepare(
+        `SELECT date, status, check_in AS checkIn, check_out AS checkOut, hours_worked AS hoursWorked, leave_type AS leaveType
+         FROM attendance_records
+         WHERE member_id = ? AND substr(date, 1, 7) = ?
+         ORDER BY date ASC`,
+      )
+      .all(empId, month);
+    return sendOk(res, rows, { month });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   getConfigHandler,
   getAnalyticsHandler,
@@ -973,5 +997,6 @@ module.exports = {
   updateProfileHandler,
   listMyPayslipsHandler,
   getMyAttendanceHistoryHandler,
+  getMyAttendanceCalendarHandler,
   getMyLeaveBalanceHandler,
 };

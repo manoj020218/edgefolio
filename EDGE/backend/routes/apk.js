@@ -29,6 +29,7 @@ const {
   updateProfileHandler,
   listMyPayslipsHandler,
   getMyAttendanceHistoryHandler,
+  getMyAttendanceCalendarHandler,
   getMyLeaveBalanceHandler,
 } = require('../controllers/apkController');
 const requestsRoutes = require('./requests');
@@ -99,9 +100,10 @@ router.patch('/profile', updateProfileHandler);
 
 // Pay Settings screen support (own data only — see handler comments for why these
 // don't just proxy to the desktop /payroll and /attendance endpoints)
-router.get('/payslips',           listMyPayslipsHandler);
-router.get('/attendance-history', getMyAttendanceHistoryHandler);
-router.get('/leave-balance',      getMyLeaveBalanceHandler);
+router.get('/payslips',            listMyPayslipsHandler);
+router.get('/attendance-history',  getMyAttendanceHistoryHandler);
+router.get('/attendance-calendar', getMyAttendanceCalendarHandler);
+router.get('/leave-balance',       getMyLeaveBalanceHandler);
 
 // Unified Requests hub, Work/Visits, Help & Support, Documents — each is its own
 // router; all inherit requireAuth + requireLicense from above.
