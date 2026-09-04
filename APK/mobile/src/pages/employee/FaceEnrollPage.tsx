@@ -43,7 +43,7 @@ export default function FaceEnrollPage() {
   async function handleCapture() {
     setStep({ kind: 'capturing' });
     try {
-      const captured = await FaceLiveness.capture({ timeoutMs: 5000 }).catch((err) => {
+      const captured = await FaceLiveness.capture({ timeoutMs: 15000 }).catch((err) => {
         const code = (err as { code?: string })?.code;
         const messages: Record<string, string> = {
           PERMISSION_DENIED: 'Camera permission is required to set up Face ID.',

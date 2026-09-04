@@ -1,6 +1,6 @@
 {
   "name": "edgefolio-mobile",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "EdgeFolio field-employee attendance app — React+TS wrapped in Capacitor. Rebuild of APK/android (native Kotlin/Compose, kept in place as reference) per client's requested tech stack.",

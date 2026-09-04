@@ -6,6 +6,7 @@ const { FACES_DIR } = require('../config/app');
 const { sendOk, createHttpError } = require('../utils/http');
 const { getJwtSecret } = require('../config/secrets');
 const fcm = require('../services/fcmService');
+const { toIstParts, todayIST } = require('../utils/dateUtils');
 
 function verifyPassword(input, stored) {
   const [salt, hash] = stored.split(':');
@@ -139,7 +140,7 @@ function getTodayStatusHandler(req, res, next) {
     const empId = req.user?.empId;
     if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIST();
     const db = getDb();
 
     const record = db
@@ -178,7 +179,7 @@ function getTodayStatusHandler(req, res, next) {
 function getWorkAssignmentsHandler(req, res, next) {
   try {
     const db = getDb();
-    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const date = req.query.date || todayIST();
     const params = [date, date];
     let sql = `
       SELECT wa.*, e.name AS emp_name, e.emp_code, e.department
@@ -279,7 +280,11 @@ async function mobileAttendanceHandler(req, res, next) {
     }
     if (liveness !== 'PASSED') throw createHttpError(422, 'Liveness check did not pass');
 
-    const today = timestamp.slice(0, 10);
+    // The submitted timestamp is a UTC instant (Date#toISOString() on the phone)
+    // — convert to IST wall-clock date/time rather than reading UTC components
+    // directly, or "today" and the check-in clock time both silently read 5.5
+    // hours early (and a full calendar day early before 05:30 IST).
+    const { date: today, time: checkIn } = toIstParts(timestamp);
     const db = getDb();
 
     const emp = db.prepare('SELECT id, name FROM employees WHERE id = ?').get(empId);
@@ -309,7 +314,6 @@ async function mobileAttendanceHandler(req, res, next) {
     }
 
     const eventId = randomUUID();
-    const checkIn = timestamp.slice(11, 19);
     const mode = workType === 'tour' ? 'mobile-tour' : 'mobile-wfh';
 
     db.prepare(
@@ -328,6 +332,48 @@ async function mobileAttendanceHandler(req, res, next) {
     notifyWatchers(db, empId, emp.name, 'checkin', checkIn, workType).catch(() => {});
 
     return sendOk(res, { eventId, alreadyMarked: false });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// POST /apk/attendance/checkout — no liveness/GPS re-check by design (mirrors
+// the office machine's own check-out flow, which is just a second tap/scan);
+// check-IN is where identity + location actually get verified.
+async function mobileCheckoutHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+
+    const { timestamp } = req.body || {};
+    if (!timestamp) throw createHttpError(400, 'timestamp is required');
+
+    const { date: today, time: checkOutTime } = toIstParts(timestamp);
+    const db = getDb();
+
+    const record = db
+      .prepare('SELECT event_id, check_in, check_out, attendance_mode FROM attendance_records WHERE member_id = ? AND date = ?')
+      .get(empId, today);
+    if (!record || !record.check_in) {
+      throw createHttpError(404, 'No check-in found for today');
+    }
+    if (record.check_out) {
+      return sendOk(res, { alreadyCheckedOut: true, checkedOutAt: record.check_out, hoursWorked: null });
+    }
+
+    const [inH, inM] = record.check_in.split(':').map(Number);
+    const [outH, outM] = checkOutTime.split(':').map(Number);
+    const hoursWorked = Number(Math.max(0, (outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2));
+
+    db.prepare(
+      `UPDATE attendance_records SET check_out = ?, hours_worked = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ?`,
+    ).run(checkOutTime, hoursWorked, record.event_id);
+
+    const emp = db.prepare('SELECT name FROM employees WHERE id = ?').get(empId);
+    const workType = record.attendance_mode?.replace('mobile-', '') || null;
+    if (emp) notifyWatchers(db, empId, emp.name, 'checkout', checkOutTime, workType).catch(() => {});
+
+    return sendOk(res, { alreadyCheckedOut: false, checkedOutAt: checkOutTime, hoursWorked });
   } catch (err) {
     return next(err);
   }
@@ -354,8 +400,7 @@ async function batchSyncHandler(req, res, next) {
       for (const r of records) {
         try {
           if (!r.empId || !r.timestamp || !['tour', 'wfh'].includes(r.workType)) { failed++; continue; }
-          const today = r.timestamp.slice(0, 10);
-          const checkIn = r.timestamp.slice(11, 19);
+          const { date: today, time: checkIn } = toIstParts(r.timestamp);
           const mode = r.workType === 'tour' ? 'mobile-tour' : 'mobile-wfh';
           const result = insert.run(
             randomUUID(), r.empId, today, checkIn,
@@ -381,7 +426,7 @@ async function batchSyncHandler(req, res, next) {
 function liveFeedHandler(req, res, next) {
   try {
     const db = getDb();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIST();
 
     const total = db.prepare("SELECT COUNT(*) AS n FROM employees WHERE status = 'active'").get().n;
 
@@ -635,8 +680,8 @@ async function broadcastHandler(req, res, next) {
   try {
     const { type, message, target = 'all' } = req.body || {};
     if (!type || !message) throw createHttpError(400, 'type and message are required');
-    if (!['sos', 'holiday', 'event', 'general'].includes(type)) {
-      throw createHttpError(400, 'type must be sos | holiday | event | general');
+    if (!['sos', 'holiday', 'event', 'general', 'app_update'].includes(type)) {
+      throw createHttpError(400, 'type must be sos | holiday | event | general | app_update');
     }
     const db = getDb();
     const admin = db.prepare('SELECT id, name, designation FROM employees WHERE id = ?').get(req.user?.empId);
@@ -645,15 +690,15 @@ async function broadcastHandler(req, res, next) {
     const id = randomUUID();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO announcements (id, type, message, announced_by, target, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(id, type, message, admin.id, target, now);
+      `INSERT INTO announcements (id, type, message, announced_by_emp_id, announced_by_name, announced_by_designation, target, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, type, message, admin.id, admin.name, admin.designation || null, target, now);
 
     const tokens = db
       .prepare("SELECT fcm_token FROM employees WHERE fcm_token IS NOT NULL AND status = 'active'")
       .all().map((r) => r.fcm_token);
     if (tokens.length) {
-      const labels = { sos: 'URGENT', holiday: 'Holiday Notice', event: 'Announcement', general: 'Notice' };
+      const labels = { sos: 'URGENT', holiday: 'Holiday Notice', event: 'Announcement', general: 'Notice', app_update: 'App Update' };
       await fcm.sendToTokens(tokens, labels[type] || 'Announcement', message, { type: 'ANNOUNCEMENT', announcementType: type, id });
     }
     return sendOk(res, { id, sentTo: tokens.length });
@@ -733,7 +778,7 @@ function getAnalyticsHandler(_req, res, next) {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10);
+      const dateStr = toIstParts(d).date;
       const present = db
         .prepare("SELECT COUNT(DISTINCT member_id) AS n FROM attendance_records WHERE date = ?")
         .get(dateStr).n;
@@ -741,7 +786,7 @@ function getAnalyticsHandler(_req, res, next) {
     }
 
     // Department breakdown for today
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIST();
     const depts = db
       .prepare(
         `SELECT COALESCE(department, 'Unknown') AS dept, COUNT(*) AS total
@@ -785,7 +830,7 @@ async function notifyWatchers(db, empId, empName, event, time, workType) {
 
   const tokens = watchers.map((w) => w.fcm_token).filter(Boolean);
   const title = event === 'checkin' ? `${empName} checked in` : `${empName} checked out`;
-  const body = `${time} • ${workType.toUpperCase()}`;
+  const body = workType ? `${time} • ${String(workType).toUpperCase()}` : time;
 
   await fcm.sendToTokens(tokens, title, body, { type: 'ATTENDANCE_ALERT', empId, event, workType, time });
 }
@@ -911,6 +956,7 @@ module.exports = {
   createWorkAssignmentHandler,
   deleteWorkAssignmentHandler,
   mobileAttendanceHandler,
+  mobileCheckoutHandler,
   batchSyncHandler,
   liveFeedHandler,
   getAlertSubscriptionsHandler,

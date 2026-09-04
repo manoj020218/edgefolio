@@ -44,6 +44,15 @@ class FaceLivenessPlugin : Plugin() {
         val timeoutMs = call.getLong("timeoutMs") ?: 5_000L
         val intent = Intent(context, FaceCaptureActivity::class.java)
             .putExtra(FaceCaptureActivity.EXTRA_TIMEOUT_MS, timeoutMs)
+        // Optional — only the attendance flow passes this (it already has the
+        // employee's enrolled embedding on hand to check against); enrollment
+        // has no reference yet on a first-ever capture. Display-only on the
+        // native side: JS still does its own authoritative cosineSimilarity/
+        // matchesFace check on the returned embedding, unchanged.
+        val reference = call.getArray("referenceEmbedding")
+        if (reference != null) {
+            intent.putExtra(FaceCaptureActivity.EXTRA_REFERENCE_EMBEDDING, reference.toString())
+        }
         startActivityForResult(call, intent, "handleCaptureResult")
     }
 

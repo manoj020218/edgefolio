@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Calendar } from 'lucide-react';
-import { apiGet, rootApiGet } from '../../lib/api';
+import { AlertTriangle, Bell, Calendar, Download, PartyPopper } from 'lucide-react';
+import { apiGet, apiPost, rootApiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 interface TodayAttendance {
@@ -30,9 +30,18 @@ interface RequestRow {
 
 interface Announcement {
   id: string;
+  type: string;
   message: string;
   createdAt: string;
 }
+
+const ANNOUNCEMENT_STYLES: Record<string, { icon: typeof Bell; iconClass: string; label: string }> = {
+  sos: { icon: AlertTriangle, iconClass: 'text-danger', label: 'Urgent' },
+  holiday: { icon: PartyPopper, iconClass: 'text-purple-400', label: 'Holiday Notice' },
+  app_update: { icon: Download, iconClass: 'text-brand-400', label: 'App Update' },
+  event: { icon: Bell, iconClass: 'text-warning', label: 'Announcement' },
+  general: { icon: Bell, iconClass: 'text-warning', label: 'Notice' },
+};
 
 interface Holiday {
   id: string;
@@ -56,14 +65,29 @@ export default function HomePage() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [nextHoliday, setNextHoliday] = useState<Holiday | null>(null);
+  const [now, setNow] = useState(new Date());
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkOutError, setCheckOutError] = useState<string | null>(null);
 
   useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  function refreshStatus() {
     apiGet<TodayStatus>('/today-status').then(setStatus).catch(() => {});
+  }
+
+  useEffect(() => {
+    refreshStatus();
     apiGet<LeaveBalance>('/leave-balance').then(setLeave).catch(() => {});
     apiGet<RequestRow[]>('/requests', { status: 'pending' })
       .then((rows) => setPendingCount(rows.length))
       .catch(() => {});
-    rootApiGet<Announcement[]>('/announcements')
+    // target scopes a private/targeted announcement to this employee — the API
+    // returns rows where target is 'all' or matches this param (see
+    // EDGE/backend/controllers/announcementController.js).
+    rootApiGet<Announcement[]>('/announcements', { target: user?.empId })
       .then((rows) => setAnnouncement(rows[0] ?? null))
       .catch(() => {});
 
@@ -84,6 +108,19 @@ export default function HomePage() {
   const isWorking = Boolean(att?.checkIn && !att?.checkOut);
   const canMarkFromPhone = status?.workType === 'tour' || status?.workType === 'wfh';
 
+  async function handleCheckOut() {
+    setCheckingOut(true);
+    setCheckOutError(null);
+    try {
+      await apiPost('/attendance/checkout', { timestamp: new Date().toISOString() });
+      refreshStatus();
+    } catch (err) {
+      setCheckOutError(err instanceof Error ? err.message : 'Check-out failed.');
+    } finally {
+      setCheckingOut(false);
+    }
+  }
+
   return (
     <div className="flex min-h-full flex-col px-5 pb-4" style={{ paddingTop: '52px' }}>
       <div className="mb-3.5 flex items-center justify-between">
@@ -97,7 +134,10 @@ export default function HomePage() {
           </div>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400">{new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+          <p className="text-sm font-bold tabular-nums text-slate-100">
+            {now.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+          </p>
+          <p className="text-xs text-slate-400">{now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}</p>
         </div>
       </div>
 
@@ -124,9 +164,11 @@ export default function HomePage() {
           </div>
         ) : (
           <p className="mb-4 text-sm text-sky-100">
-            {status?.workType === 'office'
-              ? 'Mark attendance at the office machine.'
-              : 'You can mark attendance from your phone today.'}
+            {status === null
+              ? 'Loading…'
+              : canMarkFromPhone
+                ? 'You can mark attendance from your phone today.'
+                : 'Mark attendance at the office machine.'}
           </p>
         )}
         {canMarkFromPhone && !att?.checkIn && (
@@ -137,6 +179,16 @@ export default function HomePage() {
             Mark Attendance
           </button>
         )}
+        {isWorking && (
+          <button
+            onClick={() => void handleCheckOut()}
+            disabled={checkingOut}
+            className="w-full rounded-xl bg-white py-3 text-sm font-bold text-brand-700 disabled:opacity-60"
+          >
+            {checkingOut ? 'Checking out…' : 'Check Out'}
+          </button>
+        )}
+        {checkOutError && <p className="mt-2 text-xs text-red-100">{checkOutError}</p>}
       </div>
 
       {/* quick stats */}
@@ -157,17 +209,22 @@ export default function HomePage() {
         </div>
       </div>
 
-      {announcement && (
-        <div className="mb-3.5 flex items-start gap-3 rounded-xl border border-surface-light bg-surface p-3.5">
-          <Bell size={17} className="mt-0.5 flex-shrink-0 text-warning" />
-          <div>
-            <p className="text-[13px] font-semibold text-slate-100">{announcement.message}</p>
-            <p className="mt-0.5 text-[11.5px] text-slate-400">
-              {new Date(announcement.createdAt).toLocaleDateString('en-IN')}
-            </p>
+      {announcement && (() => {
+        const style = ANNOUNCEMENT_STYLES[announcement.type] ?? ANNOUNCEMENT_STYLES.general;
+        const Icon = style.icon;
+        return (
+          <div className="mb-3.5 flex items-start gap-3 rounded-xl border border-surface-light bg-surface p-3.5">
+            <Icon size={17} className={`mt-0.5 flex-shrink-0 ${style.iconClass}`} />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{style.label}</p>
+              <p className="text-[13px] font-semibold text-slate-100">{announcement.message}</p>
+              <p className="mt-0.5 text-[11.5px] text-slate-400">
+                {new Date(announcement.createdAt).toLocaleDateString('en-IN')}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {nextHoliday && (
         <div className="flex items-center gap-3 rounded-xl border border-surface-light bg-surface p-3.5">

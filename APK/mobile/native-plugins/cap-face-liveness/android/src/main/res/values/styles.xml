@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- FaceCaptureActivity extends AppCompatActivity, so its theme must descend
+         from Theme.AppCompat — a plain platform theme (e.g. android:Theme.Black.*)
+         crashes on setContentView with "You need to use a Theme.AppCompat theme". -->
+    <style name="Theme.FaceCapture.Fullscreen" parent="Theme.AppCompat.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>

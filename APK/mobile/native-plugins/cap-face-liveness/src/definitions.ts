@@ -1,6 +1,15 @@
 export interface FaceLivenessOptions {
   /** Liveness detection timeout in ms. Default 5000, matches APK/android's LivenessDetector. */
   timeoutMs?: number;
+  /**
+   * Optional enrolled reference embedding — when provided, the native capture
+   * screen shows a live match score (number + colored bar) right after capture,
+   * purely for user feedback. Does NOT change the resolved promise or replace
+   * the caller's own cosineSimilarity/matchesFace check — pass the same
+   * reference you already fetched for that check. Omit for enrollment (no
+   * reference exists yet on a first capture).
+   */
+  referenceEmbedding?: number[];
 }
 
 export interface FaceCaptureResult {

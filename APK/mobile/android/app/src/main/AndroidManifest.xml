@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -39,4 +39,13 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Explicit, unrestricted override: some dependency (Google Play Services
+         location, most likely) contributes its own ACCESS_FINE_LOCATION entry
+         capped at maxSdkVersion=30 during the manifest merge, which — because
+         app-module entries win merge priority over library-contributed ones —
+         silences the plugin's own plain declaration and makes Android treat
+         FINE location as entirely undeclared on any Android 12+ (API 31+)
+         device. Declaring it here, unqualified, restores it for all versions. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="replace" />
 </manifest>

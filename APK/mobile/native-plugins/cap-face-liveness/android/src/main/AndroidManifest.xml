@@ -7,7 +7,7 @@
         <activity
             android:name="com.jenix.cap.faceliveness.FaceCaptureActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:theme="@style/Theme.FaceCapture.Fullscreen"
             android:screenOrientation="portrait" />
     </application>
 </manifest>

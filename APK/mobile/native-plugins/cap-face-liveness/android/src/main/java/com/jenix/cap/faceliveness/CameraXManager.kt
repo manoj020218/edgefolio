@@ -69,7 +69,10 @@ class CameraXManager(
 
     private fun analyzeProxy(proxy: ImageProxy) {
         val bitmap   = proxy.toBitmap()
-        val mirrored = bitmap.mirror()
+        // proxy.toBitmap() returns the raw sensor-orientation buffer — rotationDegrees
+        // (usually 90/270 for a front camera in portrait) must be applied or ML Kit is
+        // handed a sideways frame and essentially never detects a face.
+        val mirrored = bitmap.rotateAndMirror(proxy.imageInfo.rotationDegrees)
         val fw = mirrored.width.toFloat()
         val fh = mirrored.height.toFloat()
 
@@ -99,9 +102,14 @@ class CameraXManager(
         detector.close()
     }
 
-    // Front camera frames are mirrored — flip horizontally for a natural preview
-    private fun Bitmap.mirror(): Bitmap {
-        val m = Matrix().apply { preScale(-1f, 1f) }
+    // Rotates the raw sensor buffer upright, then mirrors horizontally (front camera
+    // frames are mirrored for a natural, non-inverted preview). Order matters: rotate
+    // into the correct orientation first, then flip in that now-upright coordinate space.
+    private fun Bitmap.rotateAndMirror(rotationDegrees: Int): Bitmap {
+        val m = Matrix().apply {
+            postRotate(rotationDegrees.toFloat())
+            postScale(-1f, 1f)
+        }
         return Bitmap.createBitmap(this, 0, 0, width, height, m, true)
     }
 

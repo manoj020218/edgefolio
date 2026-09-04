@@ -12,6 +12,7 @@ const {
   createWorkAssignmentHandler,
   deleteWorkAssignmentHandler,
   mobileAttendanceHandler,
+  mobileCheckoutHandler,
   batchSyncHandler,
   liveFeedHandler,
   getAlertSubscriptionsHandler,
@@ -62,6 +63,7 @@ router.delete('/work-assignments/:id', requireRole('hr-admin'),          deleteW
 
 // Mobile attendance (any authenticated employee)
 router.post('/attendance',             mobileAttendanceHandler);
+router.post('/attendance/checkout',    mobileCheckoutHandler);
 router.post('/attendance/batch-sync',  batchSyncHandler);
 
 // Live feed — admin and owner only
