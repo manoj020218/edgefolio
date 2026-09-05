@@ -123,6 +123,14 @@ export default function AttendancePage({ workType, onBack }: Props) {
     return <AttendanceSuccess alreadyMarked={step.alreadyMarked} onDone={onBack} />;
   }
 
+  // The native camera Activity takes a beat to launch — until it does, this
+  // route's own header would otherwise flash on screen for that gap. Render
+  // nothing but the matching background for idle/checking-face so there's
+  // nothing visible to flash.
+  if (step.kind === 'idle' || step.kind === 'checking-face') {
+    return <div className="min-h-full bg-surface-bg" />;
+  }
+
   return (
     <div className="flex min-h-full flex-col px-6 py-8">
       <button onClick={onBack} className="mb-6 self-start text-sm text-brand-500 underline">
@@ -132,8 +140,6 @@ export default function AttendancePage({ workType, onBack }: Props) {
       <h1 className="mb-1 text-xl font-semibold text-slate-100">Mark Attendance</h1>
       <p className="mb-8 text-sm text-slate-300 capitalize">{workType}</p>
 
-      {step.kind === 'idle' && <p className="text-slate-300">Opening camera…</p>}
-      {step.kind === 'checking-face' && <p className="text-slate-300">Opening camera…</p>}
       {step.kind === 'locating' && <p className="text-slate-300">Getting your location…</p>}
       {step.kind === 'submitting' && <p className="text-slate-300">Submitting…</p>}
 
