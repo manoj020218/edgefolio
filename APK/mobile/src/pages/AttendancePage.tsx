@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Check } from 'lucide-react';
 import { FaceLiveness, cosineSimilarity, matchesFace } from '@jenix/cap-face-liveness';
 import { Location } from '@jenix/cap-location';
 import { apiGet, apiPost, ApiError } from '../lib/api';
@@ -109,6 +110,10 @@ export default function AttendancePage({ workType, onBack }: Props) {
     }
   }
 
+  if (step.kind === 'done') {
+    return <AttendanceSuccess alreadyMarked={step.alreadyMarked} onDone={onBack} />;
+  }
+
   return (
     <div className="flex min-h-full flex-col px-6 py-8">
       <button onClick={onBack} className="mb-6 self-start text-sm text-brand-500 underline">
@@ -131,17 +136,6 @@ export default function AttendancePage({ workType, onBack }: Props) {
       {step.kind === 'locating' && <p className="text-slate-300">Getting your location…</p>}
       {step.kind === 'submitting' && <p className="text-slate-300">Submitting…</p>}
 
-      {step.kind === 'done' && (
-        <div className="rounded-lg border border-success bg-surface p-4">
-          <p className="font-medium text-slate-100">
-            {step.alreadyMarked ? 'You are already checked in.' : 'Attendance marked.'}
-          </p>
-          <button onClick={onBack} className="mt-3 text-sm text-brand-500 underline">
-            Done
-          </button>
-        </div>
-      )}
-
       {step.kind === 'not-enrolled' && (
         <div className="rounded-lg border border-danger bg-surface p-4">
           <p className="text-slate-100">Face ID isn&rsquo;t set up on this account yet.</p>
@@ -159,6 +153,42 @@ export default function AttendancePage({ workType, onBack }: Props) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Full-screen celebratory takeover instead of a "Done" tap — checkmark pops
+// in, then auto-returns to Home. One less tap on the single most frequent
+// action in the app.
+function AttendanceSuccess({ alreadyMarked, onDone }: { alreadyMarked: boolean; onDone: () => void }) {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setShow(true));
+    const timer = setTimeout(onDone, 1600);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [onDone]);
+
+  return (
+    <div className="flex min-h-full flex-col items-center justify-center px-6 text-center">
+      <div
+        className={`flex h-24 w-24 items-center justify-center rounded-full bg-success/15 transition-all duration-500 ease-out ${
+          show ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
+        }`}
+      >
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success">
+          <Check size={32} className="text-white" strokeWidth={3} />
+        </div>
+      </div>
+      <p className="mt-5 text-lg font-bold text-slate-100">
+        {alreadyMarked ? 'Already Checked In' : 'Attendance Marked!'}
+      </p>
+      <p className="mt-1 text-sm text-slate-400">
+        {new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+      </p>
     </div>
   );
 }
