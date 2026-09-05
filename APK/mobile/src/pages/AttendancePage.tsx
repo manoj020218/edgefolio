@@ -39,6 +39,15 @@ export default function AttendancePage({ workType, onBack }: Props) {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>({ kind: 'idle' });
 
+  // Open the camera the instant this screen mounts — Home's "Mark Attendance"
+  // tap is the user's intent to start, a second "Start Face Check" tap here
+  // was pure friction with no permission-priming or business logic riding on
+  // it. useEffect (not called inline) so a re-render never re-triggers it.
+  useEffect(() => {
+    void handleStart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleStart() {
     if (!user) return;
 
@@ -123,15 +132,7 @@ export default function AttendancePage({ workType, onBack }: Props) {
       <h1 className="mb-1 text-xl font-semibold text-slate-100">Mark Attendance</h1>
       <p className="mb-8 text-sm text-slate-300 capitalize">{workType}</p>
 
-      {step.kind === 'idle' && (
-        <button
-          onClick={() => void handleStart()}
-          className="rounded-md bg-brand-500 py-2.5 font-medium text-white transition hover:bg-brand-600"
-        >
-          Start Face Check
-        </button>
-      )}
-
+      {step.kind === 'idle' && <p className="text-slate-300">Opening camera…</p>}
       {step.kind === 'checking-face' && <p className="text-slate-300">Opening camera…</p>}
       {step.kind === 'locating' && <p className="text-slate-300">Getting your location…</p>}
       {step.kind === 'submitting' && <p className="text-slate-300">Submitting…</p>}
@@ -148,7 +149,7 @@ export default function AttendancePage({ workType, onBack }: Props) {
       {step.kind === 'error' && (
         <div className="rounded-lg border border-danger bg-surface p-4">
           <p className="text-slate-100">{step.message}</p>
-          <button onClick={() => setStep({ kind: 'idle' })} className="mt-3 text-sm text-brand-500 underline">
+          <button onClick={() => void handleStart()} className="mt-3 text-sm text-brand-500 underline">
             Try again
           </button>
         </div>
