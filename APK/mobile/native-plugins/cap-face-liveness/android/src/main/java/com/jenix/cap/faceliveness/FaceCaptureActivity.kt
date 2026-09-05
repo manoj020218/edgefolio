@@ -27,6 +27,16 @@ import java.util.concurrent.Executors
 // display bar green/red here; the actual pass/fail decision stays in JS.
 private const val MATCH_THRESHOLD = 0.6f
 
+// A single camera frame can land mid-blink, slightly motion-blurred, or at an
+// off angle — any of which knocks a genuine match down to a random-looking
+// score (users reported the same person occasionally scoring ~45%). Averaging
+// several consecutive frames' embeddings (post L2-normalize, then
+// re-normalize) smooths that per-frame noise out, for both enrollment (a
+// steadier reference) and attendance (a steadier sample to compare it
+// against) — a few hundred ms of extra "hold still" time, not a visible
+// slowdown.
+private const val BURST_SIZE = 3
+
 /**
  * Full-screen native camera flow: liveness check (blink/head-turn), then one
  * MobileFaceNet embedding capture. Started by FaceLivenessPlugin via
@@ -198,15 +208,30 @@ class FaceCaptureActivity : AppCompatActivity() {
                 if (capturing) return
                 capturing = true
                 mainHandler.post { hintView.text = "Hold still…" }
-                cameraManager.requestCapture(::onCaptured)
+                burstBitmaps.clear()
+                captureNextBurstFrame()
             }
             LivenessState.TIMEOUT -> finishWith(reason = "LIVENESS_TIMEOUT")
         }
     }
 
-    private fun onCaptured(faceBitmap: Bitmap) {
+    private val burstBitmaps = mutableListOf<Bitmap>()
+
+    private fun captureNextBurstFrame() {
+        cameraManager.requestCapture { bitmap ->
+            burstBitmaps.add(bitmap)
+            if (burstBitmaps.size < BURST_SIZE) {
+                captureNextBurstFrame()
+            } else {
+                onCaptured(burstBitmaps.toList())
+            }
+        }
+    }
+
+    private fun onCaptured(faceBitmaps: List<Bitmap>) {
         embeddingExecutor.execute {
-            val embedding = embeddingEngine.generate(faceBitmap)
+            val embeddings = faceBitmaps.mapNotNull { embeddingEngine.generate(it) }
+            val embedding = if (embeddings.isEmpty()) null else averageEmbeddings(embeddings)
             mainHandler.post {
                 if (embedding == null) {
                     finishWith(reason = "EMBEDDING_FAILED")
@@ -236,6 +261,17 @@ class FaceCaptureActivity : AppCompatActivity() {
         var dot = 0f
         for (i in a.indices) dot += a[i] * b[i]
         return dot.coerceIn(-1f, 1f)
+    }
+
+    // Each input is already L2-normalized (FaceEmbeddingEngine.generate) — mean
+    // + re-normalize is the standard "template averaging" combination for face
+    // embeddings, smoothing out per-frame noise from any single capture.
+    private fun averageEmbeddings(list: List<FloatArray>): FloatArray {
+        val dim = list[0].size
+        val sum = FloatArray(dim)
+        for (e in list) for (i in 0 until dim) sum[i] += e[i]
+        val norm = kotlin.math.sqrt(sum.fold(0.0) { acc, x -> acc + x * x }.toFloat()).coerceAtLeast(1e-10f)
+        return FloatArray(dim) { sum[it] / norm }
     }
 
     private fun finishWith(embedding: FloatArray? = null, reason: String? = null) {
