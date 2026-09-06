@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Bell, Calendar, CalendarDays, Download, PartyPopper } from 'lucide-react';
 import { apiGet, apiPost, rootApiGet } from '../../lib/api';
+import { formatDateTime } from '../../lib/format';
 import { useAuth } from '../../lib/auth';
 import AttendanceCalendarDrawer from '../../components/AttendanceCalendarDrawer';
 
@@ -166,9 +167,11 @@ export default function HomePage() {
         <div className="flex items-center gap-2.5">
           <div className="text-right">
             <p className="text-sm font-bold tabular-nums text-slate-100">
-              {now.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+              {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })}
             </p>
-            <p className="text-xs text-slate-400">{now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}</p>
+            <p className="text-xs text-slate-400">
+              {now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+            </p>
           </div>
           <button
             onClick={() => setCalendarOpen(true)}
@@ -257,7 +260,7 @@ export default function HomePage() {
               <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{style.label}</p>
               <p className="text-[13px] font-semibold text-slate-100">{announcement.message}</p>
               <p className="mt-0.5 text-[11.5px] text-slate-400">
-                {new Date(announcement.createdAt).toLocaleDateString('en-IN')}
+                {formatDateTime(announcement.createdAt)}
               </p>
             </div>
           </div>

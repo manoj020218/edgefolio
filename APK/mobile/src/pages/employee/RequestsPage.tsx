@@ -4,6 +4,7 @@ import {
   CalendarDays, Clock, Wallet, Receipt, Plane, RefreshCw, Home as HomeIcon, Timer, FileText,
 } from 'lucide-react';
 import { apiGet, ApiError } from '../../lib/api';
+import { formatDateTime } from '../../lib/format';
 import { REQUEST_TYPES, requestTypeLabel, type RequestType } from './requestTypes';
 
 const ICONS: Record<RequestType, typeof CalendarDays> = {
@@ -101,7 +102,7 @@ export default function RequestsPage() {
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              {requestTypeLabel(r.type)} &middot; {new Date(r.createdAt).toLocaleDateString('en-IN')}
+              {requestTypeLabel(r.type)} &middot; {formatDateTime(r.createdAt)}
               {r.decisionNote ? ` · ${r.decisionNote}` : ''}
             </p>
           </div>

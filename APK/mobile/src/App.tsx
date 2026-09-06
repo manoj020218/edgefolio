@@ -24,6 +24,7 @@ import NewRequestPage from './pages/employee/NewRequestPage';
 import ProfilePage from './pages/employee/ProfilePage';
 import DetailProfilePage from './pages/employee/DetailProfilePage';
 import PaySettingsPage from './pages/employee/PaySettingsPage';
+import AttendanceCardPage from './pages/employee/AttendanceCardPage';
 import DocumentsPage from './pages/employee/DocumentsPage';
 import HelpSupportPage from './pages/employee/HelpSupportPage';
 import FaceEnrollPage from './pages/employee/FaceEnrollPage';
@@ -110,6 +111,7 @@ export default function App() {
       <Route path="/profile/detail" element={user && !isAdmin ? <DetailProfilePage /> : <Navigate to="/" replace />} />
       <Route path="/profile/face-id" element={user && !isAdmin ? <FaceEnrollPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/pay" element={user && !isAdmin ? <PaySettingsPage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/attendance-card" element={user && !isAdmin ? <AttendanceCardPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/documents" element={user && !isAdmin ? <DocumentsPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/help" element={user && !isAdmin ? <HelpSupportPage /> : <Navigate to="/" replace />} />
 

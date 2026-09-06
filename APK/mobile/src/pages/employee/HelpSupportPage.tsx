@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, HeadphonesIcon, Laptop, MessageSquareWarning, ShieldQuestion, Wallet } from 'lucide-react';
 import { apiGet, apiPost, ApiError } from '../../lib/api';
+import { formatDateTime } from '../../lib/format';
 
 type Category = 'hr' | 'complaint' | 'it' | 'payroll' | 'grievance';
 
@@ -84,7 +85,7 @@ export default function HelpSupportPage() {
                 {t.status.replace('_', ' ').toUpperCase()}
               </span>
             </div>
-            <p className="text-[11.5px] text-slate-400">{new Date(t.createdAt).toLocaleDateString('en-IN')}</p>
+            <p className="text-[11.5px] text-slate-400">{formatDateTime(t.createdAt)}</p>
           </div>
         ))}
         {tickets && tickets.length === 0 && <p className="text-sm text-slate-400">No tickets yet.</p>}

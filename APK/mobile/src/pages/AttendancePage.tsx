@@ -4,6 +4,7 @@ import { Check, Loader2, MapPin } from 'lucide-react';
 import { FaceLiveness, cosineSimilarity, matchesFace } from '@jenix/cap-face-liveness';
 import { Location } from '@jenix/cap-location';
 import { apiGet, apiPost, ApiError } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { useAuth } from '../lib/auth';
 
 interface Props {
@@ -221,9 +222,7 @@ function AttendanceSuccess({ alreadyMarked, onDone }: { alreadyMarked: boolean; 
       <p className="mt-5 text-lg font-bold text-slate-100">
         {alreadyMarked ? 'Already Checked In' : 'Attendance Marked!'}
       </p>
-      <p className="mt-1 text-sm text-slate-400">
-        {new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
-      </p>
+      <p className="mt-1 text-sm text-slate-400">{formatDateTime(new Date())}</p>
     </div>
   );
 }

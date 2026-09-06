@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { authApiGet, authApiPost, ApiError } from '../../lib/api';
+import { formatDateTime } from '../../lib/format';
 
 interface ResetRequest {
   id: string;
@@ -67,7 +68,7 @@ export default function PasswordResetsPage() {
               <div>
                 <p className="font-medium text-slate-100">{r.emp_name}</p>
                 <p className="text-xs text-slate-400">
-                  {r.emp_phone || 'No phone on file'} · requested {new Date(r.requested_at).toLocaleString()}
+                  {r.emp_phone || 'No phone on file'} · requested {formatDateTime(r.requested_at)}
                 </p>
               </div>
               <button

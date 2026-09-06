@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ShieldCheck } from 'lucide-react';
 import { FaceLiveness } from '@jenix/cap-face-liveness';
 import { apiGet, apiPost, ApiError } from '../../lib/api';
+import { formatDateTime } from '../../lib/format';
 
 interface StatusResponse {
   enrolled: boolean;
@@ -86,7 +87,7 @@ export default function FaceEnrollPage() {
             <p className="text-base font-semibold text-slate-100">Face ID is set up</p>
             {step.enrolledAt && (
               <p className="mt-1 text-xs text-slate-500">
-                Since {new Date(step.enrolledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                Since {formatDateTime(step.enrolledAt)}
               </p>
             )}
           </div>

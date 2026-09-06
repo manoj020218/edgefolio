@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, FileText, Upload } from 'lucide-react';
 import { apiGet, apiPost, ApiError } from '../../lib/api';
+import { formatDateTime } from '../../lib/format';
 
 interface Doc {
   id: string;
@@ -82,7 +83,7 @@ export default function DocumentsPage() {
                 <FileText size={17} className="flex-shrink-0 text-slate-400" />
                 <div className="flex-1">
                   <p className="text-[13.5px] font-medium text-slate-100">{d.title}</p>
-                  <p className="text-[11px] text-slate-500">Uploaded {new Date(d.createdAt).toLocaleDateString('en-IN')}</p>
+                  <p className="text-[11px] text-slate-500">Uploaded {formatDateTime(d.createdAt)}</p>
                 </div>
               </div>
             ))}
