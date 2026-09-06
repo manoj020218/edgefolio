@@ -15,6 +15,10 @@ EDGE/dist-exe/
 *.dmg
 *.AppImage
 
+# Packaged mobile builds — VPS/marketing/downloads/EdgeFolio.apk is deployed
+# by hand via pscp (same as the .exe installers above), never via git
+*.apk
+
 # Package lock files (we use npm on Windows, pnpm on VPS)
 package-lock.json
 

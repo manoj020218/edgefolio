@@ -127,6 +127,16 @@ app.get('/download/portable', (_req, res) => {
   }
 })
 
+// Mobile companion app (Android) — signed release build, sideloaded (not on Play Store)
+app.get('/download/apk', (_req, res) => {
+  const apkPath = path.join(__dirname, 'downloads', 'EdgeFolio.apk')
+  if (fs.existsSync(apkPath)) {
+    res.download(apkPath, 'EdgeFolio.apk')
+  } else {
+    res.status(503).send('Download temporarily unavailable. Please contact support on WhatsApp: +91 72402 26566')
+  }
+})
+
 // Clean URL routes for legal pages
 app.get('/privacy-policy', (_req, res) => {
   res.sendFile(path.join(__dirname, 'privacy-policy.html'))
