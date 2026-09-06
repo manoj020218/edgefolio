@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check } from 'lucide-react';
+import { Check, Loader2, MapPin } from 'lucide-react';
 import { FaceLiveness, cosineSimilarity, matchesFace } from '@jenix/cap-face-liveness';
 import { Location } from '@jenix/cap-location';
 import { apiGet, apiPost, ApiError } from '../lib/api';
@@ -131,6 +131,37 @@ export default function AttendancePage({ workType, onBack }: Props) {
     return <div className="min-h-full bg-surface-bg" />;
   }
 
+  // Face check already passed here — GPS and the final submit are automatic
+  // background steps, not decisions for the user, so they get the same
+  // full-screen, header-free treatment as the success screen. The Android
+  // location-permission system dialog sits on top of this for a moment the
+  // first time; the radar animation keeps something reassuring visible
+  // underneath rather than a bare "Getting your location…" line.
+  if (step.kind === 'locating') {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center px-6 text-center">
+        <div className="relative flex h-24 w-24 items-center justify-center">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500/30" />
+          <span className="absolute inline-flex h-16 w-16 animate-ping rounded-full bg-brand-500/25 [animation-delay:300ms]" />
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700">
+            <MapPin size={24} className="text-white" />
+          </div>
+        </div>
+        <p className="mt-6 text-base font-semibold text-slate-100">Getting your location…</p>
+        <p className="mt-1 text-sm text-slate-400">Confirming you&rsquo;re at the right place</p>
+      </div>
+    );
+  }
+
+  if (step.kind === 'submitting') {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center px-6 text-center">
+        <Loader2 size={36} className="animate-spin text-brand-500" />
+        <p className="mt-5 text-base font-semibold text-slate-100">Submitting attendance…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-full flex-col px-6 py-8">
       <button onClick={onBack} className="mb-6 self-start text-sm text-brand-500 underline">
@@ -139,9 +170,6 @@ export default function AttendancePage({ workType, onBack }: Props) {
 
       <h1 className="mb-1 text-xl font-semibold text-slate-100">Mark Attendance</h1>
       <p className="mb-8 text-sm text-slate-300 capitalize">{workType}</p>
-
-      {step.kind === 'locating' && <p className="text-slate-300">Getting your location…</p>}
-      {step.kind === 'submitting' && <p className="text-slate-300">Submitting…</p>}
 
       {step.kind === 'not-enrolled' && (
         <div className="rounded-lg border border-danger bg-surface p-4">
