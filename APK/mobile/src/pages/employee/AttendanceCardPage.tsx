@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, TreePalm, XCircle } from 'lucide-react';
+import { CalendarOff, CheckCircle2, ChevronLeft, ChevronRight, Clock, PartyPopper, TreePalm, XCircle } from 'lucide-react';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -38,6 +38,8 @@ export default function AttendanceCardPage() {
       present: rows.filter((r) => r.status === 'present').length,
       absent: rows.filter((r) => r.status === 'absent').length,
       leave: rows.filter((r) => r.status === 'leave').length,
+      holiday: rows.filter((r) => r.status === 'holiday').length,
+      weeklyOff: rows.filter((r) => r.status === 'weekly_off').length,
       hours: rows.reduce((sum, r) => sum + (r.hoursWorked || 0), 0),
     };
   }, [records]);
@@ -77,7 +79,7 @@ export default function AttendanceCardPage() {
         {records === null ? (
           <p className="text-sm text-sky-100">Loading…</p>
         ) : (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <CheckCircle2 size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.present}</p>
@@ -92,6 +94,16 @@ export default function AttendanceCardPage() {
               <TreePalm size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.leave}</p>
               <p className="text-[10px] text-sky-100">Leave</p>
+            </div>
+            <div className="rounded-xl bg-white/10 p-2.5 text-center">
+              <PartyPopper size={16} className="mx-auto mb-1 text-white" />
+              <p className="text-lg font-bold text-white">{summary.holiday}</p>
+              <p className="text-[10px] text-sky-100">Holiday</p>
+            </div>
+            <div className="rounded-xl bg-white/10 p-2.5 text-center">
+              <CalendarOff size={16} className="mx-auto mb-1 text-white" />
+              <p className="text-lg font-bold text-white">{summary.weeklyOff}</p>
+              <p className="text-[10px] text-sky-100">Weekly Off</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <Clock size={16} className="mx-auto mb-1 text-white" />
@@ -114,6 +126,10 @@ export default function AttendanceCardPage() {
               <span className="text-xs font-medium text-orange-400">{r.leaveType ? `${r.leaveType} leave` : 'Leave'}</span>
             ) : r.status === 'absent' ? (
               <span className="text-xs font-medium text-red-400">Absent</span>
+            ) : r.status === 'holiday' ? (
+              <span className="text-xs font-medium text-purple-400">Holiday</span>
+            ) : r.status === 'weekly_off' ? (
+              <span className="text-xs font-medium text-slate-400">Weekly Off</span>
             ) : (
               <span className="text-xs text-slate-400">
                 {r.checkIn ?? '—'} &rarr; {r.checkOut ?? '—'}

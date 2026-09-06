@@ -1002,16 +1002,51 @@ function getMyAttendanceCalendarHandler(req, res, next) {
     if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
 
     const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : todayIST().slice(0, 7);
+    const db = getDb();
 
-    const rows = getDb()
+    const rows = db
       .prepare(
         `SELECT date, status, check_in AS checkIn, check_out AS checkOut, hours_worked AS hoursWorked, leave_type AS leaveType
          FROM attendance_records
-         WHERE member_id = ? AND substr(date, 1, 7) = ?
-         ORDER BY date ASC`,
+         WHERE member_id = ? AND substr(date, 1, 7) = ?`,
       )
       .all(empId, month);
-    return sendOk(res, rows, { month });
+    const byDate = new Map(rows.map((r) => [r.date, r]));
+
+    // A day with no attendance_records row isn't "unknown" — it's either a
+    // weekly off, a holiday, or a genuine no-show, exactly the same
+    // three-way split models/attendance.js's getLopDays() already uses for
+    // payroll. Without this, present-day counts on the mobile Attendance
+    // Card looked wrong against a 30/31-day month (e.g. "12 present" with
+    // no absent/leave shown at all for the other ~19 days).
+    const whRow = db.prepare('SELECT weekly_off_days FROM working_hours WHERE id = 1').get();
+    let weeklyOffDays = [0, 6];
+    try { weeklyOffDays = JSON.parse(whRow?.weekly_off_days || '[0,6]'); } catch { /* keep default */ }
+    const offSet = new Set(weeklyOffDays);
+
+    const holidaySet = new Set(
+      db.prepare('SELECT date FROM holidays WHERE substr(date, 1, 7) = ?').all(month).map((h) => h.date),
+    );
+
+    const [y, m] = month.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const today = todayIST();
+
+    const out = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = `${month}-${String(d).padStart(2, '0')}`;
+      if (date > today) break; // never fabricate a status for a day that hasn't happened yet
+
+      const rec = byDate.get(date);
+      if (rec) {
+        out.push(rec);
+        continue;
+      }
+      const dow = new Date(`${date}T00:00:00`).getDay();
+      const status = offSet.has(dow) ? 'weekly_off' : holidaySet.has(date) ? 'holiday' : 'absent';
+      out.push({ date, status, checkIn: null, checkOut: null, hoursWorked: 0, leaveType: null });
+    }
+    return sendOk(res, out, { month });
   } catch (err) {
     return next(err);
   }

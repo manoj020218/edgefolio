@@ -20,12 +20,16 @@ const DOT_CLASS: Record<string, string> = {
   present: 'bg-green-400',
   absent: 'bg-red-400',
   leave: 'bg-orange-400',
+  weekly_off: 'bg-slate-500',
+  holiday: 'bg-purple-400',
 };
 
 const STATUS_LABEL: Record<string, string> = {
   present: 'Present',
   absent: 'Absent',
   leave: 'On Leave',
+  weekly_off: 'Weekly Off',
+  holiday: 'Holiday',
 };
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -151,6 +155,10 @@ export default function AttendanceCalendarDrawer({ open, onClose }: Props) {
               <p className="text-[12.5px] text-slate-400">
                 {selectedRecord.leaveType ? `${selectedRecord.leaveType} leave` : 'On leave'}
               </p>
+            ) : selectedRecord.status === 'weekly_off' || selectedRecord.status === 'holiday' ? (
+              <p className="text-[12.5px] text-slate-400">
+                {selectedRecord.status === 'holiday' ? 'Company holiday' : 'Weekly off day'}
+              </p>
             ) : (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -176,7 +184,7 @@ export default function AttendanceCalendarDrawer({ open, onClose }: Props) {
           </div>
         )}
 
-        <div className="mt-4 flex items-center justify-center gap-5">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
           <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <span className="h-2 w-2 rounded-full bg-green-400" /> Present
           </span>
@@ -185,6 +193,12 @@ export default function AttendanceCalendarDrawer({ open, onClose }: Props) {
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <span className="h-2 w-2 rounded-full bg-orange-400" /> Leave
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <span className="h-2 w-2 rounded-full bg-purple-400" /> Holiday
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <span className="h-2 w-2 rounded-full bg-slate-500" /> Weekly Off
           </span>
         </div>
       </div>
