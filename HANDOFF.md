@@ -1,6 +1,6 @@
 # EdgeFolio — Marketing, Licensing & Distribution HANDOFF
 
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07
 **Covers:** the self-serve onboarding flow, the free-forever licensing model, the
 installer/distribution pipeline, and everything found broken and fixed along the way.
 **Read this before touching `/onboard`, `VPS/marketing/`, the billing-server EdgeFolio
@@ -253,13 +253,15 @@ silently threw and fell back to the hardcoded `'1.0.0'` default, so Settings →
 Backup always showed v1.0.0 regardless of the real installed version; fixed to
 `../../package.json`).
 
-**Superseded by v1.0.3, deployed 2026-09-06.** `EdgeFolio-Setup.exe` SHA256
+**Current live installer: v1.0.3, deployed 2026-09-06.** `EdgeFolio-Setup.exe` SHA256
 `c3c9446882a46492b3cce718fd5a9472b98089c404a9e53e9107106843dd61b8`;
 `EdgeFolio-Portable.exe` SHA256
 `0641eac4c6443ba16673df74f8eb7e758f5ab055ffe6990c89ae39e64f0d943c`. Built from commit
-`6da59bc`. Verified: SHA256 matched between local build and the VPS copy
-(`sha256sum` over plink), `/download` and `/download/portable` both return 206 on a
-ranged request. Not yet re-verified end-to-end on a clean machine by the product owner.
+`6da59bc` (the release-signing gradle wiring landed one commit later, `2b3a4d6` —
+desktop-side behavior unaffected, that commit only touches the mobile build). Verified:
+SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
+`/download` and `/download/portable` both return 200 on a full download. Not yet
+re-verified end-to-end on a clean machine by the product owner.
 This deploy is a large batch of mobile-APK-driven backend fixes accumulated over
 2026-09-04 through 2026-09-06 (see `git log` for the full list) — the headline ones:
 - IST timestamp fix (`backend/utils/dateUtils.js` `toIstParts`/`todayIST`) — attendance
@@ -287,9 +289,13 @@ exists:
   sign a future update that installs cleanly over this release for existing users —
   **back both up somewhere off this machine.** Losing them means every future release
   needs a fresh key, which means every existing install has to be uninstalled (losing
-  local data/session) before it can take an update again. A local, gitignored copy of
-  the passwords also sits at `APK/mobile/android/.keystore-credentials.txt` — move that
-  somewhere safe too, don't leave it as the only backup.
+  local data/session) before it can take an update again. **Done** — the product owner
+  has their own external backup, and a second copy (keystore + `key.properties` +
+  the one-time `.keystore-credentials.txt` reference file) lives at
+  `C:\Users\User\Documents\EdgeFolio-Keystore-Backup\` on this machine. The working
+  copy's `.keystore-credentials.txt` (in `APK/mobile/android/`) has since been deleted
+  now that both backups exist — `key.properties` (needed for `assembleRelease` to sign
+  builds) and the keystore itself remain in place there.
 - Signing wired into `APK/mobile/android/app/build.gradle` — `assembleRelease` picks up
   `key.properties` automatically if present; without it, a release build still
   configures (just comes out unsigned) so a fresh clone without the keystore doesn't
@@ -298,12 +304,13 @@ exists:
   Verified with `apksigner verify` (exit 0) — signer cert
   `CN=EdgeFolio, OU=IoT Soft, O=IoT Soft, L=Jaipur, ST=Rajasthan, C=IN`, SHA-256
   fingerprint `d71f8207c305844b1f21a3062ec54505f5855ff81014e8c5531c59beb4161b4a`.
-  Package/version confirmed via `aapt dump badging`. **Not installed/smoke-tested on
-  a physical device** — the only test phone this session had access to already had the
-  debug build installed under a different signing key, and installing the release
-  build over it would have required uninstalling first (losing the active test
-  session), so that step was skipped. Do a real device install before telling users to
-  download it, if that hasn't happened yet.
+  Package/version confirmed via `aapt dump badging`. **Smoke-tested on a physical
+  device 2026-09-06** — the test phone's debug build (different signing key) was
+  uninstalled first (`adb uninstall`), the signed release APK installed clean
+  (`adb install`, after the phone's own "Install via USB" developer-options toggle
+  was enabled — first attempt failed with `INSTALL_FAILED_USER_RESTRICTED` until
+  that was turned on), and a full login → face-capture → attendance-mark cycle
+  confirmed working under the real release build, not just debug.
 - Deployed to the marketing site: `VPS/marketing/downloads/EdgeFolio.apk`, SHA256
   `b2613759048705888ba5387043a83505778169361ce4125de246cda2b26bf353` (verified
   matching between local and VPS via `sha256sum`). New `GET /download/apk` route in
