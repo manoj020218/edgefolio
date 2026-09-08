@@ -1,11 +1,16 @@
+const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const { FIREBASE_SERVICE_ACCOUNT_PATH } = require('../config/app');
 
 let messaging = null;
 
 function init() {
-  const accountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  if (!accountPath) return;
+  const accountPath = FIREBASE_SERVICE_ACCOUNT_PATH;
+  if (!accountPath || !fs.existsSync(accountPath)) {
+    logger.info('Firebase service account not found — push notifications disabled', { accountPath });
+    return;
+  }
   try {
     // firebase-admin is an optional dep — only installed when FCM is needed
     const admin = require('firebase-admin');

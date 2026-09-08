@@ -22,6 +22,14 @@ export async function setBaseUrl(url: string): Promise<void> {
   await Preferences.set({ key: BASE_URL_KEY, value: trimmed });
 }
 
+// The stored base URL is .../api/v1 (see setBaseUrl callers) — the plain
+// unauthenticated /health route (used for reachability checks) lives one
+// level up, at the server root.
+export async function getServerRoot(): Promise<string | null> {
+  const base = await getBaseUrl();
+  return base ? base.replace(/\/api\/v1$/, '') : null;
+}
+
 export async function getToken(): Promise<string | null> {
   const { value } = await Preferences.get({ key: TOKEN_KEY });
   return value ?? null;

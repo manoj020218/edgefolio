@@ -6,6 +6,7 @@ import { Location } from '@jenix/cap-location';
 import { apiGet, apiPost, ApiError } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { enqueue } from '../lib/offlineQueue';
 
 interface Props {
   workType: 'tour' | 'wfh';
@@ -29,7 +30,7 @@ type Step =
   | { kind: 'checking-face' }
   | { kind: 'locating' }
   | { kind: 'submitting' }
-  | { kind: 'done'; alreadyMarked: boolean }
+  | { kind: 'done'; alreadyMarked: boolean; offline: boolean }
   | { kind: 'not-enrolled' }
   | { kind: 'error'; message: string };
 
@@ -101,16 +102,28 @@ export default function AttendancePage({ workType, onBack }: Props) {
       }
 
       setStep({ kind: 'submitting' });
-      const res = await apiPost<AttendanceResponse>('/attendance', {
+      const timestamp = new Date().toISOString();
+      const attendancePayload = {
         empId: user.empId,
         workType,
-        timestamp: new Date().toISOString(),
+        timestamp,
         similarity,
-        liveness: 'PASSED',
+        liveness: 'PASSED' as const,
         location: { lat: loc.latitude, lon: loc.longitude, accuracy: loc.accuracy },
-      });
-
-      setStep({ kind: 'done', alreadyMarked: res.alreadyMarked });
+      };
+      try {
+        const res = await apiPost<AttendanceResponse>('/attendance', attendancePayload);
+        setStep({ kind: 'done', alreadyMarked: res.alreadyMarked, offline: false });
+      } catch (submitErr) {
+        if (submitErr instanceof ApiError) throw submitErr; // a real rejection from a reachable EDGE — handled below
+        // Not an ApiError — the request never reached EDGE at all (its PC is
+        // off, out of wifi range, or the app's closed). Face + GPS already
+        // succeeded fully offline (no network needed for either) — save this
+        // the same way rather than losing the capture and making the user
+        // redo it; NetworkStatusProvider replays it once EDGE answers again.
+        await enqueue({ kind: 'checkin', id: crypto.randomUUID(), queuedAt: timestamp, payload: attendancePayload });
+        setStep({ kind: 'done', alreadyMarked: false, offline: true });
+      }
     } catch (err) {
       if (err && typeof err === 'object' && 'notEnrolled' in err) {
         setStep({ kind: 'not-enrolled' });
@@ -121,7 +134,7 @@ export default function AttendancePage({ workType, onBack }: Props) {
   }
 
   if (step.kind === 'done') {
-    return <AttendanceSuccess alreadyMarked={step.alreadyMarked} onDone={onBack} />;
+    return <AttendanceSuccess alreadyMarked={step.alreadyMarked} offline={step.offline} onDone={onBack} />;
   }
 
   // The native camera Activity takes a beat to launch — until it does, this
@@ -196,33 +209,49 @@ export default function AttendancePage({ workType, onBack }: Props) {
 // Full-screen celebratory takeover instead of a "Done" tap — checkmark pops
 // in, then auto-returns to Home. One less tap on the single most frequent
 // action in the app.
-function AttendanceSuccess({ alreadyMarked, onDone }: { alreadyMarked: boolean; onDone: () => void }) {
+function AttendanceSuccess({
+  alreadyMarked,
+  offline,
+  onDone,
+}: {
+  alreadyMarked: boolean;
+  offline: boolean;
+  onDone: () => void;
+}) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setShow(true));
-    const timer = setTimeout(onDone, 1600);
+    // Give the offline case a beat longer — there's an extra line of text to
+    // read ("will sync automatically") that the normal success screen doesn't have.
+    const timer = setTimeout(onDone, offline ? 2400 : 1600);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onDone]);
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-6 text-center">
       <div
-        className={`flex h-24 w-24 items-center justify-center rounded-full bg-success/15 transition-all duration-500 ease-out ${
+        className={`flex h-24 w-24 items-center justify-center rounded-full ${offline ? 'bg-amber-500/15' : 'bg-success/15'} transition-all duration-500 ease-out ${
           show ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
         }`}
       >
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success">
+        <div className={`flex h-16 w-16 items-center justify-center rounded-full ${offline ? 'bg-amber-500' : 'bg-success'}`}>
           <Check size={32} className="text-white" strokeWidth={3} />
         </div>
       </div>
       <p className="mt-5 text-lg font-bold text-slate-100">
-        {alreadyMarked ? 'Already Checked In' : 'Attendance Marked!'}
+        {offline ? 'Saved — Offline' : alreadyMarked ? 'Already Checked In' : 'Attendance Marked!'}
       </p>
       <p className="mt-1 text-sm text-slate-400">{formatDateTime(new Date())}</p>
+      {offline && (
+        <p className="mt-3 max-w-[240px] text-xs text-amber-300">
+          Couldn&rsquo;t reach EDGE right now — this will sync automatically once you&rsquo;re back in range.
+        </p>
+      )}
     </div>
   );
 }

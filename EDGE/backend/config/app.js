@@ -44,6 +44,16 @@ module.exports = {
     path.join(STORAGE_DIR, IS_TEST ? 'edgefolio-test.db' : 'edgefolio.db'),
   CLOUD_SYNC_BASE_URL:
     process.env.CLOUD_SYNC_BASE_URL || 'https://edgefolio.iotsoft.in/api/v1',
+  // A Firebase Admin SDK service-account key (Project Settings → Service
+  // Accounts → Generate new private key), NOT the client google-services.json
+  // the mobile app uses. Defaults to a fixed drop-in path under STORAGE_BASE
+  // (same convention as the DB/faces/uploads dirs) so a packaged Electron
+  // build — which has no shell to set env vars in — can pick it up just by
+  // having the file placed there; FIREBASE_SERVICE_ACCOUNT_PATH still
+  // overrides it for dev/test.
+  FIREBASE_SERVICE_ACCOUNT_PATH:
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+    path.join(STORAGE_BASE, 'firebase-service-account.json'),
   SCHEDULERS_ENABLED: toBoolean(process.env.SCHEDULERS_ENABLED, !IS_TEST),
   SYNC_INTERVAL_MINUTES: toNumber(process.env.SYNC_INTERVAL_MINUTES, 240, 1),
   SYNC_RUN_ON_STARTUP: toBoolean(process.env.SYNC_RUN_ON_STARTUP, true),

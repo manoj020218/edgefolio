@@ -50,4 +50,11 @@ dependencies {
     implementation "androidx.core:core-ktx:1.12.0"
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    // For EdgeFolioMessagingService (FirebaseMessagingService) — the host app
+    // applies com.google.gms.google-services (see app/build.gradle) whenever
+    // google-services.json is present, which is what actually wires this BOM
+    // to a real Firebase project; without that file this dependency alone is
+    // inert.
+    implementation platform('com.google.firebase:firebase-bom:33.5.1')
+    implementation 'com.google.firebase:firebase-messaging'
 }

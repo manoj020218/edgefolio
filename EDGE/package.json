@@ -29,7 +29,7 @@
     "cors": "^2.8.5",
     "electron-updater": "^6.1.8",
     "express": "^4.21.2",
-    "firebase-admin": "^12.3.0",
+    "firebase-admin": "^12.7.0",
     "jsonwebtoken": "^9.0.3",
     "mqtt": "^5.15.1",
     "qrcode": "^1.5.4",
@@ -63,7 +63,10 @@
       "!frontend/src/**/*"
     ],
     "extraResources": [
-      { "from": "scripts/RESET-ADMIN-PASSWORD.bat", "to": "RESET-ADMIN-PASSWORD.bat" }
+      {
+        "from": "scripts/RESET-ADMIN-PASSWORD.bat",
+        "to": "RESET-ADMIN-PASSWORD.bat"
+      }
     ],
     "directories": {
       "output": "../dist-exe",

@@ -1,10 +1,17 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { apiPost, getToken, setToken as persistToken } from './api';
+import { registerPushToken } from './push';
 
 export type AppRole = 'owner' | 'hr-admin' | 'employee';
 
 export interface AuthUser {
-  empId: number;
+  // A UUID string (e.g. "069b604a-0f47-4fd0-9451-cb8cbcdafeb2"), not a
+  // number — matches EDGE/backend/controllers/apkController.js's JWT
+  // payload. This was mistyped as `number` until it broke a real feature
+  // (AttendancePage's offline queue, typed correctly, wouldn't compile
+  // against it) — see AlertsPage.tsx for the same class of bug already
+  // found and fixed elsewhere in this app.
+  empId: string;
   empCode: string;
   name: string;
   department: string | null;
@@ -42,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token && raw) {
         try {
           setUser(JSON.parse(raw) as AuthUser);
+          void registerPushToken();
         } catch {
           localStorage.removeItem(USER_KEY);
         }
@@ -55,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await persistToken(res.token);
     localStorage.setItem(USER_KEY, JSON.stringify(res.user));
     setUser(res.user);
+    void registerPushToken();
     return res.user;
   }
 

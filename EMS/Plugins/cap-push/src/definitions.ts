@@ -11,9 +11,15 @@ export interface PushStatus {
   nativeCallBridgeAvailable: boolean;
 }
 
+export interface PushPermissionStatus {
+  notifications: 'granted' | 'denied' | 'prompt';
+}
+
 export interface PushPlugin {
   getToken(): Promise<{ token?: string }>;
   refreshRegistration(options?: { token?: string }): Promise<{ uploaded: boolean }>;
   getPushStatus(): Promise<PushStatus>;
   dispatchPayload(payload: Record<string, string>): Promise<{ handled: boolean; commandType?: CommandType }>;
+  checkPermissions(): Promise<PushPermissionStatus>;
+  requestPermissions(): Promise<PushPermissionStatus>;
 }

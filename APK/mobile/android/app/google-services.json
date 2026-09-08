@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "676141356881",
+    "project_id": "edgfolio",
+    "storage_bucket": "edgfolio.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:676141356881:android:55a3bdb328897b712c6570",
+        "android_client_info": {
+          "package_name": "in.iotsoft.edgefolio"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "676141356881-2n0nm3o9kro61248520jb3pduud2pd1k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDY1CobAoJ8NUdwqiJyM5UpAYGD1JXNDeo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "676141356881-2n0nm3o9kro61248520jb3pduud2pd1k.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

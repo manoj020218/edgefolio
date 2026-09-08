@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Bell, Calendar, CalendarDays, Download, PartyPopper } from 'lucide-react';
+import { AlertTriangle, Bell, Calendar, CalendarDays, CloudOff, Download, PartyPopper, RefreshCw } from 'lucide-react';
 import { apiGet, apiPost, rootApiGet } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { useAuth } from '../../lib/auth';
+import { useNetworkStatus } from '../../lib/network';
+import { enqueue } from '../../lib/offlineQueue';
 import AttendanceCalendarDrawer from '../../components/AttendanceCalendarDrawer';
 
 interface TodayAttendance {
@@ -73,6 +75,8 @@ export default function HomePage() {
   const [checkOutError, setCheckOutError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [faceEnrolled, setFaceEnrolled] = useState<boolean | null>(null);
+  const [queuedCheckout, setQueuedCheckout] = useState(false);
+  const { status: netStatus, pendingCount: syncPendingCount, syncing } = useNetworkStatus();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -82,6 +86,18 @@ export default function HomePage() {
   function refreshStatus() {
     apiGet<TodayStatus>('/today-status').then(setStatus).catch(() => {});
   }
+
+  // Once EDGE is reachable again, NetworkStatusProvider has already replayed
+  // the offline queue by the time `netStatus` flips to 'online' — refetch so
+  // this screen picks up the real, server-computed first-in/last-out state
+  // instead of the optimistic "queued" placeholder.
+  useEffect(() => {
+    if (netStatus === 'online') {
+      setQueuedCheckout(false);
+      refreshStatus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [netStatus]);
 
   useEffect(() => {
     refreshStatus();
@@ -121,8 +137,22 @@ export default function HomePage() {
   async function handleCheckOut() {
     setCheckingOut(true);
     setCheckOutError(null);
+    const timestamp = new Date().toISOString();
+
+    if (netStatus === 'offline') {
+      // No network round-trip possible — save locally and let
+      // NetworkStatusProvider replay it once EDGE answers /health again.
+      // queuedCheckout (not a server round-trip) is what keeps this button
+      // from re-queuing a second checkout on a repeat tap before that sync
+      // happens.
+      await enqueue({ kind: 'checkout', id: crypto.randomUUID(), queuedAt: timestamp, payload: { timestamp } });
+      setQueuedCheckout(true);
+      setCheckingOut(false);
+      return;
+    }
+
     try {
-      await apiPost('/attendance/checkout', { timestamp: new Date().toISOString() });
+      await apiPost('/attendance/checkout', { timestamp });
       refreshStatus();
     } catch (err) {
       // The screen's WORKING/not-working state can go stale if attendance was
@@ -182,6 +212,42 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* EDGE is a PC on the local network, not a cloud service — this reflects
+          whether it actually answered just now, not just whether the phone has
+          any network at all (see lib/network.tsx). */}
+      <div
+        className={`mb-3.5 flex items-center gap-2 rounded-xl border p-2.5 text-xs font-medium ${
+          netStatus === 'offline'
+            ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+            : 'border-surface-light bg-surface text-slate-400'
+        }`}
+      >
+        {netStatus === 'offline' ? (
+          <>
+            <CloudOff size={14} className="flex-shrink-0" />
+            <span>
+              Offline — can&rsquo;t reach EDGE.
+              {syncPendingCount > 0 && ` ${syncPendingCount} action${syncPendingCount === 1 ? '' : 's'} saved, will sync.`}
+            </span>
+          </>
+        ) : syncing ? (
+          <>
+            <RefreshCw size={14} className="flex-shrink-0 animate-spin" />
+            <span>Back online — syncing {syncPendingCount || ''}…</span>
+          </>
+        ) : netStatus === 'checking' ? (
+          <>
+            <RefreshCw size={14} className="flex-shrink-0 animate-spin" />
+            <span>Checking connection…</span>
+          </>
+        ) : (
+          <>
+            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-400" />
+            <span>Online</span>
+          </>
+        )}
+      </div>
+
       {/* Check-in card */}
       <div className="relative mb-3.5 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-5">
         <div className="mb-4 flex items-center justify-between">
@@ -223,10 +289,10 @@ export default function HomePage() {
         {isWorking && (
           <button
             onClick={() => void handleCheckOut()}
-            disabled={checkingOut}
+            disabled={checkingOut || queuedCheckout}
             className="w-full rounded-xl bg-white py-3 text-sm font-bold text-brand-700 disabled:opacity-60"
           >
-            {checkingOut ? 'Checking out…' : 'Check Out'}
+            {queuedCheckout ? 'Saved — will sync when online' : checkingOut ? 'Checking out…' : 'Check Out'}
           </button>
         )}
         {checkOutError && <p className="mt-2 text-xs text-red-100">{checkOutError}</p>}

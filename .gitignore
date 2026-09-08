@@ -70,6 +70,11 @@ coverage/
 # Generated per-install JWT secret — must never be committed
 **/jwt-secret.key
 
+# Firebase Admin SDK service-account private key (server-side FCM sending) —
+# dropped in by hand at STORAGE_BASE, same convention as EDGE/android's
+# google-services.json but this one is a real secret, not client config.
+**/firebase-service-account.json
+
 # License file and machine-id — per-install, never commit
 **/license.json
 **/machine-id.txt
