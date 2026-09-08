@@ -13,9 +13,12 @@ const WORK_TYPE_OPTS = [
   { value: 'field', label: 'Field' },
   { value: 'wfh', label: 'WFH' },
 ];
+// Values match what the mobile APK's login handler checks (see
+// EmployeeDrawer.jsx's ROLE_OPTS comment for the full explanation).
 const ROLE_OPTS = [
-  { value: 'user', label: 'User' },
-  { value: 'soft_admin', label: 'Soft Admin' },
+  { value: 'user', label: 'Employee' },
+  { value: 'hr-admin', label: 'HR Admin' },
+  { value: 'owner', label: 'Owner' },
 ];
 
 const ALL_COLS = [
@@ -260,7 +263,7 @@ export const EmployeesPage = () => {
                               </Badge>
                             )}
                             {col.key === 'appRole' && (
-                              <Badge variant={emp.appRole === 'soft_admin' ? 'warning' : 'default'}>
+                              <Badge variant={emp.appRole !== 'user' ? 'warning' : 'default'}>
                                 {ROLE_OPTS.find((o) => o.value === emp.appRole)?.label || emp.appRole}
                               </Badge>
                             )}

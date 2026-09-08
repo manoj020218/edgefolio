@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Notification-bar icon: same "E" mark as the app icon, but bolder and
+       filling most of the frame — Android notification icons are rendered as
+       a pure white silhouette at tiny sizes (as small as 24dp), so the app
+       icon's own glyph (with its adaptive-icon safe-zone padding) would be
+       too thin/small to read there. No <text> here either, for the same
+       font-availability reason as icon-foreground.svg. -->
+  <g fill="#ffffff">
+    <rect x="162" y="117" width="130" height="790" rx="26"/>
+    <rect x="162" y="117" width="700" height="130" rx="26"/>
+    <rect x="162" y="447" width="569" height="130" rx="26"/>
+    <rect x="162" y="777" width="700" height="130" rx="26"/>
+  </g>
+</svg>

@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, BarChart3, Bell, LogOut, Users, CalendarClock } from 'lucide-react';
+import { Activity, BarChart3, Bell, LogOut, Users, CalendarClock, UserCircle } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 
 const tabs = [
@@ -10,23 +10,42 @@ const tabs = [
   { to: '/admin/analytics', label: 'Stats', icon: BarChart3 },
 ];
 
-export default function AdminShell() {
+interface Props {
+  onSwitchToEmployee: () => void;
+}
+
+export default function AdminShell({ onSwitchToEmployee }: Props) {
   const { user, logout } = useAuth();
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="flex items-center justify-between border-b border-surface-light px-4 py-3">
+      {/* AdminShell is the only shell with its own header (EmployeeShell's pages each
+          render their own top content with paddingTop: '52px', the value already
+          tuned against this app's status bar across every other screen) — match that
+          same top inset here instead of the bare py-3 this had, which put the header
+          text right under the status bar/clock. */}
+      <header className="flex items-center justify-between border-b border-surface-light px-4 pb-3" style={{ paddingTop: '52px' }}>
         <div>
           <p className="text-sm font-medium text-slate-100">{user?.name}</p>
           <p className="text-xs capitalize text-slate-400">{user?.role}</p>
         </div>
-        <button
-          onClick={() => void logout()}
-          className="rounded-md p-2 text-slate-300 hover:bg-surface hover:text-slate-100"
-          aria-label="Sign out"
-        >
-          <LogOut size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onSwitchToEmployee}
+            className="rounded-md p-2 text-slate-300 hover:bg-surface hover:text-slate-100"
+            aria-label="Switch to my attendance"
+            title="Switch to my attendance"
+          >
+            <UserCircle size={20} />
+          </button>
+          <button
+            onClick={() => void logout()}
+            className="rounded-md p-2 text-slate-300 hover:bg-surface hover:text-slate-100"
+            aria-label="Sign out"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>

@@ -8,14 +8,27 @@ const tabs = [
   { to: '/profile', label: 'Profile', icon: UserCircle },
 ];
 
+export interface EmployeeShellContext {
+  isAdmin: boolean;
+  onSwitchToAdmin: () => void;
+}
+
+interface Props {
+  isAdmin: boolean;
+  onSwitchToAdmin: () => void;
+}
+
 // Bottom nav for the employee side of the app. Unlike AdminShell, no persistent
 // header — each page (Home, Work, Requests, Profile) renders its own top content,
-// matching the design mockup.
-export default function EmployeeShell() {
+// matching the design mockup. isAdmin/onSwitchToAdmin are only meaningful when an
+// hr-admin/owner account is viewing this shell (see App.tsx's viewMode) — passed
+// through via Outlet context so ProfilePage can render a "Switch to Admin" item
+// without every other page needing to know about it.
+export default function EmployeeShell({ isAdmin, onSwitchToAdmin }: Props) {
   return (
     <div className="flex min-h-full flex-col">
       <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
-        <Outlet />
+        <Outlet context={{ isAdmin, onSwitchToAdmin } satisfies EmployeeShellContext} />
       </main>
 
       <nav

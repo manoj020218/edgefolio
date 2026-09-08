@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { App as CapApp } from '@capacitor/app';
-import { BadgeCheck, CheckCircle2, ChevronRight, Contact, DownloadCloud, FileText, Fingerprint, Globe, Headphones, KeyRound, LogOut, Wallet } from 'lucide-react';
+import { BadgeCheck, CheckCircle2, ChevronRight, Contact, DownloadCloud, FileText, Fingerprint, Globe, Headphones, KeyRound, LogOut, ShieldCheck, Wallet } from 'lucide-react';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import type { EmployeeShellContext } from './EmployeeShell';
 
 const items = [
   { to: '/profile/detail', label: 'Detailed Profile', hint: 'Personal details, address, emergency contact', icon: Contact },
@@ -33,6 +34,7 @@ function versionIsOlder(current: string, minimum: string): boolean {
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
+  const { isAdmin, onSwitchToAdmin } = useOutletContext<EmployeeShellContext>();
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<'unknown' | 'current' | 'outdated'>('unknown');
@@ -76,6 +78,21 @@ export default function ProfilePage() {
       </div>
 
       <div className="mb-4 flex flex-col gap-2.5">
+        {isAdmin && (
+          <button
+            onClick={onSwitchToAdmin}
+            className="flex items-center gap-3.5 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-4 text-left"
+          >
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/20">
+              <ShieldCheck size={18} className="text-brand-400" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[14.5px] font-semibold text-slate-100">Switch to Admin View</p>
+              <p className="mt-0.5 text-[11.5px] text-slate-400">Back to the Live Feed, Employees, Alerts &amp; more</p>
+            </div>
+            <ChevronRight size={16} className="text-slate-500" />
+          </button>
+        )}
         {items.map(({ to, label, hint, icon: Icon }) => (
           <Link key={to} to={to} className="flex items-center gap-3.5 rounded-2xl border border-surface-light bg-surface p-4">
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/15">

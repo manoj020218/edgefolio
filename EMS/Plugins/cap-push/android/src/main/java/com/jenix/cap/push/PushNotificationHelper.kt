@@ -12,7 +12,7 @@ object PushNotificationHelper {
         val notification = NotificationCompat.Builder(context, "jenix_admin")
             .setContentTitle(title)
             .setContentText(body)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_notify)
             .setAutoCancel(true)
             .build()
         manager.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)

@@ -3,13 +3,13 @@ import { apiDelete, apiGet, apiPost, ApiError } from '../../lib/api';
 
 interface Subscription {
   id: string;
-  watched: { id: number; name: string; empCode: string; dept: string | null };
+  watched: { id: string; name: string; empCode: string; dept: string | null };
   alertCheckin: boolean;
   alertCheckout: boolean;
 }
 
 interface EmployeeOption {
-  id: number;
+  id: string;
   empCode: string;
   name: string;
 }
@@ -17,7 +17,12 @@ interface EmployeeOption {
 export default function AlertsPage() {
   const [rows, setRows] = useState<Subscription[] | null>(null);
   const [employees, setEmployees] = useState<EmployeeOption[] | null>(null);
-  const [pickEmpId, setPickEmpId] = useState<number | ''>('');
+  // employees.id is a UUID string (see EDGE/backend/controllers/apkController.js's
+  // createAlertSubscriptionHandler, which passes watchedEmpId straight into a
+  // `WHERE id = ?` string comparison) — this used to be typed/coerced as a number,
+  // so Number(uuidString) silently became NaN and the Add button just stayed
+  // disabled forever with no visible error.
+  const [pickEmpId, setPickEmpId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -67,7 +72,7 @@ export default function AlertsPage() {
       <div className="mb-4 flex gap-2">
         <select
           value={pickEmpId}
-          onChange={(e) => setPickEmpId(e.target.value ? Number(e.target.value) : '')}
+          onChange={(e) => setPickEmpId(e.target.value)}
           className="flex-1 rounded-md border border-surface-light bg-surface px-3 py-2 text-sm text-slate-100"
         >
           <option value="">Select employee to watch…</option>

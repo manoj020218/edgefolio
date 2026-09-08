@@ -14,9 +14,15 @@ const WORK_TYPE_OPTS = [
   { value: 'field', label: 'Field Duty' },
   { value: 'wfh', label: 'Work From Home' },
 ];
+// Values match what the mobile APK's login handler actually checks
+// (EDGE/backend/controllers/apkController.js's validRoles) — 'user' falls
+// back to employee-only mobile access, 'hr-admin'/'owner' route into the
+// APK's admin section (LiveFeed, Employees, Assignments, Alerts, Analytics,
+// Broadcast, Password Resets).
 const ROLE_OPTS = [
-  { value: 'user', label: 'User' },
-  { value: 'soft_admin', label: 'Soft Admin' },
+  { value: 'user', label: 'Employee' },
+  { value: 'hr-admin', label: 'HR Admin' },
+  { value: 'owner', label: 'Owner' },
 ];
 const PAYMENT_MODE_OPTS = [
   { value: 'NEFT', label: 'NEFT' },

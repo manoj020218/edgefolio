@@ -62,6 +62,17 @@ function AttendanceRoute() {
 export default function App() {
   const { user, loading } = useAuth();
   const [baseUrl, setBaseUrlState] = useState<string | null | 'loading'>('loading');
+  // An hr-admin/owner account is also frequently a working employee (small-company
+  // HR/owner who needs to check in/out too) — viewMode lets them flip between the
+  // Admin dashboard and the normal employee Home/Attendance/Profile screens on the
+  // same login, rather than the two being permanently mutually exclusive. Session-only
+  // (not persisted) — a fresh launch always lands back on Admin for an admin account,
+  // matching the previous default. Declared here, before any conditional return below,
+  // because React hooks must run in the same order on every render — placing this
+  // after an early return (as an earlier version of this file did) intermittently
+  // throws "Rendered fewer hooks than expected" the moment a render takes a different
+  // branch than the previous one.
+  const [viewMode, setViewMode] = useState<'admin' | 'employee'>('admin');
 
   useEffect(() => {
     getBaseUrl().then(setBaseUrlState);
@@ -87,6 +98,7 @@ export default function App() {
   }
 
   const isAdmin = user?.role === 'hr-admin' || user?.role === 'owner';
+  const showEmployeeShell = !isAdmin || viewMode === 'employee';
 
   return (
     <Routes>
@@ -94,7 +106,15 @@ export default function App() {
 
       <Route
         path="/"
-        element={!user ? <Navigate to="/login" replace /> : isAdmin ? <Navigate to="/admin" replace /> : <EmployeeShell />}
+        element={
+          !user ? (
+            <Navigate to="/login" replace />
+          ) : showEmployeeShell ? (
+            <EmployeeShell isAdmin={isAdmin} onSwitchToAdmin={() => setViewMode('admin')} />
+          ) : (
+            <Navigate to="/admin" replace />
+          )
+        }
       >
         <Route index element={<HomePage />} />
         <Route path="work" element={<WorkPage />} />
@@ -102,22 +122,35 @@ export default function App() {
         <Route path="profile" element={<ProfilePage />} />
       </Route>
 
-      {/* Full-screen employee sub-flows — outside EmployeeShell, no bottom nav */}
-      <Route path="/attendance" element={user && !isAdmin ? <AttendanceRoute /> : <Navigate to="/" replace />} />
+      {/* Full-screen employee sub-flows — outside EmployeeShell, no bottom nav.
+          Reachable by any authenticated user (including an admin currently in
+          employee view) — these used to be gated to !isAdmin, which was the actual
+          bug blocking an HR-admin/owner from ever marking their own attendance. */}
+      <Route path="/attendance" element={user ? <AttendanceRoute /> : <Navigate to="/login" replace />} />
       <Route path="/change-password" element={user ? <ChangePasswordRoute /> : <Navigate to="/login" replace />} />
-      <Route path="/requests/new/:type" element={user && !isAdmin ? <NewRequestPage /> : <Navigate to="/" replace />} />
-      <Route path="/work/new-visit" element={user && !isAdmin ? <NewVisitPage /> : <Navigate to="/" replace />} />
-      <Route path="/work/visits/:id" element={user && !isAdmin ? <VisitDetailPage /> : <Navigate to="/" replace />} />
-      <Route path="/profile/detail" element={user && !isAdmin ? <DetailProfilePage /> : <Navigate to="/" replace />} />
-      <Route path="/profile/face-id" element={user && !isAdmin ? <FaceEnrollPage /> : <Navigate to="/" replace />} />
-      <Route path="/profile/pay" element={user && !isAdmin ? <PaySettingsPage /> : <Navigate to="/" replace />} />
-      <Route path="/profile/attendance-card" element={user && !isAdmin ? <AttendanceCardPage /> : <Navigate to="/" replace />} />
-      <Route path="/profile/documents" element={user && !isAdmin ? <DocumentsPage /> : <Navigate to="/" replace />} />
-      <Route path="/profile/help" element={user && !isAdmin ? <HelpSupportPage /> : <Navigate to="/" replace />} />
+      <Route path="/requests/new/:type" element={user ? <NewRequestPage /> : <Navigate to="/" replace />} />
+      <Route path="/work/new-visit" element={user ? <NewVisitPage /> : <Navigate to="/" replace />} />
+      <Route path="/work/visits/:id" element={user ? <VisitDetailPage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/detail" element={user ? <DetailProfilePage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/face-id" element={user ? <FaceEnrollPage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/pay" element={user ? <PaySettingsPage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/attendance-card" element={user ? <AttendanceCardPage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/documents" element={user ? <DocumentsPage /> : <Navigate to="/" replace />} />
+      <Route path="/profile/help" element={user ? <HelpSupportPage /> : <Navigate to="/" replace />} />
 
       <Route
         path="/admin"
-        element={user && isAdmin ? <AdminShell /> : <Navigate to="/" replace />}
+        element={
+          // Must mirror the "/" route's showEmployeeShell check, not just isAdmin —
+          // checking isAdmin alone meant switching viewMode to 'employee' from deep
+          // inside /admin/* (e.g. /admin/analytics) changed the flag but nothing ever
+          // actually navigated away, since this route didn't read viewMode at all.
+          user && isAdmin && !showEmployeeShell ? (
+            <AdminShell onSwitchToEmployee={() => setViewMode('employee')} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
       >
         <Route index element={<LiveFeedPage />} />
         <Route path="employees" element={<EmployeesPage />} />
