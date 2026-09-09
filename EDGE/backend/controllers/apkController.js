@@ -7,6 +7,8 @@ const { sendOk, createHttpError } = require('../utils/http');
 const { getJwtSecret } = require('../config/secrets');
 const fcm = require('../services/fcmService');
 const { toIstParts, todayIST } = require('../utils/dateUtils');
+const payrollEngine = require('../services/payrollEngine');
+const { serializePayrollRun, serializePayslip } = require('../utils/serializers');
 
 function verifyPassword(input, stored) {
   const [salt, hash] = stored.split(':');
@@ -863,6 +865,33 @@ function getAnalyticsHandler(_req, res, next) {
   }
 }
 
+// ─── Payroll (read-only, hr-admin/owner) ─────────────────────────────────────
+// Mobile-side view only — reuses the same payrollEngine/serializers the desktop
+// PayrollPage.jsx uses. Deliberately does NOT expose run/approve/bank-payment —
+// those stay desktop-only for now; this is analysis/visibility only.
+
+function getPayrollSummaryHandler(_req, res, next) {
+  try {
+    const runs = payrollEngine.getPayrollOverview().map(serializePayrollRun);
+    return sendOk(res, runs, { count: runs.length });
+  } catch (err) {
+    next(err);
+  }
+}
+
+function getPayrollRunHandler(req, res, next) {
+  try {
+    const details = payrollEngine.getPayrollRunDetails(req.params.runId);
+    if (!details) throw createHttpError(404, 'Payroll run not found');
+    return sendOk(res, {
+      run: serializePayrollRun(details.run),
+      payslips: details.payslips.map(serializePayslip),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function notifyWatchers(db, empId, empName, event, time, workType) {
@@ -1055,6 +1084,8 @@ function getMyAttendanceCalendarHandler(req, res, next) {
 module.exports = {
   getConfigHandler,
   getAnalyticsHandler,
+  getPayrollSummaryHandler,
+  getPayrollRunHandler,
   loginCheckHandler,
   apkLoginHandler,
   registerFcmTokenHandler,

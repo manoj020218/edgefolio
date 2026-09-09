@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Wallet } from 'lucide-react';
 import { apiGet, ApiError } from '../../lib/api';
 
 interface Analytics {
@@ -18,7 +20,15 @@ export default function AnalyticsPage() {
 
   return (
     <div className="px-4 py-4">
-      <h1 className="mb-4 text-lg font-semibold text-slate-100">Analytics</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-slate-100">Analytics</h1>
+        <Link
+          to="/admin/payroll"
+          className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white"
+        >
+          <Wallet size={16} /> Payroll
+        </Link>
+      </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}
       {!error && !data && <p className="text-sm text-slate-400">Loading…</p>}

@@ -4,6 +4,8 @@ const { requireLicense } = require('../middleware/license');
 const {
   getConfigHandler,
   getAnalyticsHandler,
+  getPayrollSummaryHandler,
+  getPayrollRunHandler,
   loginCheckHandler,
   apkLoginHandler,
   registerFcmTokenHandler,
@@ -89,6 +91,11 @@ router.post('/broadcast', requireRole('hr-admin', 'owner'), broadcastHandler);
 
 // Analytics — owner and hr-admin
 router.get('/analytics', requireRole('hr-admin', 'owner'), getAnalyticsHandler);
+
+// Payroll — read-only view for owner/hr-admin (analysis only; run/approve/bank
+// payment stay desktop-only, see apkController.js's handler comment)
+router.get('/payroll',          requireRole('hr-admin', 'owner'), getPayrollSummaryHandler);
+router.get('/payroll/:runId',   requireRole('hr-admin', 'owner'), getPayrollRunHandler);
 
 // Employee management (hr-admin only)
 router.get('/employees',       requireRole('hr-admin', 'owner'), getEmployeesHandler);
