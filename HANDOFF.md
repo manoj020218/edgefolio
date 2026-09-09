@@ -253,15 +253,33 @@ silently threw and fell back to the hardcoded `'1.0.0'` default, so Settings →
 Backup always showed v1.0.0 regardless of the real installed version; fixed to
 `../../package.json`).
 
-**Current live installer: v1.0.3, deployed 2026-09-06.** `EdgeFolio-Setup.exe` SHA256
+**v1.0.3, deployed 2026-09-06.** `EdgeFolio-Setup.exe` SHA256
 `c3c9446882a46492b3cce718fd5a9472b98089c404a9e53e9107106843dd61b8`;
 `EdgeFolio-Portable.exe` SHA256
 `0641eac4c6443ba16673df74f8eb7e758f5ab055ffe6990c89ae39e64f0d943c`. Built from commit
 `6da59bc` (the release-signing gradle wiring landed one commit later, `2b3a4d6` —
 desktop-side behavior unaffected, that commit only touches the mobile build). Verified:
 SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
-`/download` and `/download/portable` both return 200 on a full download. Not yet
-re-verified end-to-end on a clean machine by the product owner.
+`/download` and `/download/portable` both return 200 on a full download.
+
+**Current live installer: v1.0.4, deployed 2026-09-09.** `EdgeFolio-Setup.exe` SHA256
+`ae6ad017afcbadceefc8e69d4f11093f0c92ee2d0b83831e5a4b3b348278693c`;
+`EdgeFolio-Portable.exe` SHA256
+`cb27980e1fe999f458e6f1b2d74e367f2474bd0d75cfc0e52fb121a2a9fd11fd`. Built from commit
+`515e38a`. Verified: SHA256 matched between local build and the VPS copy (`sha256sum`
+over plink), `/download` and `/download/portable` both return 200. Not yet re-verified
+end-to-end on a clean machine by the product owner.
+This deploy carries the backend half of the mobile push-notification and payroll-view
+work (see `APK/mobile` git history for the mobile-side commits, which ship
+independently as APK builds — this desktop release doesn't touch the mobile app):
+- `EDGE/backend/services/fcmService.js` + `config/app.js`: Firebase Admin SDK service
+  account now resolves from a fixed drop-in path (`<userData>/storage/
+  firebase-service-account.json`) instead of requiring an env var a packaged Electron
+  app has no way to set — this is what actually lets `POST /apk/broadcast` (and any
+  future FCM feature) send real pushes.
+- `GET /apk/payroll` + `GET /apk/payroll/:runId` — new read-only endpoints (hr-admin/
+  owner only) backing the mobile Payroll view, reusing the same `payrollEngine`/
+  serializers desktop's own PayrollPage.jsx uses. No desktop-side UI change.
 This deploy is a large batch of mobile-APK-driven backend fixes accumulated over
 2026-09-04 through 2026-09-06 (see `git log` for the full list) — the headline ones:
 - IST timestamp fix (`backend/utils/dateUtils.js` `toIstParts`/`todayIST`) — attendance
