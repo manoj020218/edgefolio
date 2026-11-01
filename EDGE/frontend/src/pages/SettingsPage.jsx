@@ -1343,6 +1343,14 @@ function U5MachinesTab() {
     } catch (e) { setErr(e.message) }
   }
 
+  const handleRetentionSave = async (raw) => {
+    const days = Math.min(Math.max(Math.round(Number(raw)) || 90, 1), 3650)
+    try {
+      await updateU5Preferences({ u5_face_photo_retention_days: String(days) })
+      setPrefs(p => ({ ...p, u5_face_photo_retention_days: String(days) }))
+    } catch (e) { setErr(e.message) }
+  }
+
   if (loading) return <div className="py-8 text-center text-slate-400">Loading U5 settings…</div>
 
   return (
@@ -1572,13 +1580,26 @@ function U5MachinesTab() {
             className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 text-sky-500 cursor-pointer"
           />
           <div>
-            <p className="text-slate-200 text-sm font-medium">Store face capture photos in database</p>
+            <p className="text-slate-200 text-sm font-medium">Save punch photos on this PC</p>
             <p className="text-slate-500 text-xs mt-0.5">
-              When enabled, the face image from each attendance record is saved alongside the record.
-              This increases database size. Most installations keep this OFF. Default: OFF.
+              Keeps the camera snapshot the machine takes at every punch, as a JPEG file on this PC only
+              (never uploaded). Shown in Machine Import (so you see the face before linking an ID) and in
+              Attendance &rarr; Detail Punch Record. Works in Direct HTTP and MQTT modes. About 37&nbsp;KB per
+              punch &mdash; 100 people &times; 2 punches a day is roughly 190&nbsp;MB a month. Default: OFF.
             </p>
           </div>
         </label>
+        {prefs.u5_store_face_photos === '1' && (
+          <div className="flex items-center gap-2 pl-7">
+            <label className="text-slate-400 text-xs" htmlFor="u5-photo-retention">Delete photos older than</label>
+            <input id="u5-photo-retention" type="number" min="1" max="3650"
+              value={prefs.u5_face_photo_retention_days ?? '90'}
+              onChange={(e) => setPrefs(p => ({ ...p, u5_face_photo_retention_days: e.target.value }))}
+              onBlur={(e) => handleRetentionSave(e.target.value)}
+              className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100 text-sm focus:border-sky-500 focus:outline-none" />
+            <span className="text-slate-400 text-xs">days (checked twice a day)</span>
+          </div>
+        )}
       </div>
 
       {/* Timezone settings */}

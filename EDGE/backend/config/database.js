@@ -248,6 +248,10 @@ function runMigrations(db) {
   if (!columnExists(db, 'u5_devices', 'last_polled_at')) {
     db.exec('ALTER TABLE u5_devices ADD COLUMN last_polled_at TEXT');
   }
+  // Relative path of the punch snapshot JPEG (services/u5PunchPhotos.js), local PC only.
+  if (!columnExists(db, 'machine_import_staging', 'photo_path')) {
+    db.exec('ALTER TABLE machine_import_staging ADD COLUMN photo_path TEXT');
+  }
 
   // ── APK additions (v2.0.0) ────────────────────────────────────────────────
   // employees: mobile login gate + FCM token for push notifications

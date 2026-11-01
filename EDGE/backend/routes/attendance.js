@@ -20,6 +20,7 @@ const {
   stagingCommitHandler,
   stagingSummaryHandler,
   stagingRecordsHandler,
+  stagingPhotoHandler,
 } = require('../controllers/attendanceController');
 const { validateBody } = require('../middleware/validators');
 
@@ -46,6 +47,7 @@ router.delete('/machine-import/batches/:batchId', stagingDeleteBatchHandler);
 router.get('/machine-import/summary',       stagingSummaryHandler);   // ?batchId=
 router.get('/machine-import/records',       stagingRecordsHandler);   // ?batchId=&machineEmpId=&status=&page=&limit=
 router.get('/machine-import/unmapped',      stagingUnmappedHandler);  // machine IDs with no mapping yet
+router.get('/machine-import/photo/:id',     stagingPhotoHandler);     // stored punch snapshot (U5)
 
 // Step 3: Map machine IDs to employees (user's choice)
 router.get('/machine-import/mappings',      stagingGetMappingsHandler);

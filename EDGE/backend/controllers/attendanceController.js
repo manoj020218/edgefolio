@@ -272,6 +272,23 @@ function stagingRecordsHandler(req, res, next) {
   }
 }
 
+// GET /attendance/machine-import/photo/:id — the stored punch snapshot for one staging row,
+// as a data URL (the UI's <img> can't send the auth header, so it fetches this via the API
+// client). Files live only on this PC; see services/u5PunchPhotos.js.
+function stagingPhotoHandler(req, res, next) {
+  try {
+    const db = require('../config/database').getDb();
+    const row = db.prepare('SELECT photo_path FROM machine_import_staging WHERE id = ?').get(Number(req.params.id));
+    if (!row || !row.photo_path) return next({ statusCode: 404, message: 'No photo for this punch' });
+    const { readPunchPhoto } = require('../services/u5PunchPhotos');
+    const buf = readPunchPhoto(row.photo_path);
+    if (!buf) return next({ statusCode: 404, message: 'Photo file not found (it may have been cleaned up)' });
+    return sendOk(res, { dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getJenixSheetsHandler(req, res, next) {
@@ -322,4 +339,5 @@ module.exports = {
   stagingCommitHandler,
   stagingSummaryHandler,
   stagingRecordsHandler,
+  stagingPhotoHandler,
 };

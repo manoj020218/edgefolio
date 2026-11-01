@@ -104,6 +104,7 @@ async function sendCommandHandler(req, res, next) {
 // ── Preferences ───────────────────────────────────────────────────────────────
 const PREF_KEYS = [
   'u5_store_face_photos',
+  'u5_face_photo_retention_days',  // punch photos older than this are deleted (default 90)
   'u5_embedded_port',
   'u5_vps_host',
   'u5_vps_port',

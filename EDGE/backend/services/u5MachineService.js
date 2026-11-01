@@ -17,6 +17,7 @@
 const { getDb } = require('../config/database');
 const { stageRecords } = require('../models/machineImportModel');
 const { U5Adapter } = require('../hardware/u5/u5Adapter');
+const { savePunchPhoto } = require('./u5PunchPhotos');
 
 // ── Runtime state ─────────────────────────────────────────────────────────────
 const _state = {
@@ -252,7 +253,8 @@ async function pollHttpDeviceOnce(device) {
     afterTime = row && row.last_polled_at ? row.last_polled_at : null;
   } catch {}
 
-  const result = await adapter.getAttendanceLogs(afterTime);
+  const withPhotos = shouldStoreFacePhoto();
+  const result = await adapter.getAttendanceLogs(afterTime, { withPhotos });
   if (!result.success) {
     console.warn(`[U5-HTTP] ${sn}: poll failed — ${result.message}`);
     markDeviceOffline(sn);
@@ -274,16 +276,24 @@ async function pollHttpDeviceOnce(device) {
   const stagingRows = rows.map(row => {
     const localTime = convertDeviceTime(row.checkin_time, deviceOffsetMin, localOffsetMin);
     const parts     = (localTime || '').includes(' ') ? localTime.split(' ') : [localTime, null];
+    const { picLarge, ...deviceData } = row;   // photo goes to a file, never into raw_json
+    const machineEmpId = String(row.id_number || row.userId || '').trim();
+    const punchDate    = parts[0] || today;
+    const punchTime    = parts[1] || null;
+    const photoPath    = withPhotos && picLarge && machineEmpId
+      ? savePunchPhoto(picLarge, { deviceSn: sn, machineEmpId, punchDate, punchTime })
+      : null;
     return {
-      machineEmpId: String(row.id_number || row.userId || '').trim(),
+      machineEmpId,
       machineName:  row.name || null,
-      punchDate:    parts[0] || today,
-      punchTime:    parts[1] || null,
+      punchDate,
+      punchTime,
       direction:    'in',
       mode:         'face',
       remark:       row.ispass === 0 ? 'denied' : 'pass',
       recordType:   'punch',
-      deviceData:   row,
+      deviceData,
+      photoPath,
     };
   }).filter(r => r.machineEmpId);
 

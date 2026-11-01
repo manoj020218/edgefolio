@@ -18,7 +18,7 @@ function stageRecords(batchId, sourceType, records) {
       am_in, am_out, pm_in, pm_out, over_in, over_out,
       hours_overtime, late_mins, early_leave_mins, remark,
       tm_no, mode, raw_json,
-      mapped_employee_id, status
+      mapped_employee_id, status, photo_path
     ) VALUES (
       @importBatch, @sourceType, @recordType,
       @machineEmpId, @machineName, @department,
@@ -27,7 +27,7 @@ function stageRecords(batchId, sourceType, records) {
       @amIn, @amOut, @pmIn, @pmOut, @overIn, @overOut,
       @hoursOvertime, @lateMins, @earlyLeaveMins, @remark,
       @tmNo, @mode, @rawJson,
-      @mappedEmployeeId, @status
+      @mappedEmployeeId, @status, @photoPath
     )
   `);
 
@@ -62,6 +62,7 @@ function stageRecords(batchId, sourceType, records) {
         rawJson:        JSON.stringify(r),
         mappedEmployeeId: mapped,
         status:         mapped ? 'mapped' : 'pending',
+        photoPath:      r.photoPath    || null,
       });
       count++;
     }
@@ -77,7 +78,11 @@ function listUnmappedIds() {
            MAX(s.machine_name) AS machine_name,
            COUNT(*) AS record_count,
            MIN(s.punch_date) AS earliest_date,
-           MAX(s.punch_date) AS latest_date
+           MAX(s.punch_date) AS latest_date,
+           -- newest stored punch snapshot, so HR sees the face before linking the ID
+           (SELECT p.id FROM machine_import_staging p
+             WHERE p.machine_emp_id = s.machine_emp_id AND p.photo_path IS NOT NULL
+             ORDER BY p.punch_date DESC, p.punch_time DESC LIMIT 1) AS latest_photo_id
     FROM machine_import_staging s
     WHERE s.status = 'pending'
     GROUP BY s.machine_emp_id

@@ -15,6 +15,7 @@ import {
   CheckCircle, Loader2, Plug, RefreshCw, Database, ArrowRight, Trash2, UserPlus,
 } from 'lucide-react'
 import { Button } from '../atomic'
+import { PunchPhoto } from '../shared/PunchPhoto'
 import {
   importAttendance, testMachineConnection, pullFromMachine,
   getJenixSheets,
@@ -884,6 +885,7 @@ function MachineImportTab({ onImported }) {
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {unmapped.map(row => (
               <div key={row.machine_emp_id} className="flex items-center gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                {row.latest_photo_id && <PunchPhoto id={row.latest_photo_id} size={36} title={row.machine_name || `ID ${row.machine_emp_id}`} />}
                 <div className="w-28 flex-shrink-0">
                   <p className="text-slate-300 text-sm font-mono font-semibold">ID: {row.machine_emp_id}</p>
                   {row.machine_name && <p className="text-slate-500 text-xs truncate">{row.machine_name}</p>}

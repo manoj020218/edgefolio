@@ -3,6 +3,18 @@ const path = require('path');
 const { getDb } = require('../config/database');
 const { BACKUP_DIR, LOG_DIR } = require('../config/app');
 const logger = require('../utils/logger');
+const { pruneOldPunchPhotos, DEFAULT_RETENTION_DAYS } = require('../services/u5PunchPhotos');
+
+// U5 punch snapshots (local files) — retention is a U5 preference, read each cycle so a
+// change in Settings applies without a restart.
+function prunePunchPhotos() {
+  let days = DEFAULT_RETENTION_DAYS;
+  try {
+    const row = getDb().prepare("SELECT value FROM app_preferences WHERE key = 'u5_face_photo_retention_days'").get();
+    if (row && Number(row.value) > 0) days = Number(row.value);
+  } catch { /* table may not exist yet — use default */ }
+  return pruneOldPunchPhotos(days);
+}
 
 function listFilesSafe(targetDir, extFilter = null) {
   if (!fs.existsSync(targetDir)) return [];
@@ -117,6 +129,7 @@ function startCleanupScheduler({
       const deletedBackupFiles = pruneBackupFiles(safeKeepBackups);
       const deletedBackupRows = pruneBackupRows(deletedBackupFiles);
       const deletedLogs = pruneOldLogs(safeLogDays);
+      const deletedPunchPhotoDays = prunePunchPhotos();
 
       logger.info('Cleanup scheduler cycle completed', {
         trigger,
@@ -124,6 +137,7 @@ function startCleanupScheduler({
         deletedBackupFiles: deletedBackupFiles.length,
         deletedBackupRows,
         deletedLogs,
+        deletedPunchPhotoDays,
         keepLocalBackups: safeKeepBackups,
         logRetentionDays: safeLogDays,
       });

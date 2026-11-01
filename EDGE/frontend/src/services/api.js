@@ -200,6 +200,7 @@ export const machineImportAlog    = (data) => http.post('/attendance/machine-imp
 export const machineImportJenix   = (data) => http.post('/attendance/machine-import/jenix', data, { timeout: 60000 })
 export const getMachineImportBatches  = ()         => http.get('/attendance/machine-import/batches')
 export const getMachineImportRecords  = (params)   => http.get('/attendance/machine-import/records', { params })
+export const getMachineImportPhoto    = (id)       => http.get(`/attendance/machine-import/photo/${id}`)
 export const deleteMachineImportBatch = (batchId)  => http.delete(`/attendance/machine-import/batches/${batchId}`)
 export const getMachineImportUnmapped = ()         => http.get('/attendance/machine-import/unmapped')
 export const getMachineImportMappings = ()         => http.get('/attendance/machine-import/mappings')

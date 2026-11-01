@@ -4,6 +4,7 @@ import { Clock, Upload, RefreshCw, Download, ListOrdered, Loader2 } from 'lucide
 import { Button, Card, Badge, Alert, Modal, Select } from '../components/atomic'
 import { getAttendance, getAttendanceSummary, logAttendanceEvent, getEmployees, getAttendanceRange, getMachineImportRecords, getHolidays, getWorkingHours } from '../services/api'
 import { ImportModal } from '../components/attendance/ImportModal'
+import { PunchPhoto } from '../components/shared/PunchPhoto'
 
 // ─── Main AttendancePage ──────────────────────────────────────────────────────
 export const AttendancePage = () => {
@@ -939,6 +940,7 @@ export const AttendancePage = () => {
                   <thead>
                     <tr className="border-b border-slate-700">
                       <th className="text-left py-2 px-3 text-slate-400 font-semibold">#</th>
+                      {punchDetailRecords.some((p) => p.photo_path) && <th className="text-left py-2 px-3 text-slate-400 font-semibold">Photo</th>}
                       <th className="text-left py-2 px-3 text-slate-400 font-semibold">Time</th>
                       <th className="text-left py-2 px-3 text-slate-400 font-semibold">Direction</th>
                       <th className="text-left py-2 px-3 text-slate-400 font-semibold">Batch</th>
@@ -948,6 +950,9 @@ export const AttendancePage = () => {
                     {punchDetailRecords.map((p, idx) => (
                       <tr key={p.id} className={idx % 2 === 0 ? 'bg-slate-900/50' : ''}>
                         <td className="py-2 px-3 text-slate-500">{idx + 1}</td>
+                        {punchDetailRecords.some((r) => r.photo_path) && (
+                          <td className="py-1.5 px-3">{p.photo_path ? <PunchPhoto id={p.id} size={36} title={`${punchDetail.employeeName} ${p.punch_time}`} /> : <span className="text-slate-600">—</span>}</td>
+                        )}
                         <td className="py-2 px-3 text-slate-100 font-mono">{p.punch_time}</td>
                         <td className="py-2 px-3 text-slate-400 capitalize">{p.direction || '—'}</td>
                         <td className="py-2 px-3 text-slate-500 text-xs font-mono truncate max-w-[140px]">{p.import_batch}</td>

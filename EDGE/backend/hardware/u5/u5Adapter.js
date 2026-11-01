@@ -213,12 +213,15 @@ class U5Adapter {
   /**
    * Fetch punch/attendance records from the device via /getWorkNoteList.
    *
-   * Safety: pic_large is stripped from every row -- the raw base64 can exceed 300 KB per row
-   * and locks the Mongoose/6.18 single-connection HTTP server.
+   * The device always sends pic_large (~37 KB punch snapshot) with every row. By default it is
+   * dropped here; pass { withPhotos: true } to get it back as `picLarge` (used by the
+   * "Save punch photos" setting -- costs no extra device load, the bytes arrive anyway).
    *
    * @param {string} [afterTime]  ISO string -- only returns records newer than this timestamp.
+   * @param {{ withPhotos?: boolean }} [opts]
    */
-  async getAttendanceLogs(afterTime) {
+  async getAttendanceLogs(afterTime, opts) {
+    const withPhotos = !!(opts && opts.withPhotos);
     const cutoff = afterTime ? new Date(afterTime).getTime() : 0;
     try {
       // type 2 = recognised (enrolled) punches only; other types are stranger records.
@@ -240,7 +243,7 @@ class U5Adapter {
           if (row.id_number !== undefined) out.id_number = row.id_number;
           if (row.name      !== undefined) out.name      = row.name;
           if (row.temp      !== undefined) out.temp      = row.temp;
-          // pic_large intentionally stripped to avoid locking the device
+          if (withPhotos && row.pic_large) out.picLarge = row.pic_large;
           return out;
         });
 
