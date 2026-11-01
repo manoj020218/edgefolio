@@ -262,7 +262,18 @@ desktop-side behavior unaffected, that commit only touches the mobile build). Ve
 SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
 `/download` and `/download/portable` both return 200 on a full download.
 
-**Current live installer: v1.0.6, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
+**Current live installer: v1.0.7, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
+`dc171341e8725f42837f65958f43cbcc832dfcba1c3606e337b013ab4a735f3a`;
+`EdgeFolio-Portable.exe` SHA256
+`9fdd1648e93cc855ccdcca1c43aeb0a7685b448ddbd0961b3c8a0239f0327bad`. Built from commit
+`34aaf1e` + the 1.0.7 version bump. Verified: SHA256 matched between local build and the
+VPS copy (`sha256sum` over plink), `/download` and `/download/portable` both return 200
+with the new sizes. Not yet verified on a clean machine. Fixes machine-import commits
+(`5f46e40`): a later commit no longer overwrites the day's earlier check-in (check-in =
+earliest, check-out = latest across all commits), and U5 punches now produce a check-out
+(they were staged with a hard-coded 'in' direction).
+
+**Previous: v1.0.6, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
 `f3f0d9c19a3326d95e0fa075ebaca0534ffefbb82ab6d9e330725a163421f921`;
 `EdgeFolio-Portable.exe` SHA256
 `de76cd8ab15fea8384b925760ecf08304dfc3bb23abf496a2dc40a5db0397948`. Built from commit
