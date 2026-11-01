@@ -700,12 +700,25 @@ function MachineImportTab({ onImported }) {
     finally { setDeletingBatch(null) }
   }
 
+  // Employees picked in the dropdowns but not yet saved via "Save Mappings". Commit
+  // saves these first -- HR picking an employee and going straight to Commit used to
+  // commit 0 records, because commit only uses SAVED mappings.
+  const unsavedPairs = unmapped
+    .filter((row) => mappings[row.machine_emp_id])
+    .map((row) => ({ machineEmpId: row.machine_emp_id, employeeId: mappings[row.machine_emp_id] }))
+
   const handleCommit = async () => {
     setCommitting(true); setErr(''); setSuccess('')
     try {
+      if (unsavedPairs.length) await saveMachineImportMappings({ mappings: unsavedPairs })
       const res = await commitMachineImport(selectedBatch ? { batchId: selectedBatch } : {})
       const d = res.data || {}
-      setSuccess(`Committed ${d.committed} records${d.skipped ? ` (${d.skipped} skipped)` : ''}.`)
+      if (!d.committed) {
+        setErr('Nothing was committed: no machine ID is linked to an employee yet. Pick an employee for each machine ID in Step 1, then commit again.')
+        load(true)
+        return
+      }
+      setSuccess(`Committed ${d.committed} records${d.skipped ? ` (${d.skipped} skipped)` : ''}${unsavedPairs.length ? ` after saving ${unsavedPairs.length} mapping${unsavedPairs.length !== 1 ? 's' : ''}` : ''}.`)
       load(true)
       onImported()
     } catch (e) { setErr(e.message) }
@@ -767,7 +780,7 @@ function MachineImportTab({ onImported }) {
       {unmapped.length > 0 && (
         <div className="space-y-3">
           <div>
-            <h3 className="text-base font-semibold text-slate-200">Map Machine IDs → Employees</h3>
+            <h3 className="text-base font-semibold text-slate-200">Step 1 — Map Machine IDs → Employees</h3>
             <p className="text-slate-500 text-xs mt-0.5">
               {unmapped.length} machine employee ID{unmapped.length !== 1 ? 's' : ''} not yet mapped.
               {Object.keys(autoMatched).length > 0 && (
@@ -920,20 +933,23 @@ function MachineImportTab({ onImported }) {
       {/* Commit */}
       {pendingBatches.length > 0 && (
         <div className={`bg-slate-900/50 rounded-lg p-4 space-y-3 transition-colors ${
-          unmapped.length === 0
+          unmapped.length === 0 || unsavedPairs.length > 0
             ? 'border-2 border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.15)]'
             : 'border border-slate-700'
         }`}>
           <div>
-            <h3 className="text-base font-semibold text-slate-200">Commit to Attendance Records</h3>
+            <h3 className="text-base font-semibold text-slate-200">Step 2 — Commit to Attendance Records</h3>
             <p className="text-slate-500 text-xs mt-0.5">
               {selectedBatch ? `Committing batch: ${selectedBatch}` : 'Committing all mapped records across all batches.'}
               {' '}Only records with a mapped employee will be committed.
+              {unsavedPairs.length > 0 && <> Your {unsavedPairs.length} selected mapping{unsavedPairs.length !== 1 ? 's are' : ' is'} saved automatically.</>}
             </p>
           </div>
           <Button variant="primary" isLoading={committing} onClick={handleCommit}>
             <Database className="w-4 h-4 mr-1.5 inline" />
-            Commit {selectedBatch ? 'Selected Batch' : 'All Mapped Records'}
+            {unsavedPairs.length > 0
+              ? `Save ${unsavedPairs.length} Mapping${unsavedPairs.length !== 1 ? 's' : ''} & Commit`
+              : `Commit ${selectedBatch ? 'Selected Batch' : 'All Mapped Records'}`}
           </Button>
         </div>
       )}

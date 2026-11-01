@@ -43,6 +43,7 @@ export const EmployeesPage = () => {
   const [designations, setDesignations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,20 +90,24 @@ export const EmployeesPage = () => {
 
   const handleOpenAdd = () => {
     setFormData({ name: '', email: '', phone: '', department: '', designation: '', salary: '', status: 'active', workType: 'office', appRole: 'user' });
+    setFormError('');
     setIsModalOpen(true);
   };
 
+  // Errors from the Add Employee form go to formError, shown INSIDE the modal --
+  // the page-level Alert renders behind the modal overlay where nobody can see it.
   const handleCreateEmployee = async () => {
     if (!formData.name || !formData.department || !formData.salary) {
-      setError('Name, department and salary are required'); return;
+      setFormError('Name, department and salary are required'); return;
     }
+    setFormError('');
     setSaving(true);
     try {
       await createEmployee({ ...formData, salary: Number(formData.salary) });
       setIsModalOpen(false);
       fetchEmployees();
     } catch (err) {
-      setError(err.message);
+      setFormError(err.message);
     } finally {
       setSaving(false);
     }
@@ -305,6 +310,7 @@ export const EmployeesPage = () => {
       {/* Add Employee Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add New Employee" size="lg">
         <div className="space-y-4">
+          {formError && <Alert variant="danger" message={formError} onClose={() => setFormError('')} />}
           <div className="grid grid-cols-2 gap-4">
             <Input label="Full Name *" placeholder="John Doe" value={formData.name} onChange={f('name')} />
             <Input label="Email" type="email" placeholder="john@example.com" value={formData.email} onChange={f('email')} />

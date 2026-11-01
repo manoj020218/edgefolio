@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Button } from '../atomic';
 
 // A <Select> that can also create a brand-new option inline — used for
 // Department/Designation pickers so HR never has to leave the form (or
@@ -48,15 +47,29 @@ export function CreatableSelect({
       ) : (
         <div className="space-y-1.5">
           {err && <p className="text-red-400 text-xs">{err}</p>}
-          <div className="flex gap-2">
+          {/* Add / cancel live INSIDE the input box so the control never grows wider
+              than its column (side-by-side buttons overflowed half-width form grids). */}
+          <div className="relative w-full">
             <input
               autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreate();
+                if (e.key === 'Escape') { setCreating(false); setNewName(''); }
+              }}
               placeholder="New name"
-              className="flex-1 bg-slate-800 border border-sky-600 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none"
+              className="w-full min-w-0 bg-slate-800 border border-sky-600 rounded-lg pl-3 pr-20 py-2 text-slate-100 text-sm focus:outline-none"
             />
-            <Button size="sm" variant="primary" isLoading={saving} onClick={handleCreate}>Add</Button>
-            <Button size="sm" variant="secondary" onClick={() => { setCreating(false); setNewName(''); }}>Cancel</Button>
+            <div className="absolute inset-y-0 right-1.5 flex items-center gap-1">
+              <button type="button" onClick={handleCreate} disabled={saving || !newName.trim()}
+                className="px-2 py-0.5 rounded-md bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-medium">
+                {saving ? '…' : 'Add'}
+              </button>
+              <button type="button" title="Cancel" aria-label="Cancel"
+                onClick={() => { setCreating(false); setNewName(''); }}
+                className="px-1.5 py-0.5 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700 text-xs">
+                ✕
+              </button>
+            </div>
           </div>
         </div>
       )}
