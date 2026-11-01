@@ -53,3 +53,23 @@ same person walks up again → green box "TempProbe" on screen + a type-2 record
 | Background faces | People several metres away get logged as strangers. Auto-enroll needs a face-size/quality gate (or a "second sighting" rule). |
 | Clock | Device was +2:30 ahead of IST (set to UTC+8). Attendance times are wrong until fixed. |
 | Enroll result | `insertEmployee` with the stranger frame (as `data:image/jpeg;base64,…`) returns `code 200`. The device stores its own ~11 KB crop. `pass_date`/`pass_time` = `"0"` means no expiry; the expiry format is still untested. |
+
+## Demo: temporary-labour attendance with no enrollment (`u5-visitor-auto-enroll.js`)
+
+Hardware: the U5 as a **dedicated Visitor Attendance Machine** + the EdgeFolio PC on the same LAN.
+No ESP32, no cloud. Regular staff use their own machine, so nothing mixes.
+
+Setup (once):
+1. Stop the Community `u5Poller.ts` and the ESP32-S3 gateway (the U5 serves one caller at a time).
+2. Run EDGE from source (the paging fix in `u5Adapter.js` is not in the installed build yet).
+3. EdgeFolio → Settings → Machines → add the U5, HTTP mode, `192.168.1.92`, name it "Visitor Machine".
+4. Aim the U5 at the walk-up spot with nobody sitting behind it.
+5. `node u5-visitor-auto-enroll.js reset` (clean start), then `node u5-visitor-auto-enroll.js run`.
+
+Demo flow:
+1. A new labourer walks up → machine shows stranger → script prints `ENROLLED V0001`.
+2. They walk up again → green box "Temp V0001" = present.
+3. Within ~30 s EdgeFolio's U5 poll shows a punch for machine ID `V0001` (unlinked) → HR links it
+   to a new "Temp Labour" employee → attendance flows into payroll like anyone else.
+
+`node u5-visitor-auto-enroll.js list` shows visitors + photos (`visitor-state/`, git-ignored).
