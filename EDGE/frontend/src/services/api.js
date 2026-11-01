@@ -243,6 +243,8 @@ export const getU5Status         = ()           => http.get('/u5/status')
 export const sendU5Command       = (data)       => http.post('/u5/command', data)
 export const getU5Preferences    = ()           => http.get('/u5/preferences')
 export const updateU5Preferences = (data)       => http.put('/u5/preferences', data)
+export const getU5Visitors       = ()           => http.get('/u5/visitors')
+export const getU5VisitorPhoto   = (code)       => http.get(`/u5/visitors/${encodeURIComponent(code)}/photo`)
 
 // ── M68 (WitEasy FK BS-protocol) Machines ────────────────────────────────────
 export const getM68Devices       = ()           => http.get('/m68/devices')

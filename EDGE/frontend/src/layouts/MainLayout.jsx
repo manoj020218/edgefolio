@@ -16,6 +16,7 @@ import {
   WifiOff,
   Bell,
   Menu,
+  ScanFace,
 } from 'lucide-react'
 import { getDisputeCount } from '../services/api'
 import { LicenseBanner } from '../components/common/LicenseBanner'
@@ -23,6 +24,7 @@ import { LicenseBanner } from '../components/common/LicenseBanner'
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/attendance', label: 'Attendance', icon: Clock },
+  { path: '/visitors', label: 'Visitors', icon: ScanFace },
   { path: '/employees', label: 'Employees', icon: Users },
   { path: '/payroll', label: 'Payroll', icon: DollarSign },
   { path: '/reports', label: 'Reports', icon: BarChart3 },

@@ -10,6 +10,7 @@ import { ReportsPage } from './pages/ReportsPage'
 import { LeaveManagementPage } from './pages/LeaveManagementPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { CashbookPage } from './pages/CashbookPage'
+import { VisitorsPage } from './pages/VisitorsPage'
 import { MainLayout } from './layouts/MainLayout'
 import { UpdateBanner } from './components/common/UpdateBanner'
 import { AnnouncementBanner } from './components/common/AnnouncementBanner'
@@ -153,6 +154,7 @@ function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/attendance" element={<AttendancePage />} />
+          <Route path="/visitors" element={<VisitorsPage />} />
           <Route path="/employees" element={<EmployeesPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/reports" element={<ReportsPage />} />

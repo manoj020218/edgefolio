@@ -18,6 +18,7 @@ const { getDb } = require('../config/database');
 const { stageRecords } = require('../models/machineImportModel');
 const { U5Adapter } = require('../hardware/u5/u5Adapter');
 const { savePunchPhoto } = require('./u5PunchPhotos');
+const visitorService = require('./u5VisitorService');
 
 // ── Runtime state ─────────────────────────────────────────────────────────────
 const _state = {
@@ -28,6 +29,7 @@ const _state = {
   embeddedPort: 1883,
   deviceStatus: {},       // deviceSn → { online, lastSeen }
   httpPollTimers: {},     // deviceSn → setInterval handle
+  visitorTimers: {},      // deviceSn → setInterval handle (visitor auto-ID check, 5 s)
   httpAdapters: {},       // deviceSn → U5Adapter instance
 };
 
@@ -242,6 +244,39 @@ async function pollHttpDevice(device) {
   }
 }
 
+// Visitor auto-ID check (u5VisitorService). Shares the poll's per-device lock: if the poll
+// is running this tick is simply skipped, so the single-threaded U5 never sees two callers.
+async function visitorTick(sn) {
+  const device = loadDevices().find(d => d.device_sn === sn);
+  if (!device || device.connection_mode !== 'http' || !device.visitor_auto_enroll) {
+    visitorService.resetDevice(sn);
+    return;
+  }
+  if (_pollInFlight.has(sn)) return;
+  _pollInFlight.add(sn);
+  try {
+    await visitorService.runVisitorCheck(device, getAdapter(device), { getPref, setPref });
+  } catch (err) {
+    console.warn(`[U5-VISITOR] ${sn}: check failed — ${err.message}`);
+  } finally {
+    _pollInFlight.delete(sn);
+  }
+}
+
+// Punches of visitors we enrolled are staged under the visitor code (e.g. "TW-1001"), not the
+// U5's internal userid. If HR had already linked the old userid, carry that link over once.
+function carryOverVisitorMappings(visitorMap) {
+  try {
+    const db = getDb();
+    const get = db.prepare('SELECT employee_id FROM machine_id_mappings WHERE machine_emp_id = ?');
+    const add = db.prepare('INSERT OR IGNORE INTO machine_id_mappings (machine_emp_id, employee_id) VALUES (?, ?)');
+    for (const [userId, code] of Object.entries(visitorMap)) {
+      const old = get.get(userId);
+      if (old && !get.get(code)) add.run(code, old.employee_id);
+    }
+  } catch { /* mapping table missing — nothing to carry */ }
+}
+
 async function pollHttpDeviceOnce(device) {
   const sn      = device.device_sn;
   const adapter = getAdapter(device);
@@ -272,12 +307,14 @@ async function pollHttpDeviceOnce(device) {
 
   const today    = new Date().toISOString().slice(0, 10);
   const batchId  = `U5-HTTP-${sn}-${today}`;
+  const visitorMap = visitorService.visitorCodeMap(sn);
+  if (Object.keys(visitorMap).length) carryOverVisitorMappings(visitorMap);
 
   const stagingRows = rows.map(row => {
     const localTime = convertDeviceTime(row.checkin_time, deviceOffsetMin, localOffsetMin);
     const parts     = (localTime || '').includes(' ') ? localTime.split(' ') : [localTime, null];
     const { picLarge, ...deviceData } = row;   // photo goes to a file, never into raw_json
-    const machineEmpId = String(row.id_number || row.userId || '').trim();
+    const machineEmpId = String(row.id_number || visitorMap[String(row.userId)] || row.userId || '').trim();
     const punchDate    = parts[0] || today;
     const punchTime    = parts[1] || null;
     const photoPath    = withPhotos && picLarge && machineEmpId
@@ -347,6 +384,9 @@ function startHttpPolling() {
       }
       pollHttpDevice(fresh).catch(() => {});
     }, intervalMs);
+    // Visitor check runs on every HTTP device; it is a no-op unless the device is marked as
+    // a visitor machine, so toggling the setting needs no restart.
+    _state.visitorTimers[sn] = setInterval(() => { visitorTick(sn).catch(() => {}); }, 5000);
   }
 }
 
@@ -355,6 +395,11 @@ function stopHttpPolling(sn) {
     clearInterval(_state.httpPollTimers[sn]);
     delete _state.httpPollTimers[sn];
   }
+  if (_state.visitorTimers[sn]) {
+    clearInterval(_state.visitorTimers[sn]);
+    delete _state.visitorTimers[sn];
+  }
+  visitorService.resetDevice(sn);
   delete _state.httpAdapters[sn];
 }
 

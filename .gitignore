@@ -78,3 +78,6 @@ coverage/
 # License file and machine-id — per-install, never commit
 **/license.json
 **/machine-id.txt
+
+# U5 punch/visitor photos — real faces, local PC only (u5PunchPhotos.js, u5VisitorService.js)
+EDGE/storage/faces/

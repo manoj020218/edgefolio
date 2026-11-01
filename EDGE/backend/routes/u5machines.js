@@ -38,4 +38,8 @@ router.get('/devices/:deviceSn/ping', ctrl.pingDeviceHandler);
 // Read firmware/SN: GET /u5/devices/:deviceSn/info
 router.get('/devices/:deviceSn/info', ctrl.getDeviceInfoHandler);
 
+// Visitors created by visitor auto-ID: list (with attendance stats) + enroll-time face
+router.get('/visitors',             ctrl.listVisitorsHandler);
+router.get('/visitors/:code/photo', ctrl.visitorPhotoHandler);
+
 module.exports = router;

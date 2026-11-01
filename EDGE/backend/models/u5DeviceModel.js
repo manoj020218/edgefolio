@@ -21,11 +21,11 @@ function createDevice(payload) {
     INSERT INTO u5_devices (
       id, device_name, device_sn, connection_mode, mqtt_token,
       vps_host, vps_port, vps_username, vps_password, embedded_port,
-      device_ip, device_port, device_password, status
+      device_ip, device_port, device_password, status, visitor_auto_enroll
     ) VALUES (
       @id, @device_name, @device_sn, @connection_mode, @mqtt_token,
       @vps_host, @vps_port, @vps_username, @vps_password, @embedded_port,
-      @device_ip, @device_port, @device_password, @status
+      @device_ip, @device_port, @device_password, @status, @visitor_auto_enroll
     )
   `).run({
     id,
@@ -42,6 +42,7 @@ function createDevice(payload) {
     device_port: Number(payload.devicePort || payload.device_port || 80),
     device_password: payload.devicePassword || payload.device_password || null,
     status: 'offline',
+    visitor_auto_enroll: (payload.visitorAutoEnroll ?? payload.visitor_auto_enroll) ? 1 : 0,
   });
   return findDeviceById(id);
 }
@@ -57,6 +58,7 @@ function updateDevice(id, payload) {
         vps_username=@vps_username, vps_password=@vps_password,
         embedded_port=@embedded_port,
         device_ip=@device_ip, device_port=@device_port, device_password=@device_password,
+        visitor_auto_enroll=@visitor_auto_enroll,
         updated_at=@updated_at
     WHERE id=@id
   `).run({
@@ -73,6 +75,7 @@ function updateDevice(id, payload) {
     device_ip:       payload.deviceIp       ?? payload.device_ip       ?? existing.device_ip,
     device_port:     Number(payload.devicePort ?? payload.device_port ?? existing.device_port ?? 80),
     device_password: payload.devicePassword ?? payload.device_password ?? existing.device_password,
+    visitor_auto_enroll: (payload.visitorAutoEnroll ?? payload.visitor_auto_enroll ?? existing.visitor_auto_enroll) ? 1 : 0,
     updated_at:      new Date().toISOString(),
   });
   return findDeviceById(id);

@@ -20,6 +20,7 @@ function serializeDevice(row) {
     deviceIp:       row.device_ip,
     devicePort:     row.device_port,
     lastPolledAt:   row.last_polled_at,
+    visitorAutoEnroll: !!row.visitor_auto_enroll,
     status:         row.status,
     lastSeen:       row.last_seen,
     createdAt:      row.created_at,
@@ -38,7 +39,7 @@ async function createDeviceHandler(req, res, next) {
   try {
     const { deviceName, deviceSn, connectionMode, mqttToken,
             vpsHost, vpsPort, vpsUsername, vpsPassword, embeddedPort,
-            deviceIp, devicePort, devicePassword } = req.body || {};
+            deviceIp, devicePort, devicePassword, visitorAutoEnroll } = req.body || {};
     if (!deviceName) throw createHttpError(400, 'deviceName is required');
     if (!deviceSn)   throw createHttpError(400, 'deviceSn (serial number) is required');
     if (connectionMode === 'http' && !deviceIp) throw createHttpError(400, 'deviceIp is required for HTTP mode');
@@ -46,7 +47,7 @@ async function createDeviceHandler(req, res, next) {
     const row = model.createDevice({
       deviceName, deviceSn, connectionMode, mqttToken,
       vpsHost, vpsPort, vpsUsername, vpsPassword, embeddedPort,
-      deviceIp, devicePort, devicePassword,
+      deviceIp, devicePort, devicePassword, visitorAutoEnroll,
     });
 
     if (connectionMode === 'vps')  u5Service.restartVps();
@@ -105,6 +106,11 @@ async function sendCommandHandler(req, res, next) {
 const PREF_KEYS = [
   'u5_store_face_photos',
   'u5_face_photo_retention_days',  // punch photos older than this are deleted (default 90)
+  // Visitor auto-ID format (services/u5VisitorService.js)
+  'u5_visitor_prefix',        // e.g. "V", "TW-", "LAB"   (default "V")
+  'u5_visitor_digits',        // zero-padded width 3..6    (default 4)
+  'u5_visitor_next',          // next number to assign     (default 1)
+  'u5_visitor_name_pattern',  // name on the machine, {id}/{n}, max 10 chars (default "Temp {id}")
   'u5_embedded_port',
   'u5_vps_host',
   'u5_vps_port',
@@ -207,7 +213,25 @@ async function getDeviceInfoHandler(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── Visitors (auto-ID temp workers, services/u5VisitorService.js) ────────────
+function listVisitorsHandler(req, res, next) {
+  try {
+    sendOk(res, require('../services/u5VisitorService').listVisitors());
+  } catch (e) { next(e); }
+}
+
+// The face captured when the visitor was enrolled, as a data URL (<img> can't send auth).
+function visitorPhotoHandler(req, res, next) {
+  try {
+    const buf = require('../services/u5VisitorService').getVisitorPhoto(req.params.code);
+    if (!buf) throw createHttpError(404, 'No photo for this visitor');
+    sendOk(res, { dataUrl: `data:image/jpeg;base64,${buf.toString('base64')}` });
+  } catch (e) { next(e); }
+}
+
 module.exports = {
+  listVisitorsHandler,
+  visitorPhotoHandler,
   listDevicesHandler,
   createDeviceHandler,
   updateDeviceHandler,

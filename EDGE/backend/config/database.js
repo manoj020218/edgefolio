@@ -252,6 +252,22 @@ function runMigrations(db) {
   if (!columnExists(db, 'machine_import_staging', 'photo_path')) {
     db.exec('ALTER TABLE machine_import_staging ADD COLUMN photo_path TEXT');
   }
+  // Visitor auto-ID (services/u5VisitorService.js): a U5 marked as a visitor machine turns
+  // unknown faces into temporary IDs. u5_visitors maps the U5's own userid to the ID we gave.
+  if (!columnExists(db, 'u5_devices', 'visitor_auto_enroll')) {
+    db.exec('ALTER TABLE u5_devices ADD COLUMN visitor_auto_enroll INTEGER NOT NULL DEFAULT 0');
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS u5_visitors (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_sn       TEXT NOT NULL,
+    visitor_code    TEXT NOT NULL UNIQUE,
+    machine_user_id TEXT,
+    display_name    TEXT,
+    photo_path      TEXT,
+    first_seen      TEXT,
+    enrolled_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_u5_visitors_user ON u5_visitors(device_sn, machine_user_id)');
 
   // ── APK additions (v2.0.0) ────────────────────────────────────────────────
   // employees: mobile login gate + FCM token for push notifications

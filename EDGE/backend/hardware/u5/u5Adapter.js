@@ -253,6 +253,24 @@ class U5Adapter {
     }
   }
 
+  /**
+   * Newest page (8 rows, newest first) of the log, raw rows INCLUDING pic_large.
+   *   type 2 = recognised punches; any other type (1 is used) = strangers:
+   *   userid "-1", name "陌生人", ispass 0 -- verified live 2026-11-01.
+   * Used by the visitor auto-ID check, which only needs the latest few rows.
+   */
+  async getRecentLogs(type) {
+    try {
+      const data = await this._post('/getWorkNoteList', { password: this._password, type: type, index: 1, count: U5_PAGE_SIZE });
+      const failed = (data.result !== undefined && data.result !== 0) ||
+                     (data.code   !== undefined && data.code   !== U5_CODE_OK);
+      if (failed) return { success: false, code: data.result || data.code || -1, message: 'U5 log fetch failed' };
+      return { success: true, data: Array.isArray(data.data) ? data.data : [] };
+    } catch (err) {
+      return { success: false, code: 0, message: err.message || 'Network error reaching U5' };
+    }
+  }
+
   // Trigger the door relay -- manual unlock from the operator console.
   async openDoor() {
     try {

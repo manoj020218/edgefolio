@@ -1241,6 +1241,7 @@ function U5MachinesTab() {
     mqttToken: 'edge', embeddedPort: 1883,
     vpsHost: '', vpsPort: 1883, vpsUsername: '', vpsPassword: '',
     deviceIp: '', devicePort: 80, devicePassword: '',
+    visitorAutoEnroll: false,
   }
 
   const [devices, setDevices]         = useState([])
@@ -1318,8 +1319,39 @@ function U5MachinesTab() {
       mqttToken: d.mqttToken || 'edge', embeddedPort: d.embeddedPort || 1883,
       vpsHost: d.vpsHost || '', vpsPort: d.vpsPort || 1883, vpsUsername: d.vpsUsername || '', vpsPassword: '',
       deviceIp: d.deviceIp || '', devicePort: d.devicePort || 80, devicePassword: '',
+      visitorAutoEnroll: !!d.visitorAutoEnroll,
     })
     setShowAddForm(true)
+  }
+
+  // Visitor auto-ID format (backend: services/u5VisitorService.js). Mirrors its formatId so
+  // the preview shows exactly what the next visitor will get.
+  const visitorFmt = {
+    prefix: prefs.u5_visitor_prefix ?? 'V',
+    digits: Math.min(Math.max(parseInt(prefs.u5_visitor_digits ?? '4', 10) || 4, 3), 6),
+    next: Math.max(parseInt(prefs.u5_visitor_next ?? '1', 10) || 1, 1),
+    namePattern: prefs.u5_visitor_name_pattern || 'Temp {id}',
+  }
+  const visitorPreview = (() => {
+    const n = String(visitorFmt.next).padStart(visitorFmt.digits, '0')
+    const code = `${String(visitorFmt.prefix).trim().slice(0, 10)}${n}`
+    const full = visitorFmt.namePattern.replace(/\{id\}/g, code).replace(/\{n\}/g, n).trim()
+    return { code, name: full.slice(0, 10) || code.slice(0, 10), cut: full.length > 10 }
+  })()
+  const [visitorSaving, setVisitorSaving] = useState(false)
+  const [visitorSaved, setVisitorSaved]   = useState(false)
+  const handleSaveVisitorFmt = async () => {
+    setVisitorSaving(true); setErr(''); setVisitorSaved(false)
+    try {
+      await updateU5Preferences({
+        u5_visitor_prefix: String(visitorFmt.prefix).trim().slice(0, 10),
+        u5_visitor_digits: String(visitorFmt.digits),
+        u5_visitor_next: String(visitorFmt.next),
+        u5_visitor_name_pattern: visitorFmt.namePattern,
+      })
+      setVisitorSaved(true)
+    } catch (e) { setErr(e.message) }
+    finally { setVisitorSaving(false) }
   }
 
   const handleSaveVpsPrefs = async () => {
@@ -1445,6 +1477,19 @@ function U5MachinesTab() {
                 </div>
                 <Input label="Device Password" type="password" placeholder="123456 (default)" value={deviceForm.devicePassword}
                   onChange={(e) => setDeviceForm(p => ({ ...p, devicePassword: e.target.value }))} />
+                <label className="flex items-start gap-3 cursor-pointer select-none pt-1">
+                  <input type="checkbox" checked={!!deviceForm.visitorAutoEnroll}
+                    onChange={(e) => setDeviceForm(p => ({ ...p, visitorAutoEnroll: e.target.checked }))}
+                    className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 text-sky-500 cursor-pointer" />
+                  <div>
+                    <p className="text-slate-200 text-sm font-medium">Visitor machine — give unknown faces an ID automatically</p>
+                    <p className="text-slate-500 text-xs mt-0.5">
+                      For temporary workers: anyone not enrolled who stands at this machine gets the next visitor ID
+                      (format below) and is recognised from their next visit. Use a dedicated machine, and keep the
+                      area behind it clear — faces in the background are captured too. Leave OFF for staff machines.
+                    </p>
+                  </div>
+                </label>
               </div>
             )}
 
@@ -1600,6 +1645,42 @@ function U5MachinesTab() {
             <span className="text-slate-400 text-xs">days (checked twice a day)</span>
           </div>
         )}
+      </div>
+
+      {/* Visitor auto-ID format */}
+      <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 space-y-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-200">Visitor auto-ID</h3>
+          <p className="text-slate-500 text-xs mt-0.5">
+            ID format for temporary workers on machines marked “Visitor machine”. Change it to match your office numbering;
+            it applies to new visitors only. Visitors are listed under <span className="text-slate-300">Visitors</span> in the menu.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Input label="Prefix" placeholder="V" value={prefs.u5_visitor_prefix ?? 'V'}
+            onChange={(e) => { setVisitorSaved(false); setPrefs(p => ({ ...p, u5_visitor_prefix: e.target.value })) }} />
+          <Input label="Digits (3–6)" type="number" min="3" max="6" value={prefs.u5_visitor_digits ?? '4'}
+            onChange={(e) => { setVisitorSaved(false); setPrefs(p => ({ ...p, u5_visitor_digits: e.target.value })) }} />
+          <Input label="Next number" type="number" min="1" value={prefs.u5_visitor_next ?? '1'}
+            onChange={(e) => { setVisitorSaved(false); setPrefs(p => ({ ...p, u5_visitor_next: e.target.value })) }} />
+          <Input label="Name on machine" placeholder="Temp {id}" value={prefs.u5_visitor_name_pattern ?? 'Temp {id}'}
+            onChange={(e) => { setVisitorSaved(false); setPrefs(p => ({ ...p, u5_visitor_name_pattern: e.target.value })) }} />
+        </div>
+        <p className="text-slate-500 text-xs">
+          In “Name on machine”, <span className="font-mono text-slate-300">{'{id}'}</span> is the full ID and
+          <span className="font-mono text-slate-300"> {'{n}'}</span> just the number. The machine shows 10 characters at most.
+        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2">
+          <p className="text-slate-300 text-sm">
+            Next visitor will be <span className="font-mono font-semibold text-sky-300">{visitorPreview.code}</span>,
+            shown on the machine as <span className="font-mono font-semibold text-sky-300">“{visitorPreview.name}”</span>
+            {visitorPreview.cut && <span className="text-amber-400 text-xs"> (cut to 10 characters)</span>}
+          </p>
+          <div className="flex items-center gap-2">
+            {visitorSaved && <span className="text-green-400 text-xs">Saved</span>}
+            <Button size="sm" variant="primary" isLoading={visitorSaving} onClick={handleSaveVisitorFmt}>Save ID Format</Button>
+          </div>
+        </div>
       </div>
 
       {/* Timezone settings */}
