@@ -262,7 +262,20 @@ desktop-side behavior unaffected, that commit only touches the mobile build). Ve
 SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
 `/download` and `/download/portable` both return 200 on a full download.
 
-**Current live installer: v1.0.5, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
+**Current live installer: v1.0.6, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
+`f3f0d9c19a3326d95e0fa075ebaca0534ffefbb82ab6d9e330725a163421f921`;
+`EdgeFolio-Portable.exe` SHA256
+`de76cd8ab15fea8384b925760ecf08304dfc3bb23abf496a2dc40a5db0397948`. Built from commit
+`328eb86`. Verified: SHA256 matched between local build and the VPS copy (`sha256sum`
+over plink), `/download` and `/download/portable` both return 200 with the new sizes.
+Not yet verified on a clean machine. Adds U5 punch photos in Direct HTTP mode, kept on
+the EDGE PC only (`EDGE/backend/services/u5PunchPhotos.js`): with Settings → U5 Machines →
+"Save punch photos on this PC" on, each punch snapshot is written to
+`<storage>/faces/punches/<date>/` and shown in Machine Import (face next to each unlinked
+machine ID) and Attendance → Detail Punch Record (Photo column). Old photos are pruned by
+the cleanup scheduler after N days (default 90).
+
+**Previous: v1.0.5, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
 `7f44eff64e83bf2d5e8ed62af0f101a2eaa5142372d81c6cbd9c811c617d1c26`;
 `EdgeFolio-Portable.exe` SHA256
 `00034a744d101ef811c1db5413f90e63c341c42cef92b81a1debfc326f3f62cd`. Built from commit
