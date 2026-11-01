@@ -613,6 +613,28 @@
     }
     .anim-right.show { opacity: 1; transform: none; }
 
+    /* Hero (above the fold) animates with pure CSS so it ALWAYS ends visible — it used to
+       wait for the IntersectionObserver script, and on slow phones / in-app browsers
+       (WhatsApp, Instagram) the top of the page stayed blank. */
+    @keyframes hero-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+    .hero-inner .anim-fade, .hero-inner .anim-scale {
+      opacity: 1; transform: none; transition: none;
+      animation: hero-in 0.6s ease both;
+    }
+    .hero-inner .d1 { animation-delay: 0.1s; }
+    .hero-inner .d2 { animation-delay: 0.2s; }
+    .hero-inner .d3 { animation-delay: 0.3s; }
+    .hero-inner .d4 { animation-delay: 0.4s; }
+    .hero-inner .d5 { animation-delay: 0.5s; }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-inner .anim-fade, .hero-inner .anim-scale { animation: none; }
+    }
+    /* Narrow phones: the header pill + button wrapped onto two lines */
+    @media (max-width: 440px) {
+      .nav-badge { display: none; }
+      .nav-dl { white-space: nowrap; }
+    }
+
     /* Number counter animation */
     .count { display: inline-block; }
 
@@ -1140,8 +1162,12 @@
       : 'none';
   }, { passive: true });
 
-  // Intersection Observer for all animated elements
-  const io = new IntersectionObserver((entries) => {
+  // Intersection Observer for all animated elements. Browsers without it would leave every
+  // section invisible — show everything instead.
+  if (!('IntersectionObserver' in window)) {
+    document.querySelectorAll('.anim-fade, .anim-scale, .anim-right').forEach(el => el.classList.add('show'));
+  }
+  const io = !('IntersectionObserver' in window) ? { observe() {}, unobserve() {} } : new IntersectionObserver((entries) => {
     entries.forEach(e => {
       if (e.isIntersecting) {
         e.target.classList.add('show');
