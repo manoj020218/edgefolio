@@ -288,7 +288,7 @@ async function pollHttpDeviceOnce(device) {
       machineName:  row.name || null,
       punchDate,
       punchTime,
-      direction:    'in',
+      direction:    null,   // the U5 log has no in/out; first punch = check-in, last = check-out
       mode:         'face',
       remark:       row.ispass === 0 ? 'denied' : 'pass',
       recordType:   'punch',

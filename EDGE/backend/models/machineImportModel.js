@@ -168,10 +168,18 @@ function commitMappedRecords(batchId = null) {
     // is the standard punch-clock convention and matches what min(ins)/max(outs)
     // below already compute. Devices that DO report direction keep their exact
     // in/out split, unaffected.
-    if (p.punch_time && (p.direction === 'in'  || p.direction == null)) punchGroups[key].ins.push(p.punch_time);
-    if (p.punch_time && (p.direction === 'out' || p.direction == null)) punchGroups[key].outs.push(p.punch_time);
+    // The U5 face terminal reports no direction either; older U5 staging rows were
+    // hard-coded 'in', which meant a U5 day never got a check-out. Treat U5 as directionless.
+    const direction = p.source_type === 'u5_face' ? null : p.direction;
+    if (p.punch_time && (direction === 'in'  || direction == null)) punchGroups[key].ins.push(p.punch_time);
+    if (p.punch_time && (direction === 'out' || direction == null)) punchGroups[key].outs.push(p.punch_time);
     punchGroups[key].ids.push(p.id);
   }
+
+  // Merge with the attendance already saved for that day. Punches for one day can arrive
+  // in several commits (the U5 poll stages new punches every 30 s); without this a later
+  // commit replaced the earlier check-in with its own, later, first punch.
+  const getExisting = db.prepare('SELECT check_in, check_out FROM attendance_records WHERE member_id = ? AND date = ?');
 
   const markDone  = db.prepare("UPDATE machine_import_staging SET status = 'committed' WHERE id = ?");
   const markError = db.prepare("UPDATE machine_import_staging SET status = 'error' WHERE id = ?");
@@ -181,8 +189,13 @@ function commitMappedRecords(batchId = null) {
 
   db.transaction(() => {
     for (const group of Object.values(punchGroups)) {
-      const checkIn  = group.ins.sort()[0]  || null;
-      const checkOut = group.outs.sort().reverse()[0] || null;
+      const existing = getExisting.get(group.employeeId, group.date);
+      const ins  = group.ins.concat(existing && existing.check_in  ? [existing.check_in]  : []).sort();
+      const outs = group.outs.concat(existing && existing.check_out ? [existing.check_out] : []).sort();
+      const checkIn  = ins[0] || null;
+      let   checkOut = outs[outs.length - 1] || null;
+      // A directionless single punch is both "first" and "last" -- that's a check-in only.
+      if (checkOut && checkOut === checkIn) checkOut = null;
       try {
         upsertAttendanceEvent({
           memberId: group.employeeId,
