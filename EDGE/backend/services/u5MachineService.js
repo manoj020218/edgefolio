@@ -225,7 +225,23 @@ function getAdapter(device) {
   return _state.httpAdapters[sn];
 }
 
+// One poll per device at a time. A first poll (whole log, many pages) can outlast the
+// 30 s interval; an overlapping poll would read the not-yet-advanced watermark and stage
+// every record a second time. The U5 is single-threaded anyway, so skipping is correct.
+const _pollInFlight = new Set();
+
 async function pollHttpDevice(device) {
+  const sn = device.device_sn;
+  if (_pollInFlight.has(sn)) return;
+  _pollInFlight.add(sn);
+  try {
+    await pollHttpDeviceOnce(device);
+  } finally {
+    _pollInFlight.delete(sn);
+  }
+}
+
+async function pollHttpDeviceOnce(device) {
   const sn      = device.device_sn;
   const adapter = getAdapter(device);
 

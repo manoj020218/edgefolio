@@ -14,10 +14,11 @@
 
 const U5_CODE_OK        = 200;
 const U5_CODE_DUPLICATE = 12;  // face too similar to an existing enrolled person
-// Each log row carries a ~40-50 KB photo, so 20 rows is ~1 MB per request -- large pages
-// risk locking the single-connection server. 500 pages = 10,000 rows, a runaway guard.
-const U5_PAGE_SIZE = 20;
-const U5_MAX_PAGES = 500;
+// MUST be 8: the device advances `index` by 8 rows regardless of `count` (verified live
+// 2026-11-01 -- count 20 gave pages overlapping by 12 rows, so records were staged twice).
+// 1250 pages = 10,000 rows, a runaway guard.
+const U5_PAGE_SIZE = 8;
+const U5_MAX_PAGES = 1250;
 
 class U5Adapter {
   /**
@@ -42,8 +43,8 @@ class U5Adapter {
   }
 
   /**
-   * List endpoints (/getWorkNoteList, /getEmployeeList) are PAGED: 8 rows per page unless
-   * `count` is sent, `index` is 1-based, response carries `page_sum` + `total`, rows newest
+   * List endpoints (/getWorkNoteList, /getEmployeeList) are PAGED in fixed 8-row steps (a larger
+   * `count` just overlaps pages), `index` is 1-based, reply has `page_sum` + `total`, rows newest
    * first. Verified live 2026-11-01. Reading only page 1 silently drops rows.
    *
    * Walks pages serially (single-threaded device). `stopAfterPage(rows)` lets callers stop

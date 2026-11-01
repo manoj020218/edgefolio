@@ -79,10 +79,10 @@ async function newestRows(type, count = 8) {
 async function allEmployees() {
   const out = [];
   for (let index = 1; index <= 500; index++) {
-    const d = await post('/getEmployeeList', { password: PASSWORD, index, count: 20 });
+    const d = await post('/getEmployeeList', { password: PASSWORD, index, count: 8 });   // device steps index by 8 rows whatever count is
     const page = Array.isArray(d.data) ? d.data : [];
     out.push(...page);
-    if (page.length < 20 || index >= Number(d.page_sum || 0)) break;
+    if (page.length < 8 || index >= Number(d.page_sum || 0)) break;
   }
   return out;
 }
