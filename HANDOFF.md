@@ -262,7 +262,20 @@ desktop-side behavior unaffected, that commit only touches the mobile build). Ve
 SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
 `/download` and `/download/portable` both return 200 on a full download.
 
-**Current live installer: v1.0.4, deployed 2026-09-09.** `EdgeFolio-Setup.exe` SHA256
+**Current live installer: v1.0.5, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
+`7f44eff64e83bf2d5e8ed62af0f101a2eaa5142372d81c6cbd9c811c617d1c26`;
+`EdgeFolio-Portable.exe` SHA256
+`00034a744d101ef811c1db5413f90e63c341c42cef92b81a1debfc326f3f62cd`. Built from commit
+`dc085b3`. Verified: SHA256 matched between local build and the VPS copy (`sha256sum`
+over plink), `/download` and `/download/portable` both return 200 with the new sizes.
+Not yet verified on a clean machine. Ships the U5 fixes found while building the visitor
+auto-ID demo (`U5_VISITOR/README.md`): the U5 log is read in 8-row pages (only page 1 was
+read before, so punches beyond 8 per poll were lost) and polls no longer overlap (that
+double-staged records). Plus UI fixes: Add Employee errors inside the modal, compact
+"+ Create New" department/designation input, one-click "Save Mappings & Commit" in
+Machine Import.
+
+**Previous: v1.0.4, deployed 2026-09-09.** `EdgeFolio-Setup.exe` SHA256
 `ae6ad017afcbadceefc8e69d4f11093f0c92ee2d0b83831e5a4b3b348278693c`;
 `EdgeFolio-Portable.exe` SHA256
 `cb27980e1fe999f458e6f1b2d74e367f2474bd0d75cfc0e52fb121a2a9fd11fd`. Built from commit
