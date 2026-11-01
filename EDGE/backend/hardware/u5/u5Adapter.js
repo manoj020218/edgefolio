@@ -14,6 +14,10 @@
 
 const U5_CODE_OK        = 200;
 const U5_CODE_DUPLICATE = 12;  // face too similar to an existing enrolled person
+// Each log row carries a ~40-50 KB photo, so 20 rows is ~1 MB per request -- large pages
+// risk locking the single-connection server. 500 pages = 10,000 rows, a runaway guard.
+const U5_PAGE_SIZE = 20;
+const U5_MAX_PAGES = 500;
 
 class U5Adapter {
   /**
@@ -35,6 +39,31 @@ class U5Adapter {
     });
     if (!res.ok) throw new Error('U5 HTTP ' + res.status + ' from ' + endpoint);
     return res.json();
+  }
+
+  /**
+   * List endpoints (/getWorkNoteList, /getEmployeeList) are PAGED: 8 rows per page unless
+   * `count` is sent, `index` is 1-based, response carries `page_sum` + `total`, rows newest
+   * first. Verified live 2026-11-01. Reading only page 1 silently drops rows.
+   *
+   * Walks pages serially (single-threaded device). `stopAfterPage(rows)` lets callers stop
+   * early, e.g. once a page reaches records older than the last poll.
+   * Returns { ok, rows } or { ok: false, code } on a device-level error.
+   */
+  async _fetchAllPages(endpoint, body, stopAfterPage) {
+    const rows = [];
+    for (let index = 1; index <= U5_MAX_PAGES; index++) {
+      const data = await this._post(endpoint, Object.assign({}, body, { index: index, count: U5_PAGE_SIZE }));
+      const failed = (data.result !== undefined && data.result !== 0) ||
+                     (data.code   !== undefined && data.code   !== U5_CODE_OK);
+      if (failed) return { ok: false, code: data.result || data.code || -1 };
+      const page = Array.isArray(data.data) ? data.data : [];
+      rows.push.apply(rows, page);
+      if (!page.length || page.length < U5_PAGE_SIZE) break;
+      if (data.page_sum !== undefined && index >= Number(data.page_sum)) break;
+      if (stopAfterPage && stopAfterPage(page)) break;
+    }
+    return { ok: true, rows: rows };
   }
 
   // Verify device is reachable and read firmware/hardware info.
@@ -150,13 +179,11 @@ class U5Adapter {
   // Fetch all enrolled employees from the device.
   async getEmployeeList() {
     try {
-      const data = await this._post('/getEmployeeList', { password: this._password });
-      const ok = data.result === 0 || data.code === U5_CODE_OK ||
-                 (data.result === undefined && data.code === undefined);
-      if (!ok) return { success: false, code: data.result || data.code || -1, message: 'U5 list failed' };
+      const res = await this._fetchAllPages('/getEmployeeList', { password: this._password });
+      if (!res.ok) return { success: false, code: res.code, message: 'U5 list failed' };
       return {
         success: true,
-        data: (data.data || []).map(function(e) {
+        data: res.rows.map(function(e) {
           const out = { userId: e.userid, name: e.name };
           if (e.id_number !== undefined) out.id_number = e.id_number;
           if (e.pic_large !== undefined) out.pic_large = e.pic_large;
@@ -193,12 +220,15 @@ class U5Adapter {
   async getAttendanceLogs(afterTime) {
     const cutoff = afterTime ? new Date(afterTime).getTime() : 0;
     try {
-      const data = await this._post('/getWorkNoteList', { password: this._password, type: 2 });
-      const failed = (data.result !== undefined && data.result !== 0) ||
-                     (data.code   !== undefined && data.code   !== U5_CODE_OK);
-      if (failed) return { success: false, code: data.result || data.code || -1, message: 'U5 attendance fetch failed' };
+      // type 2 = recognised (enrolled) punches only; other types are stranger records.
+      // Rows come newest first, so stop paging once a page reaches the cutoff.
+      const res = await this._fetchAllPages('/getWorkNoteList', { password: this._password, type: 2 },
+        function(page) {
+          return !!cutoff && page.some(function(row) { return new Date(row.checkin_time).getTime() <= cutoff; });
+        });
+      if (!res.ok) return { success: false, code: res.code, message: 'U5 attendance fetch failed' };
 
-      const rows = (data.data || [])
+      const rows = res.rows
         .filter(function(row) { return !cutoff || new Date(row.checkin_time).getTime() > cutoff; })
         .map(function(row) {
           const out = {

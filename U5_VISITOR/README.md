@@ -36,3 +36,20 @@ Bring back `summary.json`, `new-rows.jsonl` and the `log.txt` files.
 Copied 2026-10-31 from `D:\IOT Device\Society\Jenix Community One` (source of truth stays there):
 U5 handoff doc, ESP32-S3 gateway firmware plan + firmware source (no `.pio` build output), the
 TypeScript U5 adapter and poller. EdgeFolio's own U5 adapter is `EDGE/backend/hardware/u5/u5Adapter.js`.
+
+## Live test results — 2026-11-01 (U5 SN ZY20241227014, firmware V3.0-20240912)
+
+**Verdict: auto-enroll works end to end.** Stranger snapshot → `/insertEmployee` → `code 200` →
+same person walks up again → green box "TempProbe" on screen + a type-2 record
+(`userid 770722359`, `ispass 1`). Test person deleted afterwards.
+
+| Finding | Detail |
+|---|---|
+| Record types | `type 2` = recognised (`ispass 1`). Any other type (1, 3–6) = strangers. |
+| Stranger record | `userid "-1"`, `name "陌生人"` ("stranger"), `ispass 0`, 352×640 full-frame JPEG in `pic_large` (~37 KB). |
+| No visitor number | Every stranger is `userid -1`. The U5 cannot tell that two stranger visits were the same person, so we must enroll. |
+| **Paging (bug in all existing pollers)** | `getWorkNoteList` / `getEmployeeList` return 8 rows per page by default. Request `index` (starts at 1) and `count` (e.g. 50). Response has `total`, `page_sum`. Community `u5Poller.ts`, the ESP32 gateway and EdgeFolio `u5Adapter.js` read only page 1, so they lose punches if >8 happen between polls. |
+| Burst records | One approach makes 1–4 stranger records 2–5 s apart. Group them into one sighting. A stranger record can also appear ~3 s *before* a successful match (first frame at an angle). |
+| Background faces | People several metres away get logged as strangers. Auto-enroll needs a face-size/quality gate (or a "second sighting" rule). |
+| Clock | Device was +2:30 ahead of IST (set to UTC+8). Attendance times are wrong until fixed. |
+| Enroll result | `insertEmployee` with the stranger frame (as `data:image/jpeg;base64,…`) returns `code 200`. The device stores its own ~11 KB crop. `pass_date`/`pass_time` = `"0"` means no expiry; the expiry format is still untested. |
