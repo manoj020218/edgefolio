@@ -52,7 +52,7 @@ test('health: 200 when DB connected, 503 when not; response-time stats present',
 test('unknown route: EDGE-style error envelope', async () => {
   const { server, url } = await listen(createApp({ config: loadConfig(baseEnv), getDbState: () => 'connected' }));
   try {
-    const r = await fetch(`${url}/api/v1/apk/config`);
+    const r = await fetch(`${url}/api/v1/nope`);
     assert.strictEqual(r.status, 404);
     assert.deepStrictEqual(await r.json(), { ok: false, error: 'Not found' });
   } finally { server.close(); }

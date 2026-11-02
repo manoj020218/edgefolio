@@ -4,11 +4,13 @@
  * https://edgefolio.iotsoft.in/cloud/ → http://127.0.0.1:3090/) and strips it, so the app never
  * knows where it is published. Moving to a subdomain or another VPS changes nginx + .env only.
  *
- * Phase 1 (setup) ships only /health. App API (/api/v1/apk/*) and Sync API (/api/v1/sync/*) come
- * in Phase 2–3 (CLOUD_ATTENDANCE_PLAN.md §9).
+ * /health (Phase 1), app API /api/v1/apk/* and /api/v1/auth/* (Phase 2). Sync API /api/v1/sync/*
+ * comes in Phase 3 (CLOUD_ATTENDANCE_PLAN.md §9).
  */
 const express = require('express');
 const { createMetrics } = require('./metrics');
+const { apkRouter } = require('./routes/apk');
+const { authRouter } = require('./routes/authRoutes');
 
 function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) {
   const app = express();
@@ -45,6 +47,9 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) 
       responseTime: metrics.snapshot(),
     });
   });
+
+  app.use('/api/v1/apk', apkRouter(config));
+  app.use('/api/v1/auth', authRouter(config));
 
   // Same envelope as EDGE's API ({ ok, data } / { ok:false, error }), so the app parses both alike.
   app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found' }));

@@ -5,22 +5,11 @@
  * (deploy/ecosystem.config.cjs).
  */
 const path = require('path');
-const fs = require('fs');
 const mongoose = require('mongoose');
 const { loadConfig } = require('./config');
 const { createApp } = require('./app');
+const { loadDotEnv } = require('./lib/dotenv');
 const pkg = require('../package.json');
-
-// Minimal .env loader (no extra dependency): KEY=value lines, # comments. Existing env wins.
-function loadDotEnv(file) {
-  if (!fs.existsSync(file)) return;
-  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (!m || line.trim().startsWith('#')) continue;
-    const value = m[2].replace(/^(['"])(.*)\1$/, '$2');
-    if (process.env[m[1]] === undefined) process.env[m[1]] = value;
-  }
-}
 
 async function main() {
   loadDotEnv(path.join(__dirname, '..', '.env'));
