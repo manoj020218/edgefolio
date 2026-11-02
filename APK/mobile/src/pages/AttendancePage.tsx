@@ -33,7 +33,7 @@ type Step =
   | { kind: 'submitting' }
   | { kind: 'done'; alreadyMarked: boolean; offline: boolean }
   | { kind: 'not-enrolled' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; soft?: boolean };
 
 // Mirrors APK/android's AttendanceViewModel.onCapturedFrame flow: fetch reference
 // embedding → native liveness+embedding capture → cosine match → GPS → POST.
@@ -63,21 +63,23 @@ export default function AttendancePage({ workType, onBack }: Props) {
         throw new Error('Could not load your enrolled face data.');
       });
 
-      const captured = await FaceLiveness.capture({ timeoutMs: 15000, referenceEmbedding: reference.embedding }).catch((err) => {
+      const captured = await FaceLiveness.capture({ timeoutMs: 25000, referenceEmbedding: reference.embedding }).catch((err) => {
         const code = (err as { code?: string })?.code;
         const messages: Record<string, string> = {
           PERMISSION_DENIED: 'Camera permission is required to mark attendance.',
-          LIVENESS_TIMEOUT: 'Liveness check timed out. Please try again.',
+          LIVENESS_TIMEOUT: 'We could not see a blink. Look at the camera, blink twice, and we will try again.',
           EMBEDDING_FAILED: 'Face analysis failed. Please try again.',
           MODEL_MISSING: 'Face recognition isn’t set up on this build yet.',
           CANCELLED: 'Cancelled.',
         };
+        if (code === 'LIVENESS_TIMEOUT') throw { soft: messages.LIVENESS_TIMEOUT };
         throw new Error((code && messages[code]) || 'Face capture failed.');
       });
 
       const similarity = cosineSimilarity(captured.embedding, reference.embedding);
       if (!matchesFace(captured.embedding, reference.embedding)) {
-        setStep({ kind: 'error', message: `Face not recognised (${Math.round(similarity * 100)}%). Please try again.` });
+        // The camera screen already coached and retried several times; keep this gentle (amber, not red).
+        setStep({ kind: 'error', soft: true, message: `Almost there (${Math.round(similarity * 100)}% match). Try in good light, holding the phone at eye level.` });
         return;
       }
 
@@ -126,6 +128,10 @@ export default function AttendancePage({ workType, onBack }: Props) {
         setStep({ kind: 'done', alreadyMarked: false, offline: true });
       }
     } catch (err) {
+      if (err && typeof err === 'object' && 'soft' in err) {
+        setStep({ kind: 'error', soft: true, message: String((err as { soft: string }).soft) });
+        return;
+      }
       if (err && typeof err === 'object' && 'notEnrolled' in err) {
         setStep({ kind: 'not-enrolled' });
         return;
@@ -196,10 +202,10 @@ export default function AttendancePage({ workType, onBack }: Props) {
       )}
 
       {step.kind === 'error' && (
-        <div className="glass !border-danger p-4">
+        <div className={`glass p-4 ${step.soft ? '!border-amber-400/40' : '!border-danger'}`}>
           <p className="text-slate-100">{step.message}</p>
-          <button onClick={() => void handleStart()} className="mt-3 text-sm font-semibold text-brand-300">
-            Try again
+          <button onClick={() => void handleStart()} className={step.soft ? 'btn-primary mt-4 w-full py-3 text-sm font-semibold text-white' : 'mt-3 text-sm font-semibold text-brand-300'}>
+            {step.soft ? 'Scan again' : 'Try again'}
           </button>
         </div>
       )}

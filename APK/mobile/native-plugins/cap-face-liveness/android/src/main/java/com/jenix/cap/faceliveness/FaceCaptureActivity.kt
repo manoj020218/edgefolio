@@ -37,6 +37,20 @@ private const val MATCH_THRESHOLD = 0.6f
 // slowdown.
 private const val BURST_SIZE = 3
 
+// Low-match retries (attendance only): instead of closing on the first low score (which the app
+// used to show as a red "try again"), the screen stays open, coaches the user (closer / straighter /
+// blink) and re-checks. The best embedding is returned if time or attempts run out.
+private const val MAX_MATCH_ATTEMPTS = 6
+private const val RETRY_GAP_MS = 900L        // let the user react to the hint before re-capturing
+private const val FORCE_RETRY_MS = 2_200L    // re-capture even if framing still looks off
+
+// Enrollment (no reference yet): take several well-framed captures and average them into one
+// steady reference. Each round is itself a BURST_SIZE average. A round that disagrees with the
+// others (similarity to the rest below ENROLL_CONSISTENCY) is dropped and retaken.
+private const val ENROLL_ROUNDS = 3
+private const val ENROLL_CONSISTENCY = 0.75f
+private const val ENROLL_FORCE_MS = 4_000L   // enrollment waits longer for good framing
+
 /**
  * Full-screen native camera flow: liveness check (blink/head-turn), then one
  * MobileFaceNet embedding capture. Started by FaceLivenessPlugin via
@@ -75,6 +89,20 @@ class FaceCaptureActivity : AppCompatActivity() {
     private var timeoutRunnable: Runnable? = null
     private var finished = false
     private var capturing = false
+    private lateinit var guideView: FaceGuideOverlayView
+    private var livenessPassed = false
+    private var matchAttempts = 0
+    private var nextAttemptAt = 0L
+    private var bestEmbedding: FloatArray? = null
+    private var bestScore = -1f
+    private var lastGuidance: String? = null
+    private val enrollRounds = mutableListOf<FloatArray>()
+    private val retryTips = listOf(
+        "Come a little closer to the camera",
+        "Blink once and hold still",
+        "Hold the phone at eye level",
+        "Face the light, avoid bright light behind you",
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,7 +136,16 @@ class FaceCaptureActivity : AppCompatActivity() {
         cameraManager = CameraXManager(applicationContext, ::onFrame)
         cameraManager.bind(this, previewView)
 
-        timeoutRunnable = Runnable { finishWith(reason = "LIVENESS_TIMEOUT") }
+        // Out of time: if liveness passed and we have a capture, hand the best one to JS (it makes the
+        // final call); otherwise it is a genuine liveness timeout.
+        timeoutRunnable = Runnable {
+            val best = bestEmbedding
+            when {
+                best != null -> finishWith(embedding = best)
+                enrollRounds.size >= 2 -> finishWith(embedding = averageEmbeddings(enrollRounds))
+                else -> finishWith(reason = "LIVENESS_TIMEOUT")
+            }
+        }
         mainHandler.postDelayed(timeoutRunnable!!, timeoutMs)
     }
 
@@ -133,12 +170,13 @@ class FaceCaptureActivity : AppCompatActivity() {
         // the two is the single biggest cause of a same-person capture still scoring
         // low on cosineSimilarity against the enrolled reference (the embedding model
         // is sensitive to scale/crop, not just identity).
-        root.addView(FaceGuideOverlayView(this).apply {
+        guideView = FaceGuideOverlayView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
-        })
+        }
+        root.addView(guideView)
 
         // Stacked bottom bar: match score (number + colored bar, only shown once a
         // reference embedding was provided and a capture has actually happened —
@@ -189,10 +227,46 @@ class FaceCaptureActivity : AppCompatActivity() {
         return root
     }
 
-    private fun onFrame(face: com.google.mlkit.vision.face.Face?, @Suppress("UNUSED_PARAMETER") bounds: android.graphics.RectF?, @Suppress("UNUSED_PARAMETER") bitmap: Bitmap) {
+    /** Framing advice from the face box (normalised 0..1 to the analysed frame), or null if it looks fine. */
+    private fun guidanceFor(face: com.google.mlkit.vision.face.Face, b: android.graphics.RectF?): String? {
+        if (b == null) return null
+        val w = b.width()
+        return when {
+            w < 0.38f -> "Come closer to the camera"
+            w > 0.85f -> "Move the phone a little away"
+            kotlin.math.abs(b.centerX() - 0.5f) > 0.16f || b.centerY() < 0.22f || b.centerY() > 0.68f ->
+                "Keep your face inside the oval"
+            kotlin.math.abs(face.headEulerAngleY) > 12f || kotlin.math.abs(face.headEulerAngleX) > 14f ->
+                "Look straight at the camera"
+            (face.leftEyeOpenProbability ?: 1f) < 0.4f && (face.rightEyeOpenProbability ?: 1f) < 0.4f ->
+                "Keep your eyes open"
+            else -> null
+        }
+    }
+
+    private fun onFrame(face: com.google.mlkit.vision.face.Face?, bounds: android.graphics.RectF?, @Suppress("UNUSED_PARAMETER") bitmap: Bitmap) {
         if (finished) return
         if (face == null) {
-            mainHandler.post { hintView.text = "No face detected — look at the camera" }
+            if (!capturing) mainHandler.post { hintView.text = "No face detected — look at the camera" }
+            return
+        }
+
+        // Retry phase: liveness already proven, the last capture scored low. Coach, then re-capture.
+        if (livenessPassed) {
+            if (capturing) return
+            val now = System.currentTimeMillis()
+            val guidance = guidanceFor(face, bounds)
+            lastGuidance = guidance
+            if (now < nextAttemptAt) {
+                if (guidance != null) mainHandler.post { hintView.text = guidance }
+                return
+            }
+            val forceAfter = if (referenceEmbedding == null) ENROLL_FORCE_MS else FORCE_RETRY_MS
+            if (guidance != null && now < nextAttemptAt + forceAfter) {
+                mainHandler.post { hintView.text = guidance }
+                return
+            }
+            startBurst("Checking… hold still")
             return
         }
 
@@ -206,16 +280,27 @@ class FaceCaptureActivity : AppCompatActivity() {
                 // again on every frame during the score-display delay below,
                 // stacking up concurrent captures.
                 if (capturing) return
-                capturing = true
-                mainHandler.post { hintView.text = "Hold still…" }
-                burstBitmaps.clear()
-                captureNextBurstFrame()
+                livenessPassed = true
+                // Enrollment: the first round also waits for good framing (the retry branch above).
+                if (referenceEmbedding == null) {
+                    nextAttemptAt = System.currentTimeMillis()
+                    mainHandler.post { hintView.text = "Great. Look straight at the camera and hold still" }
+                    return
+                }
+                startBurst("Hold still…")
             }
             LivenessState.TIMEOUT -> finishWith(reason = "LIVENESS_TIMEOUT")
         }
     }
 
     private val burstBitmaps = mutableListOf<Bitmap>()
+
+    private fun startBurst(hint: String) {
+        capturing = true
+        mainHandler.post { hintView.text = hint }
+        burstBitmaps.clear()
+        captureNextBurstFrame()
+    }
 
     private fun captureNextBurstFrame() {
         cameraManager.requestCapture { bitmap ->
@@ -239,21 +324,60 @@ class FaceCaptureActivity : AppCompatActivity() {
                 }
                 val reference = referenceEmbedding
                 if (reference == null) {
-                    finishWith(embedding = embedding)
+                    onEnrollRound(embedding)
                     return@post
                 }
-                // Show the score briefly before closing — purely informational,
-                // JS still makes the actual pass/fail call on the same embedding.
+                // JS still makes the final pass/fail call on the returned embedding.
                 val score = cosineSimilarity(embedding, reference)
-                val pct = (score * 100).toInt().coerceIn(0, 100)
-                hintView.text = if (score >= MATCH_THRESHOLD) "Matched — $pct%" else "Low match — $pct%"
-                scoreView.text = "Face match: $pct%"
-                scoreView.visibility = View.VISIBLE
-                scoreBar.score = score
-                scoreBar.visibility = View.VISIBLE
-                mainHandler.postDelayed({ finishWith(embedding = embedding) }, 900L)
+                if (score > bestScore) { bestScore = score; bestEmbedding = embedding }
+                // The oval's border fills like a progress ring: a closed ring = matched.
+                guideView.animateProgress((score / MATCH_THRESHOLD).coerceIn(0f, 1f))
+                if (score >= MATCH_THRESHOLD) {
+                    hintView.text = "Face matched ✓"
+                    mainHandler.postDelayed({ finishWith(embedding = embedding) }, 800L)
+                    return@post
+                }
+                matchAttempts++
+                if (matchAttempts >= MAX_MATCH_ATTEMPTS) {
+                    finishWith(embedding = bestEmbedding ?: embedding)
+                    return@post
+                }
+                // Low match: no red, no closing. Coach and try again on the same screen.
+                hintView.text = lastGuidance ?: retryTips[(matchAttempts - 1) % retryTips.size]
+                nextAttemptAt = System.currentTimeMillis() + RETRY_GAP_MS
+                capturing = false
             }
         }
+    }
+
+    /** One enrollment capture done: fill the ring a step, then take the next or finish. */
+    private fun onEnrollRound(embedding: FloatArray) {
+        enrollRounds.add(embedding)
+        if (enrollRounds.size >= ENROLL_ROUNDS) {
+            // Drop a round that does not agree with the others (blink, blur, turned head) and retake it.
+            val worst = enrollRounds.indices.minByOrNull { i ->
+                val others = enrollRounds.filterIndexed { j, _ -> j != i }
+                cosineSimilarity(enrollRounds[i], averageEmbeddings(others))
+            }!!
+            val others = enrollRounds.filterIndexed { j, _ -> j != worst }
+            if (cosineSimilarity(enrollRounds[worst], averageEmbeddings(others)) < ENROLL_CONSISTENCY) {
+                enrollRounds.removeAt(worst)
+                guideView.animateProgress(enrollRounds.size.toFloat() / ENROLL_ROUNDS)
+                hintView.text = "One more, please. Look straight at the camera"
+                nextAttemptAt = System.currentTimeMillis() + RETRY_GAP_MS
+                capturing = false
+                return
+            }
+            guideView.animateProgress(1f)
+            hintView.text = "Face ID captured ✓"
+            val reference = averageEmbeddings(enrollRounds)
+            mainHandler.postDelayed({ finishWith(embedding = reference) }, 800L)
+            return
+        }
+        guideView.animateProgress(enrollRounds.size.toFloat() / ENROLL_ROUNDS)
+        hintView.text = "Good, ${enrollRounds.size} of $ENROLL_ROUNDS. Hold still…"
+        nextAttemptAt = System.currentTimeMillis() + RETRY_GAP_MS
+        capturing = false
     }
 
     private fun cosineSimilarity(a: FloatArray, b: FloatArray): Float {
@@ -308,10 +432,44 @@ class FaceCaptureActivity : AppCompatActivity() {
 private class FaceGuideOverlayView(context: Context) : View(context) {
     private val scrimPaint = Paint().apply { color = Color.parseColor("#99000000") }
     private val ovalStrokePaint = Paint().apply {
-        color = Color.WHITE
+        color = Color.parseColor("#66FFFFFF")       // dim base ring
         style = Paint.Style.STROKE
-        strokeWidth = 6f
+        strokeWidth = 8f
         isAntiAlias = true
+    }
+    private val progressPaint = Paint().apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 14f
+        strokeCap = Paint.Cap.ROUND
+        isAntiAlias = true
+    }
+
+    /** 0..1 share of the perimeter painted; 1 = full ring = matched. */
+    private var progress = 0f
+    private var animator: android.animation.ValueAnimator? = null
+
+    fun animateProgress(target: Float) {
+        animator?.cancel()
+        animator = android.animation.ValueAnimator.ofFloat(progress, target).apply {
+            duration = 650L
+            interpolator = android.view.animation.DecelerateInterpolator()
+            addUpdateListener { progress = it.animatedValue as Float; invalidate() }
+            start()
+        }
+    }
+
+    // amber (low) -> light green -> green -> dark green (full match)
+    private fun colorFor(p: Float): Int {
+        val stops = intArrayOf(
+            Color.parseColor("#FBBF24"), Color.parseColor("#A3E635"),
+            Color.parseColor("#22C55E"), Color.parseColor("#15803D"),
+        )
+        val x = p.coerceIn(0f, 1f) * (stops.size - 1)
+        val i = x.toInt().coerceAtMost(stops.size - 2)
+        val f = x - i
+        val a = stops[i]; val b = stops[i + 1]
+        fun ch(sh: Int) = (((a shr sh) and 0xFF) + (((b shr sh) and 0xFF) - ((a shr sh) and 0xFF)) * f).toInt()
+        return Color.rgb(ch(16), ch(8), ch(0))
     }
     private val clearPaint = Paint().apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
@@ -340,6 +498,11 @@ private class FaceGuideOverlayView(context: Context) : View(context) {
         canvas.restoreToCount(layerId)
 
         canvas.drawOval(rect, ovalStrokePaint)
+        if (progress > 0.001f) {
+            progressPaint.color = colorFor(progress)
+            // Start at the top of the oval and fill clockwise.
+            canvas.drawArc(rect, -90f, 360f * progress, false, progressPaint)
+        }
     }
 }
 
