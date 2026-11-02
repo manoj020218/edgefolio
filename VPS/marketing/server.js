@@ -146,6 +146,20 @@ app.get('/terms-and-conditions', (_req, res) => {
   res.sendFile(path.join(__dirname, 'terms-and-conditions.html'))
 })
 
+// Account deletion (Google Play requirement for the EdgeFolio by Jenix app)
+// Support contact comes from .env (SUPPORT_EMAIL, SUPPORT_WHATSAPP) — never hard-coded in git.
+app.get('/delete-account', (_req, res) => {
+  const fs = require('fs')
+  const email = process.env.SUPPORT_EMAIL || 'support (see the Contact section on our home page)'
+  const wa = process.env.SUPPORT_WHATSAPP || ''
+  const html = fs.readFileSync(path.join(__dirname, 'delete-account.html'), 'utf8')
+    .replaceAll('{{SUPPORT_EMAIL}}', email)
+    .replaceAll('{{SUPPORT_WHATSAPP}}', wa)
+    .replaceAll('{{SUPPORT_WHATSAPP_DIGITS}}', wa.replace(/\D/g, ''))
+  res.type('html').send(html)
+})
+app.get(['/account-deletion', '/data-deletion'], (_req, res) => res.redirect(301, '/delete-account'))
+
 // Short aliases
 app.get('/privacy', (_req, res) => res.redirect(301, '/privacy-policy'))
 app.get('/terms', (_req, res) => res.redirect(301, '/terms-and-conditions'))

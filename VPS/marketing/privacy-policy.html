@@ -183,7 +183,7 @@
 <div class="page-hero">
   <div class="page-badge">🔒 Legal</div>
   <h1>Privacy Policy</h1>
-  <p>Last updated: June 2025 &nbsp;·&nbsp; Effective: June 2025</p>
+  <p>Last updated: 2 November 2026 &nbsp;·&nbsp; Effective: 2 November 2026</p>
 </div>
 
 <div class="shimmer"></div>
@@ -192,7 +192,7 @@
 
   <div class="highlight-box">
     <span class="icon">✅</span>
-    <p><strong>The short version:</strong> EdgeFolio stores all your data locally on your own Windows PC. We do not sell your data. We do not run ads. Cloud sync is optional and encrypted.</p>
+    <p><strong>The short version:</strong> EdgeFolio for Windows stores your data locally on your own PC. The EdgeFolio by Jenix phone app sends attendance to your company's account on our cloud only when you mark attendance. We do not sell your data. We do not run ads. Everything travels encrypted (HTTPS).</p>
   </div>
 
   <div class="section-card">
@@ -239,6 +239,29 @@
         <li>Can be disabled at any time from the Settings page</li>
       </ul>
       <p style="margin-top:10px">We do not sell, rent, or share synced data with any third party.</p>
+    </div>
+  </div>
+
+  <div class="section-card" id="mobile-app">
+    <div class="s-header">
+      <div class="s-num">3a</div>
+      <div class="s-title">EdgeFolio by Jenix phone app &amp; Cloud Attendance</div>
+    </div>
+    <div class="s-body">
+      <p>The Android app <strong>EdgeFolio by Jenix</strong> lets employees mark attendance and lets owners/HR manage their team. It talks either to your company's own office PC (EdgeFolio for Windows) or, if your company uses a <strong>company code</strong>, to EdgeFolio Cloud at edgefolio.iotsoft.in. In cloud mode the following is stored on our server, separately for each company:</p>
+      <ul>
+        <li><strong>Account details</strong> — employee name, Employee ID, department/designation, role, and for owners the e-mail address and phone number given at sign-up. Passwords are stored only as salted hashes.</li>
+        <li><strong>Google sign-in</strong> — owners/HR may sign in with Google. We receive only your Google account's name, e-mail address and account ID to identify you; we never see your Google password.</li>
+        <li><strong>Precise location</strong> — read <em>only at the moment you mark attendance</em>, sent with that punch to check it against your office location. The app does not track location in the background.</li>
+        <li><strong>Camera &amp; face signature</strong> — the camera is used only during Face ID setup and the attendance face scan. <strong>Photos never leave your phone.</strong> The app converts your face into a numeric signature (192 numbers that cannot be turned back into a picture) and only that signature is stored, to confirm it is you when you mark attendance. Changing an existing Face ID needs approval from your company's HR/owner.</li>
+        <li><strong>Attendance records</strong> — check-in/check-out times, work type (office, tour, work from home) and whether the punch was inside the office area.</li>
+        <li><strong>Notifications</strong> — a push token from Google Firebase Cloud Messaging so we can deliver attendance alerts, approvals and company announcements; and a copy of those notifications in your in-app inbox (kept 90 days).</li>
+        <li><strong>Technical logs</strong> — server request logs (time, address, error codes) kept briefly for security and troubleshooting.</li>
+      </ul>
+      <p style="margin-top:12px"><strong>Who can see it:</strong> your company's owner and HR administrators see their own company's employees and attendance; employees see their own records. Each company's data is isolated from every other company. If your company links EdgeFolio for Windows, attendance is copied to that office PC for payroll.</p>
+      <p style="margin-top:10px"><strong>Sharing:</strong> we do not sell or rent this data, do not use it for advertising, and do not share it with third parties except the service providers needed to run the service (our hosting server, Google for sign-in and push notifications).</p>
+      <p style="margin-top:10px"><strong>Retention &amp; deletion:</strong> data is kept while your company uses the service. An employee or company can ask for their account and data to be deleted at any time — see <a href="/delete-account">edgefolio.iotsoft.in/delete-account</a>. We complete deletion within 30 days; backups are overwritten within a further 30 days.</p>
+      <p style="margin-top:10px"><strong>Permissions the app asks for:</strong> Camera (Face ID), Location (only while marking attendance), Notifications, Internet, Vibrate.</p>
     </div>
   </div>
 
@@ -294,7 +317,7 @@
         <li><strong>Delete:</strong> Delete the application's data folder to permanently remove all records</li>
         <li><strong>Portability:</strong> The SQLite database file is a standard format readable by any compatible tool</li>
       </ul>
-      <p style="margin-top:10px">For cloud-synced data, contact us at iotsoft.in@gmail.com to request deletion from our servers.</p>
+      <p style="margin-top:10px">For cloud data (including the phone app), request deletion at <a href="/delete-account">edgefolio.iotsoft.in/delete-account</a> (contact details are on that page).</p>
     </div>
   </div>
 
@@ -328,11 +351,12 @@
 </div>
 
 <footer>
-  <p>© 2025 EdgeFolio by IOTSoft. All rights reserved.</p>
+  <p>© 2026 EdgeFolio by IOTSoft. All rights reserved.</p>
   <div class="footer-links">
     <a href="/">Home</a>
     <a href="/privacy">Privacy Policy</a>
     <a href="/terms">Terms &amp; Conditions</a>
+    <a href="/delete-account">Delete account</a>
   </div>
 </footer>
 
