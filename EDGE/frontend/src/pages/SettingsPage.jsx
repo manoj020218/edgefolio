@@ -6,6 +6,7 @@ import {
   Cpu, Wifi, Server, Clock, History, Users, Copy,
 } from 'lucide-react'
 import { Button, Card, Input, Alert } from '../components/atomic'
+import { CloudAttendanceTab } from '../components/settings/CloudAttendanceTab'
 import {
   getCompanySettings, updateCompanySettings,
   getWorkingHours, updateWorkingHours,
@@ -42,6 +43,7 @@ const TABS = [
   { id: 'bank-templates', label: 'Bank Templates' },
   { id: 'u5-machines',   label: 'U5 Machines' },
   { id: 'm68-machines',  label: 'M68 (WitEasy)' },
+  { id: 'cloud-attendance', label: 'Cloud Attendance' },
   { id: 'emp-fields',    label: 'Employee Fields' },
   { id: 'data',           label: 'Data & Backup' },
   { id: 'sync',           label: 'Cloud Sync' },
@@ -2702,6 +2704,19 @@ export const SettingsPage = () => {
               </p>
             </div>
             <M68MachinesTab />
+          </div>
+        </Card>
+      )}
+
+      {/* ── Cloud Attendance (phone attendance from anywhere via EdgeFolio Cloud) ── */}
+      {activeTab === 'cloud-attendance' && (
+        <Card>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Cloud Attendance</h2>
+              <p className="text-slate-400 text-sm mt-1">Phone attendance from anywhere, flowing into this PC's attendance and payroll.</p>
+            </div>
+            <CloudAttendanceTab />
           </div>
         </Card>
       )}

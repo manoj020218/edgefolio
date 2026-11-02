@@ -246,6 +246,13 @@ export const updateU5Preferences = (data)       => http.put('/u5/preferences', d
 export const getU5Visitors       = ()           => http.get('/u5/visitors')
 export const getU5VisitorPhoto   = (code)       => http.get(`/u5/visitors/${encodeURIComponent(code)}/photo`)
 
+// EdgeFolio Cloud (phone attendance from anywhere) — backend/routes/cloudSync.js
+export const getCloudSyncStatus  = ()           => http.get('/cloud-sync/status')
+export const connectCloudSync    = (data)       => http.post('/cloud-sync/connect', data || {}, { timeout: 60000 })
+export const disconnectCloudSync = ()           => http.post('/cloud-sync/disconnect')
+export const runCloudSyncNow     = ()           => http.post('/cloud-sync/sync-now', {}, { timeout: 120000 })
+export const saveCloudOffices    = (data)       => http.put('/cloud-sync/offices', data)
+
 // ── M68 (WitEasy FK BS-protocol) Machines ────────────────────────────────────
 export const getM68Devices       = ()           => http.get('/m68/devices')
 export const createM68Device     = (data)       => http.post('/m68/devices', data)
