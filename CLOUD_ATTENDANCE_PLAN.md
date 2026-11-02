@@ -185,3 +185,12 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
 ## Progress log
 - 2026-11-02 — Plan written (doc + this file). Decisions: free early access, no pricing shown anywhere,
   registration on IoT billing platform, 50 employees/org, start on shared VPS, code for portability.
+- 2026-11-02 — **Phase 1 started.** Service lives in `VPS/cloud/` (new package; the empty `VPS/src`
+  skeleton is an older design, left alone). Skeleton: config from env, `/health` with response-time
+  stats, PM2 config (heap 160 MB, restart > 200 MB, port 3090), nginx snippet, 5 tests passing,
+  `deploy/first-time-setup.sh`. Public URL for now: `https://edgefolio.iotsoft.in/cloud/` (no DNS for a
+  subdomain yet). VPS facts: Node 20, MongoDB 4.4 **with auth**, 2 GB RAM (~600 MB free), ~20 PM2 apps;
+  checkout is inside a shared pnpm workspace → always `pnpm install --ignore-workspace` in `VPS/cloud`.
+  Code pulled and deps installed on the VPS. **Waiting on owner:** (a) create Mongo user
+  `edgefolio_cloud` (readWrite on `edgefolio_cloud`) and put its password in `VPS/cloud/.env`;
+  (b) run `deploy/first-time-setup.sh` on the VPS (nginx + PM2 changes need owner approval).
