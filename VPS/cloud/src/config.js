@@ -28,6 +28,7 @@ function loadConfig(env = process.env) {
     billingApiKey: env.BILLING_API_KEY || '',
     fileStoreDir: env.FILE_STORE_DIR || '',           // only if punch photos are ever enabled
     slowRequestMs: Number(env.SLOW_REQUEST_MS || 500), // the "move to another VPS" trigger watches this
+    corsOrigins: String(env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
   };
   if (nodeEnv === 'production' && cfg.jwtSecret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');

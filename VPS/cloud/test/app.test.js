@@ -57,3 +57,19 @@ test('unknown route: EDGE-style error envelope', async () => {
     assert.deepStrictEqual(await r.json(), { ok: false, error: 'Not found' });
   } finally { server.close(); }
 });
+
+test('CORS: app origins get headers and preflight; others do not', async () => {
+  const { server, url } = await listen(createApp({ config: loadConfig(baseEnv), getDbState: () => 'connected' }));
+  try {
+    const pre = await fetch(`${url}/api/v1/apk/config`, { method: 'OPTIONS', headers: { origin: 'http://localhost', 'access-control-request-headers': 'x-org-code' } });
+    assert.strictEqual(pre.status, 204);
+    assert.strictEqual(pre.headers.get('access-control-allow-origin'), 'http://localhost');
+    assert.match(pre.headers.get('access-control-allow-headers'), /X-Org-Code/);
+    const evil = await fetch(`${url}/api/v1/apk/config`, { method: 'OPTIONS', headers: { origin: 'https://evil.example' } });
+    assert.strictEqual(evil.status, 403);
+    const h = await fetch(`${url}/health`, { headers: { origin: 'https://localhost' } });
+    assert.strictEqual(h.headers.get('access-control-allow-origin'), 'https://localhost');
+    const sync = await fetch(`${url}/api/v1/sync/status`, { headers: { origin: 'http://localhost' } });
+    assert.strictEqual(sync.headers.get('access-control-allow-origin'), null);   // server-to-server only
+  } finally { server.close(); }
+});

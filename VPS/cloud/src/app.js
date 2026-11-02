@@ -12,6 +12,7 @@ const { createMetrics } = require('./metrics');
 const { apkRouter } = require('./routes/apk');
 const { authRouter } = require('./routes/authRoutes');
 const { syncRouter } = require('./routes/sync');
+const { appCors } = require('./cors');
 
 function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) {
   const app = express();
@@ -21,6 +22,8 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) 
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');           // client IP from nginx's X-Forwarded-For
   app.use(express.json({ limit: '256kb' }));    // embeddings are ~2 KB; no photos through the API
+  const cors = appCors(config.corsOrigins);      // app origins only; mounted on app routes below
+  app.use('/health', cors);                      // the app's reachability check
 
   // Response-time logging from day one (plan §10): every request timed, slow ones logged.
   app.use((req, res, next) => {
@@ -49,8 +52,8 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) 
     });
   });
 
-  app.use('/api/v1/apk', apkRouter(config));
-  app.use('/api/v1/auth', authRouter(config));
+  app.use('/api/v1/apk', cors, apkRouter(config));
+  app.use('/api/v1/auth', cors, authRouter(config));
   app.use('/api/v1/sync', syncRouter());
 
   // Same envelope as EDGE's API ({ ok, data } / { ok:false, error }), so the app parses both alike.
