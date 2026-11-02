@@ -245,3 +245,26 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   Not yet built (later phases): work-assignment admin, alerts, broadcast, analytics, payroll views,
   payslips, leave, requests/visits/support/documents, forgot-password, offices admin, login rate limit.
   **Next: Phase 3 — app Cloud mode + EDGE sync.**
+- 2026-11-02 — **Phase 3 code DONE** (f7858cf, 26a063b, 4a8d8d8, 8915e10, 8d99744; cloud deployed).
+  - Cloud `routes/sync.js`: `POST /connect` (licence key + machine id → company code + sync key; new
+    licence creates the company; same PC reconnect rotates the key; other PC → `ALREADY_LINKED`),
+    `PUT /employees` (snapshot; EDGE owns master; password rule: EDGE hash applied only on first sync or
+    when it changed in EDGE, so app-changed passwords survive), `PUT /reference` (name, weekly offs,
+    holidays, offices, enforceGeofence), `GET /punches?after=` (per-org `seq` counter, not ObjectId),
+    `POST /ack`, `GET /status`. Geofence: `OUTSIDE_GEOFENCE` for office punches when enforced.
+    CORS for the app WebView origin (`http://localhost` etc.) on app routes only. Tests 27/27.
+  - EDGE: `services/cloudSyncService.js` (+ `routes/cloudSync.js`, `jobs/cloudSyncScheduler.js` every
+    2 min) — pushes employees (app password hashes from `users`) and reference data when changed, pulls
+    punches into Machine Import as `cloud_app` already linked, commits via the merge, saves cursor, acks.
+    Settings → **Cloud Attendance** tab (`components/settings/CloudAttendanceTab.jsx`): connect, big
+    company code, sync status/errors, office locations editor + enforce switch. Offices stored as
+    `app_preferences office_<id>` = what EDGE's own `/apk/offices` reads.
+  - App: setup screen "Company code" (default, confirms the company name) vs "Office computer" (LAN,
+    unchanged); `X-Org-Code` header in Cloud mode; office punches allowed in Cloud mode only.
+  - Verified end to end on this PC against a local cloud (in-memory Mongo): connect → 6 employees + 2
+    holidays pushed; phone punch 08:30–17:00 → EDGE attendance present 8.5 h; re-sync pulls nothing;
+    office saved in EDGE served by both cloud and LAN `/apk/offices`. Dev EDGE cleaned up afterwards.
+  - **Still to do for Phase 3 sign-off:** (1) EDGE installer v1.0.9 (includes the untested-live v1.0.8
+    visitor code) and (2) a debug/release APK with Cloud mode, then a real phone + real EDGE test against
+    the live cloud. No way to switch company/server inside the app yet (reinstall/clear data) — add a
+    "Change company" option. **Next: Phase 4 — sign-up + billing-platform registration.**
