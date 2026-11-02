@@ -116,6 +116,7 @@ async function runVisitorCheck(device, adapter, { getPref, setPref, log = consol
     strangers.forEach((r) => st.seen.add(rowKey(r)));
     st.baselined = true;
     log(`[U5-VISITOR] ${sn}: visitor auto-ID active (ignoring ${strangers.length} older stranger records)`);
+    await adoptExistingVisitors(device, adapter, { getPref, log });
     return;
   }
 
@@ -157,6 +158,38 @@ async function runVisitorCheck(device, adapter, { getPref, setPref, log = consol
   st.lastEnrollDev = t0;
   const best = burst.map((p) => p.row).sort((a, b) => photoB64(b).length - photoB64(a).length)[0];
   await enrollStranger(device, adapter, best, { getPref, setPref, log });
+}
+
+/**
+ * People already enrolled on this machine whose id_number matches the visitor format
+ * (current prefix + digits, e.g. "V0001" made by the old demo script) are adopted as
+ * visitors: their machine face crop becomes the visitor photo and their earlier staged
+ * punches are relabelled from the U5 userid to the visitor code. Links HR made to the
+ * userid are carried over by the poll (u5MachineService.carryOverVisitorMappings).
+ */
+async function adoptExistingVisitors(device, adapter, { getPref, log }) {
+  const sn = device.device_sn;
+  const fmt = readFormat(getPref);
+  if (!fmt.prefix) return;   // without a prefix every numeric staff code would match
+  const escaped = fmt.prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^${escaped}\\d+$`);
+  const list = await adapter.getEmployeeList();
+  if (!list.success) return;
+  const db = getDb();
+  const known = db.prepare('SELECT 1 FROM u5_visitors WHERE visitor_code = ?');
+  const insert = db.prepare(`INSERT INTO u5_visitors (device_sn, visitor_code, machine_user_id, display_name, photo_path)
+                             VALUES (?, ?, ?, ?, ?)`);
+  const relabel = db.prepare(`UPDATE machine_import_staging SET machine_emp_id = ?
+                              WHERE machine_emp_id = ? AND source_type = 'u5_face'`);
+  for (const e of list.data) {
+    const code = String(e.id_number || '');
+    if (!pattern.test(code) || known.get(code)) continue;
+    const b64 = String(e.pic_large || '').replace(/^data:image\/\w+;base64,/, '');
+    const photo = b64.length > 1000 ? saveVisitorPhoto(code, b64) : null;
+    insert.run(sn, code, String(e.userId), e.name || code, photo);
+    const moved = relabel.run(code, String(e.userId)).changes;
+    log(`[U5-VISITOR] ${sn}: adopted existing visitor ${code} (machine userid ${e.userId}, ${moved} earlier punch(es) relabelled)`);
+  }
 }
 
 async function enrollStranger(device, adapter, row, { getPref, setPref, log }) {

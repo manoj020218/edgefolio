@@ -298,6 +298,11 @@ async function pollHttpDeviceOnce(device) {
 
   markDeviceOnline(sn);
 
+  // Visitor codes for this device; carry HR's links from old userids every poll (cheap) so
+  // adopted visitors show as linked even before their next punch.
+  const visitorMap = visitorService.visitorCodeMap(sn);
+  if (Object.keys(visitorMap).length) carryOverVisitorMappings(visitorMap);
+
   const rows = result.data;
   if (!rows.length) return;
 
@@ -307,9 +312,6 @@ async function pollHttpDeviceOnce(device) {
 
   const today    = new Date().toISOString().slice(0, 10);
   const batchId  = `U5-HTTP-${sn}-${today}`;
-  const visitorMap = visitorService.visitorCodeMap(sn);
-  if (Object.keys(visitorMap).length) carryOverVisitorMappings(visitorMap);
-
   const stagingRows = rows.map(row => {
     const localTime = convertDeviceTime(row.checkin_time, deviceOffsetMin, localOffsetMin);
     const parts     = (localTime || '').includes(' ') ? localTime.split(' ') : [localTime, null];
