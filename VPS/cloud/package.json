@@ -1,0 +1,18 @@
+{
+  "name": "edgefolio-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EdgeFolio Cloud Attendance API (Option B). See CLOUD_ATTENDANCE_PLAN.md at the repo root.",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "4.21.2",
+    "mongoose": "8.9.5"
+  }
+}
