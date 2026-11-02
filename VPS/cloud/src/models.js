@@ -151,7 +151,19 @@ const assignmentSchema = new Schema({
 assignmentSchema.index({ orgId: 1, empId: 1, fromDate: 1, toDate: 1 });
 const WorkAssignment = mongoose.model('WorkAssignment', assignmentSchema);
 
-const holidaySchema = new Schema({ orgId: org, date: { type: String, required: true }, name: String });
+// "Notify me when X checks in/out" (EDGE employee_alert_subscriptions). One row per watcher+watched.
+const alertSubSchema = new Schema({
+  orgId: org,
+  watcherEmpId: { type: String, required: true },
+  watchedEmpId: { type: String, required: true },
+  alertCheckin:  { type: Boolean, default: true },
+  alertCheckout: { type: Boolean, default: true },
+}, { timestamps: true });
+alertSubSchema.index({ orgId: 1, watcherEmpId: 1, watchedEmpId: 1 }, { unique: true });
+alertSubSchema.index({ orgId: 1, watchedEmpId: 1 });
+const AlertSubscription = mongoose.model('AlertSubscription', alertSubSchema);
+
+const holidaySchema =new Schema({ orgId: org, date: { type: String, required: true }, name: String });
 holidaySchema.index({ orgId: 1, date: 1 }, { unique: true });
 const Holiday = mongoose.model('Holiday', holidaySchema);
 
@@ -169,5 +181,6 @@ const AuditLog = mongoose.model('AuditLog', new Schema({
 
 module.exports = {
   Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, AuditLog, Counter,
+  AlertSubscription,
   PROFILE_FIELDS,
 };

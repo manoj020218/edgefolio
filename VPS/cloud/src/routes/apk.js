@@ -14,6 +14,7 @@ const { resolveOrg, signToken, requireAuth, requireRole } = require('../auth');
 const { sendOk, sendCode, httpError, codedError } = require('../lib/http');
 const { verifySecret } = require('../lib/password');
 const { toLocalParts, todayLocal, minutesOf, hoursBetween } = require('../lib/time');
+const push = require('../lib/push');
 
 const WORK_TYPES = ['office', 'tour', 'wfh'];
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);   // async handler
@@ -37,6 +38,25 @@ async function geofenceOk(db, org, location) {
 async function activeAssignment(db, empId, date) {
   return db.WorkAssignment.findOne({ empId, fromDate: { $lte: date }, toDate: { $gte: date } })
     .sort({ createdAt: -1 }).lean();
+}
+
+/**
+ * Push "X checked in/out" to everyone watching this employee (EDGE notifyWatchers). Fire-and-forget:
+ * never delays or fails the punch. Only live punches notify — offline replays are old news.
+ */
+function notifyWatchers(db, emp, event, time, workType) {
+  (async () => {
+    const col = event === 'checkin' ? 'alertCheckin' : 'alertCheckout';
+    const subs = await db.AlertSubscription.find({ watchedEmpId: emp.empId, [col]: true }, { watcherEmpId: 1 }).lean();
+    if (!subs.length) return;
+    const watchers = await db.Employee.find(
+      { empId: { $in: subs.map((s) => s.watcherEmpId) }, status: 'active', fcmToken: { $ne: null } }, { fcmToken: 1 },
+    ).lean();
+    const title = event === 'checkin' ? `${emp.name} checked in` : `${emp.name} checked out`;
+    const body = workType ? `${time.slice(0, 5)} • ${String(workType).toUpperCase()}` : time.slice(0, 5);
+    await push.sendToTokens(watchers.map((w) => w.fcmToken), title, body,
+      { type: 'ATTENDANCE_ALERT', empId: emp.empId, event, workType: workType || '', time });
+  })().catch(() => {});
 }
 
 function serializeDay(d) {
@@ -193,6 +213,7 @@ function apkRouter(config) {
       }
     }
     const out = await recordCheckIn(db, req.org, emp, { workType, timestamp, similarity, liveness, location, deviceId, source: 'app', clientRef });
+    if (!out.alreadyMarked) notifyWatchers(db, emp, 'checkin', toLocalParts(timestamp, req.org.tzOffsetMin).time, workType);
     sendOk(res, out);
   }));
 
@@ -218,6 +239,8 @@ function apkRouter(config) {
     const checkOut = day.checkOut && minutesOf(day.checkOut) > minutesOf(time) ? day.checkOut : time;
     const hoursWorked = hoursBetween(day.checkIn, checkOut);
     await db.AttendanceDay.updateOne({ empId: req.user.empId, date }, { $set: { checkOut, hoursWorked } });
+    const me = await db.Employee.findOne({ empId: req.user.empId }, { empId: 1, name: 1 }).lean();
+    if (me) notifyWatchers(db, me, 'checkout', time, last.workType);
     sendOk(res, { alreadyCheckedOut: false, checkedOutAt: time, hoursWorked });
   }));
 
@@ -427,6 +450,45 @@ function apkRouter(config) {
     const del = await db.WorkAssignment.deleteOne({ _id: id });
     if (!del.deletedCount) throw httpError(404, 'Work assignment not found');
     await db.AuditLog.create({ actor: req.user.empId, action: 'work-assignment-deleted', detail: { id } });
+    sendOk(res, { deleted: true });
+  }));
+
+  // ── Alert subscriptions — EDGE get/create/deleteAlertSubscriptionHandler ──
+  r.get('/alert-subscriptions', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    const subs = await db.AlertSubscription.find({ watcherEmpId: req.user.empId }).lean();
+    const emps = await db.Employee.find({ empId: { $in: subs.map((s) => s.watchedEmpId) } },
+      { empId: 1, empCode: 1, name: 1, department: 1 }).lean();
+    const byId = new Map(emps.map((e) => [e.empId, e]));
+    sendOk(res, subs.filter((s) => byId.has(s.watchedEmpId)).map((s) => {
+      const e = byId.get(s.watchedEmpId);
+      return {
+        id: String(s._id),
+        watched: { id: e.empId, name: e.name, empCode: e.empCode, dept: e.department || null },
+        alertCheckin: Boolean(s.alertCheckin), alertCheckout: Boolean(s.alertCheckout),
+      };
+    }).sort((x, y) => x.watched.name.localeCompare(y.watched.name)));
+  }));
+
+  r.post('/alert-subscriptions', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const { watchedEmpId, alertCheckin = true, alertCheckout = true } = req.body || {};
+    if (!watchedEmpId) throw httpError(400, 'watchedEmpId is required');
+    const db = forOrg(req.user.orgId);
+    if (!(await db.Employee.exists({ empId: String(watchedEmpId) }))) throw httpError(404, 'Employee not found');
+    // Same pair again = update (EDGE uses INSERT OR REPLACE).
+    const s = await db.AlertSubscription.findOneAndUpdate(
+      { watcherEmpId: req.user.empId, watchedEmpId: String(watchedEmpId) },
+      { $set: { alertCheckin: Boolean(alertCheckin), alertCheckout: Boolean(alertCheckout) } },
+      { upsert: true, new: true },
+    );
+    sendOk(res, { id: String(s._id), watchedEmpId: String(watchedEmpId), alertCheckin: Boolean(alertCheckin), alertCheckout: Boolean(alertCheckout) });
+  }));
+
+  r.delete('/alert-subscriptions/:id', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const id = String(req.params.id);
+    if (!/^[a-f0-9]{24}$/i.test(id)) throw httpError(404, 'Subscription not found');
+    const del = await forOrg(req.user.orgId).AlertSubscription.deleteOne({ _id: id, watcherEmpId: req.user.empId });
+    if (!del.deletedCount) throw httpError(404, 'Subscription not found');
     sendOk(res, { deleted: true });
   }));
 

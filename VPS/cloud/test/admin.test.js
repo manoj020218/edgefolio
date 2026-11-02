@@ -68,3 +68,43 @@ test('analytics: 7-day trend and today by department', async () => {
   ]);
   assert.strictEqual((await client.get('/api/v1/apk/analytics', { token: emp })).status, 403);
 });
+
+test('alert subscriptions: watch, push on check-in/out, unwatch', async () => {
+  const push = require('../src/lib/push');
+  const sent = [];
+  push.setTransport(async (m) => { sent.push(m); });
+  await forOrg(org._id).Employee.updateOne({ empId: 'o1' }, { $set: { fcmToken: 'tok-owner' } });
+
+  assert.strictEqual((await client.post('/api/v1/apk/alert-subscriptions', { token: owner, body: {} })).status, 400);
+  assert.strictEqual((await client.post('/api/v1/apk/alert-subscriptions', { token: owner, body: { watchedEmpId: 'zz' } })).status, 404);
+  assert.strictEqual((await client.get('/api/v1/apk/alert-subscriptions', { token: emp })).status, 403);
+
+  const made = await client.post('/api/v1/apk/alert-subscriptions', { token: owner, body: { watchedEmpId: 'e2' } });
+  assert.strictEqual(made.status, 200);
+  const again = await client.post('/api/v1/apk/alert-subscriptions', { token: owner, body: { watchedEmpId: 'e2' } });
+  assert.strictEqual(again.body.data.id, made.body.data.id);            // same pair = same row
+  const list = await client.get('/api/v1/apk/alert-subscriptions', { token: owner });
+  assert.deepStrictEqual(list.body.data, [{
+    id: made.body.data.id, watched: { id: 'e2', name: 'Bala', empCode: 'E2', dept: 'Sales' }, alertCheckin: true, alertCheckout: true,
+  }]);
+  assert.deepStrictEqual((await client.get('/api/v1/apk/alert-subscriptions', { token: hr })).body.data, []);   // per watcher
+
+  const bala = await client.login('ADMN23', 'E2');
+  const now = new Date().toISOString();
+  const { punchBody } = require('./helpers');
+  assert.strictEqual((await client.post('/api/v1/apk/attendance', { token: bala, body: punchBody('e2', now) })).status, 200);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.strictEqual(sent.length, 1);
+  assert.deepStrictEqual(sent[0].tokens, ['tok-owner']);
+  assert.strictEqual(sent[0].title, 'Bala checked in');
+  assert.strictEqual(sent[0].data.type, 'ATTENDANCE_ALERT');
+
+  assert.strictEqual((await client.post('/api/v1/apk/attendance/checkout', { token: bala, body: { timestamp: new Date(Date.now() + 1000).toISOString() } })).status, 200);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.strictEqual(sent.length, 2);
+  assert.strictEqual(sent[1].title, 'Bala checked out');
+
+  assert.strictEqual((await client.del(`/api/v1/apk/alert-subscriptions/${made.body.data.id}`, { token: hr })).status, 404);   // not hr's
+  assert.strictEqual((await client.del(`/api/v1/apk/alert-subscriptions/${made.body.data.id}`, { token: owner })).status, 200);
+  push.setTransport(null);
+});
