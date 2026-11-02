@@ -288,3 +288,14 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   4. **Owner action:** in Google Cloud project 676141356881 (same as the website's GOOGLE_CLIENT_ID), create
      an **Android OAuth client**: package `in.iotsoft.edgefolio`, SHA-1 (release key)
      `33:1A:0E:20:A4:69:E8:EC:F7:B8:CC:D2:43:62:AC:1B:17:B5:1F:AF`.
+- 2026-11-02 — Phase 4 progress: **cloud part done + deployed** (a5cf140, tests 34/34; sign-up/Google
+  return "not configured" until env is set). **Billing routes written + committed locally in the billing
+  repo, NOT deployed.** Remaining, in order:
+  1. Deploy billing (backup `/var/www/billing-platform/src` first, pscp the 4 files: models/EdgeLicense.js,
+     controllers/edgefolio.cloud.controller.js, routes/edgefolio.cloud.routes.js, index.js; add
+     `EDGEFOLIO_CLOUD_KEY` (≥24 random chars) to billing `.env`; `pm2 reload billing-platform`).
+  2. Cloud `.env`: `BILLING_API_URL=https://iotsoft.in`, `BILLING_API_KEY=<same key>`,
+     `GOOGLE_CLIENT_IDS=<web client id from VPS/marketing/.env>`; restart; test sign-up live.
+  3. App: Create-company (Google sign-in via @capgo/capacitor-social-login@7), "Sign in with Google",
+     Company screen (code, licence key, "Send PC software link", "Invite employees" via @capacitor/share),
+     add-employee screen, export button (@capacitor/browser). Needs owner's Android OAuth client (step 4 above).
