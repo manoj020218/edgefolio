@@ -2,6 +2,9 @@ const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { requireLicense } = require('../middleware/license');
 const {
+  listNotificationsHandler,
+  unreadNotificationCountHandler,
+  markNotificationsReadHandler,
   getConfigHandler,
   getAnalyticsHandler,
   getPayrollSummaryHandler,
@@ -62,6 +65,12 @@ router.patch('/fcm-token', registerFcmTokenHandler);
 
 // Employee: check own work type for today
 router.get('/today-status', getTodayStatusHandler);
+
+// Notifications inbox (any authenticated employee, own rows)
+router.get('/notifications', listNotificationsHandler);
+router.get('/notifications/unread-count', unreadNotificationCountHandler);
+router.post('/notifications/read', markNotificationsReadHandler);
+
 
 // Work assignment management (HR-Admin writes, Owner reads)
 router.get('/work-assignments',        requireRole('hr-admin', 'owner'), getWorkAssignmentsHandler);

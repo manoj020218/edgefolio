@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Activity, BarChart3, Bell, LogOut, Users, CalendarClock, UserCircle, Building2 } from 'lucide-react';
 import { isCloudModeSync } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import NotificationBell from '../../components/NotificationBell';
 
 const tabs = [
   { to: '/admin', label: 'Feed', icon: Activity, end: true },
@@ -47,6 +48,7 @@ export default function AdminShell({ onSwitchToEmployee }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <NotificationBell className="!h-10 !w-10" />
           <button
             onClick={onSwitchToEmployee}
             className="btn-ghost h-10 w-10 !rounded-full text-slate-200"

@@ -8,6 +8,7 @@ import { useNetworkStatus } from '../../lib/network';
 import { enqueue } from '../../lib/offlineQueue';
 import { celebrate } from '../../lib/feedback';
 import AttendanceCalendarDrawer from '../../components/AttendanceCalendarDrawer';
+import NotificationBell from '../../components/NotificationBell';
 
 interface TodayAttendance {
   checkIn: string | null;
@@ -207,6 +208,7 @@ export default function HomePage() {
               {now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' })}
             </p>
           </div>
+          <NotificationBell className="!h-10 !w-10" />
           <button
             onClick={() => setCalendarOpen(true)}
             className="btn-ghost h-10 w-10 flex-shrink-0 !rounded-full text-slate-200"

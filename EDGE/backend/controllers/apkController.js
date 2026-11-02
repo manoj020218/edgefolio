@@ -6,6 +6,7 @@ const { FACES_DIR } = require('../config/app');
 const { sendOk, createHttpError } = require('../utils/http');
 const { getJwtSecret } = require('../config/secrets');
 const fcm = require('../services/fcmService');
+const { notifyEmployees } = require('../services/appNotifyService');
 const { toIstParts, todayIST } = require('../utils/dateUtils');
 const payrollEngine = require('../services/payrollEngine');
 const { serializePayrollRun, serializePayslip } = require('../utils/serializers');
@@ -812,22 +813,15 @@ function createRecaptureRequestHandler(req, res, next) {
     // Fire-and-forget push to HR / owners.
     try {
       const emp = db.prepare('SELECT name, emp_code FROM employees WHERE id = ?').get(empId);
-      const tokens = db
-        .prepare(
-          `SELECT fcm_token FROM employees
-           WHERE status = 'active' AND app_role IN ('hr-admin', 'owner') AND fcm_token IS NOT NULL AND fcm_token != ''`,
-        )
-        .all().map((r) => r.fcm_token);
-      if (tokens.length) {
-        Promise.resolve(
-          fcm.sendToTokens(
-            tokens,
-            'Face ID re-capture request',
-            `${emp?.name || 'An employee'} (${emp?.emp_code || ''}) wants to re-capture Face ID`,
-            { type: 'FACE_RECAPTURE_REQUEST', requestId: id },
-          ),
-        ).catch(() => {});
-      }
+      const recipients = db
+        .prepare("SELECT id FROM employees WHERE status = 'active' AND app_role IN ('hr-admin', 'owner')")
+        .all().map((r) => r.id);
+      notifyEmployees(db, recipients, {
+        type: 'FACE_RECAPTURE_REQUEST',
+        title: 'Face ID re-capture request',
+        body: `${emp?.name || 'An employee'} (${emp?.emp_code || ''}) wants to re-capture Face ID`,
+        data: { type: 'FACE_RECAPTURE_REQUEST', requestId: id },
+      }).catch(() => {});
     } catch { /* never fail the request */ }
 
     return sendOk(res, { id, status: 'pending', requestedAt });
@@ -874,19 +868,14 @@ function decideRecapture(approve) {
       ).run(status, decidedAt, decidedBy, expiresAt, reqRow.id);
 
       try {
-        const emp = db.prepare('SELECT fcm_token FROM employees WHERE id = ?').get(reqRow.emp_id);
-        if (emp?.fcm_token) {
-          Promise.resolve(
-            fcm.sendToTokens(
-              [emp.fcm_token],
-              approve ? 'Face ID re-capture approved' : 'Face ID re-capture declined',
-              approve
-                ? 'Open Profile → Face ID within 24 hours to re-capture.'
-                : 'Contact HR if you still need to change it.',
-              { type: 'FACE_RECAPTURE_DECISION', status },
-            ),
-          ).catch(() => {});
-        }
+        notifyEmployees(db, [reqRow.emp_id], {
+          type: 'FACE_RECAPTURE_DECISION',
+          title: approve ? 'Face ID re-capture approved' : 'Face ID re-capture declined',
+          body: approve
+            ? 'Open Profile → Face ID within 24 hours to re-capture.'
+            : 'Contact HR if you still need to change it.',
+          data: { type: 'FACE_RECAPTURE_DECISION', status },
+        }).catch(() => {});
       } catch { /* push is best-effort */ }
 
       return sendOk(res, approve ? { id: reqRow.id, status, expiresAt } : { id: reqRow.id, status });
@@ -918,14 +907,19 @@ async function broadcastHandler(req, res, next) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, type, message, admin.id, admin.name, admin.designation || null, target, now);
 
-    const tokens = db
-      .prepare("SELECT fcm_token FROM employees WHERE fcm_token IS NOT NULL AND status = 'active'")
-      .all().map((r) => r.fcm_token);
-    if (tokens.length) {
+    const recipients = db
+      .prepare("SELECT id FROM employees WHERE fcm_token IS NOT NULL AND fcm_token != '' AND status = 'active'")
+      .all().map((r) => r.id);
+    if (recipients.length) {
       const labels = { sos: 'URGENT', holiday: 'Holiday Notice', event: 'Announcement', general: 'Notice', app_update: 'App Update' };
-      await fcm.sendToTokens(tokens, labels[type] || 'Announcement', message, { type: 'ANNOUNCEMENT', announcementType: type, id });
+      await notifyEmployees(db, recipients, {
+        type: 'ANNOUNCEMENT',
+        title: labels[type] || 'Announcement',
+        body: message,
+        data: { type: 'ANNOUNCEMENT', announcementType: type, id },
+      });
     }
-    return sendOk(res, { id, sentTo: tokens.length });
+    return sendOk(res, { id, sentTo: recipients.length });
   } catch (err) {
     return next(err);
   }
@@ -1072,18 +1066,90 @@ async function notifyWatchers(db, empId, empName, event, time, workType) {
   const col = event === 'checkin' ? 'alert_checkin' : 'alert_checkout';
   const watchers = db
     .prepare(
-      `SELECT e.fcm_token FROM employee_alert_subscriptions s
+      `SELECT DISTINCT s.watcher_emp_id AS id FROM employee_alert_subscriptions s
        JOIN employees e ON e.id = s.watcher_emp_id
-       WHERE s.watched_emp_id = ? AND s.${col} = 1 AND e.fcm_token IS NOT NULL`,
+       WHERE s.watched_emp_id = ? AND s.${col} = 1`,
     )
     .all(empId);
   if (!watchers.length) return;
 
-  const tokens = watchers.map((w) => w.fcm_token).filter(Boolean);
   const title = event === 'checkin' ? `${empName} checked in` : `${empName} checked out`;
   const body = workType ? `${time} • ${String(workType).toUpperCase()}` : time;
 
-  await fcm.sendToTokens(tokens, title, body, { type: 'ATTENDANCE_ALERT', empId, event, workType, time });
+  await notifyEmployees(db, watchers.map((w) => w.id), {
+    type: 'ATTENDANCE_ALERT',
+    title,
+    body,
+    data: { type: 'ATTENDANCE_ALERT', empId, event, workType, time },
+  });
+}
+
+// ─── Notifications inbox (own rows only) ─────────────────────────────────────
+
+function unreadCount(db, empId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM app_notifications WHERE emp_id = ? AND read_at IS NULL').get(empId).n;
+}
+
+// GET /apk/notifications?limit=50&before=<ISO>
+function listNotificationsHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+    const db = getDb();
+    const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+    const before = req.query?.before ? String(req.query.before) : null;
+    const rows = before
+      ? db.prepare('SELECT * FROM app_notifications WHERE emp_id = ? AND created_at < ? ORDER BY created_at DESC, rowid DESC LIMIT ?').all(empId, before, limit)
+      : db.prepare('SELECT * FROM app_notifications WHERE emp_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?').all(empId, limit);
+    const data = rows.map((r) => {
+      let parsed = {};
+      try { parsed = r.data_json ? JSON.parse(r.data_json) : {}; } catch { parsed = {}; }
+      return {
+        id: r.id, type: r.type, title: r.title, body: r.body,
+        data: parsed && typeof parsed === 'object' ? parsed : {},
+        createdAt: r.created_at, read: !!r.read_at,
+      };
+    });
+    return sendOk(res, data, { unread: unreadCount(db, empId) });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /apk/notifications/unread-count
+function unreadNotificationCountHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+    return sendOk(res, { unread: unreadCount(getDb(), empId) });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// POST /apk/notifications/read  { ids?: string[] } | { all: true }
+function markNotificationsReadHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+    const db = getDb();
+    const { ids, all } = req.body || {};
+    const now = new Date().toISOString();
+    let updated = 0;
+    if (all === true) {
+      updated = db.prepare('UPDATE app_notifications SET read_at = ? WHERE emp_id = ? AND read_at IS NULL').run(now, empId).changes;
+    } else if (Array.isArray(ids) && ids.length) {
+      const upd = db.prepare('UPDATE app_notifications SET read_at = ? WHERE id = ? AND emp_id = ? AND read_at IS NULL');
+      db.transaction(() => {
+        for (const id of ids.slice(0, 500)) updated += upd.run(now, String(id), empId).changes;
+      })();
+    } else {
+      throw createHttpError(400, 'ids or all is required');
+    }
+    return sendOk(res, { updated });
+  } catch (err) {
+    return next(err);
+  }
 }
 
 // ─── Detailed Profile (optional personal fields) ─────────────────────────────
@@ -1256,6 +1322,9 @@ function getMyAttendanceCalendarHandler(req, res, next) {
 }
 
 module.exports = {
+  listNotificationsHandler,
+  unreadNotificationCountHandler,
+  markNotificationsReadHandler,
   createRecaptureRequestHandler,
   listRecaptureRequestsHandler,
   approveRecaptureHandler,

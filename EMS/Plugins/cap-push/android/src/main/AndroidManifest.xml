@@ -17,5 +17,9 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_stat_notify" />
+        <!-- Pushes without their own channel land on EdgeFolio's general channel (NotificationChannels.kt). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="ef_general" />
     </application>
 </manifest>

@@ -163,6 +163,21 @@ alertSubSchema.index({ orgId: 1, watcherEmpId: 1, watchedEmpId: 1 }, { unique: t
 alertSubSchema.index({ orgId: 1, watchedEmpId: 1 });
 const AlertSubscription = mongoose.model('AlertSubscription', alertSubSchema);
 
+// In-app notifications inbox: every push is also stored per recipient, so nothing is lost if the
+// phone missed it. Pruned after 90 days.
+const notificationSchema = new Schema({
+  orgId: org,
+  empId: { type: String, required: true },
+  type:  { type: String, required: true },          // ATTENDANCE_ALERT | FACE_RECAPTURE_REQUEST | ...
+  title: { type: String, required: true },
+  body:  { type: String, default: null },
+  data:  { type: Schema.Types.Mixed, default: {} },
+  readAt: { type: Date, default: null },
+}, { timestamps: { createdAt: true, updatedAt: false } });
+notificationSchema.index({ orgId: 1, empId: 1, createdAt: -1 });
+notificationSchema.index({ orgId: 1, empId: 1, readAt: 1 });
+const AppNotification = mongoose.model('AppNotification', notificationSchema);
+
 // Face ID re-capture needs HR/owner approval (fraud guard). First enrollment is free.
 const recaptureSchema = new Schema({
   orgId: org,
@@ -195,6 +210,6 @@ const AuditLog = mongoose.model('AuditLog', new Schema({
 
 module.exports = {
   Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, AuditLog, Counter,
-  AlertSubscription, FaceRecaptureRequest,
+  AlertSubscription, FaceRecaptureRequest, AppNotification,
   PROFILE_FIELDS,
 };

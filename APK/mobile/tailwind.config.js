@@ -41,6 +41,13 @@ export default {
         brand: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #22d3ee 100%)',
       },
       keyframes: {
+        wiggle: {
+          '0%, 100%': { transform: 'rotate(0deg)' },
+          '20%': { transform: 'rotate(-14deg)' },
+          '40%': { transform: 'rotate(12deg)' },
+          '60%': { transform: 'rotate(-8deg)' },
+          '80%': { transform: 'rotate(5deg)' },
+        },
         enter: {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },

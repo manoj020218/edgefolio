@@ -30,6 +30,9 @@ class PushPlugin : Plugin() {
     override fun load() {
         pushState = PushStateStore(context)
         coreStore = CoreStore(context)
+        // Create EdgeFolio's channels up front so pushes shown by the system (app in background)
+        // already find their channel with its own sound / vibration / badge.
+        NotificationChannels.ensure(context)
     }
 
     // Actively asks Firebase for a live token rather than only reading whatever

@@ -33,7 +33,11 @@ class EdgeFolioMessagingService : FirebaseMessagingService() {
         val title = message.notification?.title ?: message.data["title"]
         val body = message.notification?.body ?: message.data["body"]
         if (!title.isNullOrBlank() || !body.isNullOrBlank()) {
-            PushNotificationHelper.showAdminMessage(applicationContext, title ?: "EdgeFolio", body ?: "")
+            PushNotificationHelper.showAdminMessage(
+                applicationContext, title ?: "EdgeFolio", body ?: "",
+                channel = message.notification?.channelId ?: message.data["channel"],
+                data = message.data,
+            )
         }
 
         if (message.data.isNotEmpty()) {

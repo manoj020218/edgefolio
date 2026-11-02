@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let transport;          // async ({ tokens, title, body, data }) => void
+let transport;          // async ({ tokens, title, body, data, channel }) => void
 let initialised = false;
 
 function init() {
@@ -19,10 +19,13 @@ function init() {
     const admin = require('firebase-admin');
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(require(path.resolve(p))) });
     const messaging = admin.messaging();
-    transport = async ({ tokens, title, body, data }) => {
+    transport = async ({ tokens, title, body, data, channel }) => {
       await messaging.sendEachForMulticast({
-        tokens, notification: { title, body }, android: { priority: 'high' },
-        data: Object.fromEntries(Object.entries(data || {}).map(([k, v]) => [k, String(v ?? '')])),
+        tokens,
+        notification: { title, body },
+        // channelId picks the app's channel (own sound + vibration + badge); created by the app.
+        android: { priority: 'high', notification: channel ? { channelId: channel, sound: 'default' } : { sound: 'default' } },
+        data: Object.fromEntries(Object.entries({ ...(data || {}), ...(channel ? { channel } : {}) }).map(([k, v]) => [k, String(v ?? '')])),
       });
     };
     console.log('[push] FCM enabled');
@@ -33,11 +36,11 @@ function init() {
 }
 
 /** Best-effort: never throws. */
-async function sendToTokens(tokens, title, body, data = {}) {
+async function sendToTokens(tokens, title, body, data = {}, opts = {}) {
   if (!initialised) init();
   const valid = [...new Set((tokens || []).filter(Boolean))];
   if (!transport || !valid.length) return;
-  try { await transport({ tokens: valid, title, body, data }); }
+  try { await transport({ tokens: valid, title, body, data, channel: opts.channel || null }); }
   catch (e) { console.warn('[push] send failed:', e.message); }
 }
 

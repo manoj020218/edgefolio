@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './lib/auth';
 import { NetworkStatusProvider } from './lib/network';
+import { AuthedNotificationsProvider } from './lib/notifications';
 import '@fontsource-variable/plus-jakarta-sans';
 import './index.css';
 
@@ -12,7 +13,9 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <AuthProvider>
         <NetworkStatusProvider>
-          <App />
+          <AuthedNotificationsProvider>
+            <App />
+          </AuthedNotificationsProvider>
         </NetworkStatusProvider>
       </AuthProvider>
     </BrowserRouter>

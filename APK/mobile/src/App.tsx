@@ -18,6 +18,7 @@ import AnalyticsPage from './pages/admin/AnalyticsPage';
 import BroadcastPage from './pages/admin/BroadcastPage';
 import PasswordResetsPage from './pages/admin/PasswordResetsPage';
 import FaceRequestsPage from './pages/admin/FaceRequestsPage';
+import NotificationsPage from './pages/NotificationsPage';
 import PayrollPage from './pages/admin/PayrollPage';
 import EmployeeShell from './pages/employee/EmployeeShell';
 import HomePage from './pages/employee/HomePage';
@@ -144,6 +145,7 @@ export default function App() {
       <Route path="/work/new-visit" element={user ? <NewVisitPage /> : <Navigate to="/" replace />} />
       <Route path="/work/visits/:id" element={user ? <VisitDetailPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/detail" element={user ? <DetailProfilePage /> : <Navigate to="/" replace />} />
+      <Route path="/notifications" element={user ? <NotificationsPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/face-id" element={user ? <FaceEnrollPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/pay" element={user ? <PaySettingsPage /> : <Navigate to="/" replace />} />
       <Route path="/profile/attendance-card" element={user ? <AttendanceCardPage /> : <Navigate to="/" replace />} />

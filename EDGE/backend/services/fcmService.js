@@ -25,30 +25,43 @@ function init() {
   }
 }
 
-async function sendToToken(token, title, body, data = {}) {
+function buildPayload(title, body, data, opts) {
+  const d = { ...(data || {}) };
+  let android = { priority: 'high' };
+  if (opts && opts.channel) {
+    d.channel = opts.channel;
+    android = {
+      priority: 'high',
+      notification: { channelId: opts.channel, sound: 'default', defaultVibrateTimings: false },
+    };
+  }
+  return {
+    notification: { title, body },
+    data: Object.fromEntries(Object.entries(d).map(([k, v]) => [k, String(v)])),
+    android,
+  };
+}
+
+async function sendToToken(token, title, body, data = {}, opts = {}) {
   if (!messaging || !token) return;
   try {
     await messaging.send({
       token,
-      notification: { title, body },
-      data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
-      android: { priority: 'high' },
+      ...buildPayload(title, body, data, opts),
     });
   } catch (err) {
     logger.warn('FCM send failed', { token: token.slice(0, 20), reason: err.message });
   }
 }
 
-async function sendToTokens(tokens, title, body, data = {}) {
+async function sendToTokens(tokens, title, body, data = {}, opts = {}) {
   if (!messaging) return;
   const valid = (tokens || []).filter(Boolean);
   if (!valid.length) return;
   try {
     await messaging.sendEachForMulticast({
       tokens: valid,
-      notification: { title, body },
-      data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
-      android: { priority: 'high' },
+      ...buildPayload(title, body, data, opts),
     });
   } catch (err) {
     logger.warn('FCM multicast failed', { count: valid.length, reason: err.message });

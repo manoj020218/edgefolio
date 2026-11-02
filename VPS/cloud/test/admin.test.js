@@ -154,3 +154,35 @@ test('face re-capture needs an approved request (24 h, one use)', async () => {
   assert.deepStrictEqual([st.recapture.status, st.canEnroll], ['expired', false]);
   assert.strictEqual((await enroll(5)).status, 403);
 });
+
+test('notifications inbox: stored per recipient, unread count, mark read, own rows only', async () => {
+  const push = require('../src/lib/push');
+  const sent = [];
+  push.setTransport(async (m) => { sent.push(m); });
+  const db = forOrg(org._id);
+  await db.AppNotification.deleteMany({});
+  await db.FaceProfile.updateOne({ empId: 'e2' }, { $set: { embedding: Array(192).fill(0.01) } }, { upsert: true });
+  const bala = await client.login('ADMN23', 'E2');
+
+  assert.strictEqual((await client.post('/api/v1/apk/faces/recapture-request', { token: bala, body: { reason: 'beard' } })).status, 200);
+  await new Promise((r) => setTimeout(r, 300));
+  // Stored for each HR/owner, pushed on the requests channel.
+  const forOwner = await client.get('/api/v1/apk/notifications', { token: owner });
+  assert.strictEqual(forOwner.body.data.length, 1);
+  assert.strictEqual(forOwner.body.data[0].type, 'FACE_RECAPTURE_REQUEST');
+  assert.strictEqual(forOwner.body.data[0].read, false);
+  assert.strictEqual(forOwner.body.meta.unread, 1);
+  assert.strictEqual((await client.get('/api/v1/apk/notifications', { token: hr })).body.data.length, 1);
+  assert.strictEqual((await client.get('/api/v1/apk/notifications', { token: emp })).body.data.length, 0);
+  assert.strictEqual(sent.at(-1).channel, 'ef_requests');
+
+  // Someone else can't mark my row; I can.
+  const id = forOwner.body.data[0].id;
+  assert.strictEqual((await client.post('/api/v1/apk/notifications/read', { token: hr, body: { ids: [id] } })).body.data.updated, 0);
+  assert.strictEqual((await client.post('/api/v1/apk/notifications/read', { token: owner, body: {} })).status, 400);
+  assert.strictEqual((await client.post('/api/v1/apk/notifications/read', { token: owner, body: { ids: [id] } })).body.data.updated, 1);
+  assert.deepStrictEqual((await client.get('/api/v1/apk/notifications/unread-count', { token: owner })).body.data, { unread: 0 });
+  assert.strictEqual((await client.get('/api/v1/apk/notifications/unread-count', { token: hr })).body.data.unread, 1);
+  assert.strictEqual((await client.post('/api/v1/apk/notifications/read', { token: hr, body: { all: true } })).body.data.updated, 1);
+  push.setTransport(null);
+});

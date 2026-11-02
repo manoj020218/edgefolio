@@ -783,6 +783,19 @@ function runMigrations(db) {
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  db.exec(`CREATE TABLE IF NOT EXISTS app_notifications (
+    id TEXT PRIMARY KEY,
+    emp_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    data_json TEXT,
+    read_at TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_app_notifications_emp_created ON app_notifications (emp_id, created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_app_notifications_emp_read ON app_notifications (emp_id, read_at)');
+
   // Seed once from whatever designations already exist on employees, so
   // nobody's existing free-text designation becomes an orphaned value the
   // new picker doesn't know about.

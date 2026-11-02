@@ -14,7 +14,7 @@ const { resolveOrg, signToken, requireAuth, requireRole } = require('../auth');
 const { sendOk, sendCode, httpError, codedError } = require('../lib/http');
 const { verifySecret } = require('../lib/password');
 const { toLocalParts, todayLocal, minutesOf, hoursBetween } = require('../lib/time');
-const push = require('../lib/push');
+const { notifyEmployees } = require('../lib/notify');
 
 const WORK_TYPES = ['office', 'tour', 'wfh'];
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);   // async handler
@@ -49,13 +49,11 @@ function notifyWatchers(db, emp, event, time, workType) {
     const col = event === 'checkin' ? 'alertCheckin' : 'alertCheckout';
     const subs = await db.AlertSubscription.find({ watchedEmpId: emp.empId, [col]: true }, { watcherEmpId: 1 }).lean();
     if (!subs.length) return;
-    const watchers = await db.Employee.find(
-      { empId: { $in: subs.map((s) => s.watcherEmpId) }, status: 'active', fcmToken: { $ne: null } }, { fcmToken: 1 },
-    ).lean();
     const title = event === 'checkin' ? `${emp.name} checked in` : `${emp.name} checked out`;
     const body = workType ? `${time.slice(0, 5)} • ${String(workType).toUpperCase()}` : time.slice(0, 5);
-    await push.sendToTokens(watchers.map((w) => w.fcmToken), title, body,
-      { type: 'ATTENDANCE_ALERT', empId: emp.empId, event, workType: workType || '', time });
+    await notifyEmployees(db, subs.map((s) => s.watcherEmpId), {
+      type: 'ATTENDANCE_ALERT', title, body, data: { empId: emp.empId, event, workType: workType || '', time },
+    });
   })().catch(() => {});
 }
 
@@ -312,8 +310,9 @@ function apkRouter(config) {
     reason: r.reason || null, requestedAt: r.requestedAt, decidedAt: r.decidedAt || null, expiresAt: r.expiresAt || null,
   };
   async function pushToEmployees(db, filter, title, body, data) {
-    const rows = await db.Employee.find({ ...filter, status: 'active', fcmToken: { $ne: null } }, { fcmToken: 1 }).lean();
-    await push.sendToTokens(rows.map((r) => r.fcmToken), title, body, data);
+    const rows = await db.Employee.find({ ...filter, status: 'active' }, { empId: 1 }).lean();
+    const { type, ...rest } = data;
+    await notifyEmployees(db, rows.map((r) => r.empId), { type, title, body, data: rest });
   }
 
   r.get('/faces/self-enroll', ah(async (req, res) => {
@@ -573,6 +572,41 @@ function apkRouter(config) {
     const del = await forOrg(req.user.orgId).AlertSubscription.deleteOne({ _id: id, watcherEmpId: req.user.empId });
     if (!del.deletedCount) throw httpError(404, 'Subscription not found');
     sendOk(res, { deleted: true });
+  }));
+
+  // ── Notifications inbox (own rows only) ──────────────────────────────────
+  const serializeNotification = (n) => ({
+    id: String(n._id), type: n.type, title: n.title, body: n.body || null, data: n.data || {},
+    createdAt: n.createdAt, read: Boolean(n.readAt),
+  });
+
+  r.get('/notifications', ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const q = { empId: req.user.empId };
+    const before = req.query.before ? new Date(String(req.query.before)) : null;
+    if (before && !Number.isNaN(before.getTime())) q.createdAt = { $lt: before };
+    const [rows, unread] = await Promise.all([
+      db.AppNotification.find(q).sort({ createdAt: -1 }).limit(limit).lean(),
+      db.AppNotification.countDocuments({ empId: req.user.empId, readAt: null }),
+    ]);
+    sendOk(res, rows.map(serializeNotification), { unread });
+  }));
+
+  r.get('/notifications/unread-count', ah(async (req, res) => {
+    sendOk(res, { unread: await forOrg(req.user.orgId).AppNotification.countDocuments({ empId: req.user.empId, readAt: null }) });
+  }));
+
+  r.post('/notifications/read', ah(async (req, res) => {
+    const { ids, all } = req.body || {};
+    const q = { empId: req.user.empId, readAt: null };
+    if (all === true) { /* every unread row of mine */ }
+    else if (Array.isArray(ids) && ids.length) {
+      const valid = ids.map(String).filter((x) => /^[a-f0-9]{24}$/i.test(x));
+      q._id = { $in: valid };
+    } else throw httpError(400, 'Send ids (array) or all: true');
+    const r0 = await forOrg(req.user.orgId).AppNotification.updateMany(q, { $set: { readAt: new Date() } });
+    sendOk(res, { updated: r0.modifiedCount });
   }));
 
   // ── Analytics — EDGE getAnalyticsHandler: 7-day trend + today by department ──
