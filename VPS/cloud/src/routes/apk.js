@@ -377,6 +377,85 @@ function apkRouter(config) {
     sendOk(res, out, { month });
   }));
 
+  // ── Work assignments (tour / WFH) — EDGE getWorkAssignmentsHandler & co. ──
+  // CLOUD: the owner may create/delete too — an app-only company often has no separate HR admin.
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  r.get('/work-assignments', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    const date = DATE_RE.test(req.query.date || '') ? req.query.date : todayLocal(req.org.tzOffsetMin);
+    const q = { fromDate: { $lte: date }, toDate: { $gte: date } };
+    if (req.query.empId) q.empId = String(req.query.empId);
+    const [rows, emps] = await Promise.all([
+      db.WorkAssignment.find(q).lean(),
+      db.Employee.find({}, { empId: 1, empCode: 1, name: 1, department: 1 }).lean(),
+    ]);
+    const byId = new Map(emps.map((e) => [e.empId, e]));
+    const out = rows.filter((a) => byId.has(a.empId)).map((a) => {
+      const e = byId.get(a.empId);
+      return {
+        id: String(a._id),
+        employee: { id: e.empId, name: e.name, empCode: e.empCode, dept: e.department || null },
+        workType: a.workType, fromDate: a.fromDate, toDate: a.toDate,
+        notes: a.notes || null, createdBy: a.createdBy || null,
+      };
+    }).sort((x, y) => x.employee.name.localeCompare(y.employee.name));
+    sendOk(res, out, { date });
+  }));
+
+  r.post('/work-assignments', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const { employeeId, workType, fromDate, toDate, notes } = req.body || {};
+    if (!employeeId || !workType || !fromDate || !toDate) {
+      throw httpError(400, 'employeeId, workType, fromDate, toDate are required');
+    }
+    if (!['tour', 'wfh'].includes(workType)) throw httpError(400, 'workType must be "tour" or "wfh"');
+    if (!DATE_RE.test(fromDate) || !DATE_RE.test(toDate)) throw httpError(400, 'Dates must be YYYY-MM-DD');
+    if (fromDate > toDate) throw httpError(400, 'fromDate must be on or before toDate');
+    const db = forOrg(req.user.orgId);
+    if (!(await db.Employee.exists({ empId: String(employeeId), status: 'active' }))) throw httpError(404, 'Employee not found');
+    const a = await db.WorkAssignment.create({
+      empId: String(employeeId), workType, fromDate, toDate,
+      notes: notes ? String(notes).slice(0, 500) : null, createdBy: req.user.empCode || req.user.empId,
+    });
+    await db.AuditLog.create({ actor: req.user.empId, action: 'work-assignment-created', detail: { id: String(a._id), employeeId, workType, fromDate, toDate } });
+    sendOk(res, { id: String(a._id), employeeId: String(employeeId), workType, fromDate, toDate });
+  }));
+
+  r.delete('/work-assignments/:id', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    const id = String(req.params.id);
+    if (!/^[a-f0-9]{24}$/i.test(id)) throw httpError(404, 'Work assignment not found');
+    const del = await db.WorkAssignment.deleteOne({ _id: id });
+    if (!del.deletedCount) throw httpError(404, 'Work assignment not found');
+    await db.AuditLog.create({ actor: req.user.empId, action: 'work-assignment-deleted', detail: { id } });
+    sendOk(res, { deleted: true });
+  }));
+
+  // ── Analytics — EDGE getAnalyticsHandler: 7-day trend + today by department ──
+  r.get('/analytics', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    const tz = req.org.tzOffsetMin;
+    const dates = [];
+    for (let i = 6; i >= 0; i--) dates.push(toLocalParts(new Date(Date.now() - i * 86400000), tz).date);
+    const today = dates[6];
+    const emps = await db.Employee.find({ status: 'active' }, { empId: 1, department: 1 }).lean();
+    const active = new Set(emps.map((e) => e.empId));
+    const days = await db.AttendanceDay.find({ date: { $in: dates }, status: 'present' }, { empId: 1, date: 1 }).lean();
+    const presentOn = new Map(dates.map((d) => [d, new Set()]));
+    for (const d of days) if (active.has(d.empId)) presentOn.get(d.date).add(d.empId);
+    const sevenDayTrend = dates.map((date) => ({ date, present: presentOn.get(date).size, total: emps.length }));
+
+    const deptOf = (e) => (e.department && String(e.department).trim()) || 'Unknown';
+    const totals = new Map();
+    const present = new Map();
+    for (const e of emps) {
+      const k = deptOf(e);
+      totals.set(k, (totals.get(k) || 0) + 1);
+      if (presentOn.get(today).has(e.empId)) present.set(k, (present.get(k) || 0) + 1);
+    }
+    const departmentBreakdown = [...totals.keys()].sort().map((dept) => ({ dept, total: totals.get(dept), present: present.get(dept) || 0 }));
+    sendOk(res, { sevenDayTrend, departmentBreakdown });
+  }));
+
   return r;
 }
 

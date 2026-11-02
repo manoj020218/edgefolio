@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiDelete, apiGet, apiPost, ApiError } from '../../lib/api';
+import { apiDelete, apiGet, apiPost, ApiError, isCloudModeSync } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 interface Assignment {
@@ -21,7 +21,8 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 
 export default function AssignmentsPage() {
   const { user } = useAuth();
-  const canEdit = user?.role === 'hr-admin';
+  // Office PC: only HR edits (EDGE rule). Cloud: the owner too — app-only companies may have no HR admin.
+  const canEdit = user?.role === 'hr-admin' || (user?.role === 'owner' && isCloudModeSync());
 
   const [date, setDate] = useState(todayStr());
   const [rows, setRows] = useState<Assignment[] | null>(null);

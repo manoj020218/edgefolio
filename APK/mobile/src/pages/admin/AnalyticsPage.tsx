@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
-import { apiGet, ApiError } from '../../lib/api';
+import { apiGet, ApiError, isCloudModeSync } from '../../lib/api';
 
 interface Analytics {
   sevenDayTrend: { date: string; present: number; total: number }[];
@@ -22,12 +22,15 @@ export default function AnalyticsPage() {
     <div className="animate-enter px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-100">Analytics</h1>
+        {/* Payroll lives in EdgeFolio for Windows; cloud companies have no payroll runs. */}
+        {!isCloudModeSync() && (
         <Link
           to="/admin/payroll"
           className="flex items-center gap-1.5 btn-primary px-3 py-1.5 text-sm font-medium text-white"
         >
           <Wallet size={16} /> Payroll
         </Link>
+        )}
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}

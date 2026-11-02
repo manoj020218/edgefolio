@@ -146,6 +146,7 @@ const assignmentSchema = new Schema({
   fromDate: { type: String, required: true },
   toDate:   { type: String, required: true },
   notes:    { type: String, default: null },
+  createdBy: { type: String, default: null },          // empCode of the admin who made it
 }, { timestamps: true });
 assignmentSchema.index({ orgId: 1, empId: 1, fromDate: 1, toDate: 1 });
 const WorkAssignment = mongoose.model('WorkAssignment', assignmentSchema);
