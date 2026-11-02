@@ -9,7 +9,7 @@ export interface QueuedCheckIn {
   queuedAt: string;
   payload: {
     empId: string;
-    workType: 'tour' | 'wfh';
+    workType: 'tour' | 'wfh' | 'office';
     timestamp: string;
     similarity: number;
     liveness: 'PASSED';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Bell, Calendar, CalendarDays, CloudOff, Download, PartyPopper, RefreshCw } from 'lucide-react';
-import { apiGet, apiPost, rootApiGet } from '../../lib/api';
+import { apiGet, apiPost, rootApiGet, isCloudModeSync } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { useAuth } from '../../lib/auth';
 import { useNetworkStatus } from '../../lib/network';
@@ -132,7 +132,8 @@ export default function HomePage() {
   // after a re-check-in, so it alone can't tell an open cycle from a closed
   // one (see backend/controllers/apkController.js getTodayStatusHandler).
   const isWorking = Boolean(att?.currentlyWorking);
-  const canMarkFromPhone = status?.workType === 'tour' || status?.workType === 'wfh';
+  // Cloud mode also allows office punches (see App.tsx AttendanceRoute).
+  const canMarkFromPhone = status?.workType === 'tour' || status?.workType === 'wfh' || (status?.workType === 'office' && isCloudModeSync());
 
   async function handleCheckOut() {
     setCheckingOut(true);

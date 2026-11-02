@@ -3,6 +3,49 @@ import { Preferences } from '@capacitor/preferences';
 
 const BASE_URL_KEY = 'edgefolio.baseUrl';
 const TOKEN_KEY = 'edgefolio.token';
+const ORG_CODE_KEY = 'edgefolio.orgCode';
+
+// EdgeFolio Cloud (VPS/cloud). In Cloud mode the phone talks to this fixed address instead of an
+// office PC, and identifies the company with the code the employee typed once at setup
+// (sent as X-Org-Code; after login the server takes the company from the token).
+export const CLOUD_BASE_URL = 'https://edgefolio.iotsoft.in/cloud/api/v1';
+let cachedOrgCode: string | null | undefined;
+
+export async function getOrgCode(): Promise<string | null> {
+  if (cachedOrgCode !== undefined) return cachedOrgCode;
+  const { value } = await Preferences.get({ key: ORG_CODE_KEY });
+  cachedOrgCode = value ?? null;
+  return cachedOrgCode;
+}
+
+// Sync read for render paths (valid once App has awaited getBaseUrl()/getOrgCode() at start).
+export function isCloudModeSync(): boolean {
+  return Boolean(cachedOrgCode) && cachedBaseUrl === CLOUD_BASE_URL;
+}
+
+export async function setCloudMode(orgCode: string): Promise<void> {
+  const code = orgCode.trim().toUpperCase();
+  cachedOrgCode = code;
+  await Preferences.set({ key: ORG_CODE_KEY, value: code });
+  await setBaseUrl(CLOUD_BASE_URL);
+}
+
+// Office-PC (LAN) mode: forget any company code.
+export async function clearOrgCode(): Promise<void> {
+  cachedOrgCode = null;
+  await Preferences.remove({ key: ORG_CODE_KEY });
+}
+
+// Pre-setup check of a company code: returns the company's name, or throws ApiError.
+export async function checkCompanyCode(orgCode: string): Promise<{ companyName: string }> {
+  const res = await axios.get<ApiEnvelope<{ company_name?: string }>>(`${CLOUD_BASE_URL}/apk/config`, {
+    headers: { 'X-Org-Code': orgCode.trim().toUpperCase() },
+    validateStatus: () => true,
+    timeout: 15000,
+  });
+  if (!res.data?.ok) throw toApiError(res.data ?? { ok: false, error: 'Could not reach EdgeFolio Cloud' });
+  return { companyName: res.data.data?.company_name || '' };
+}
 
 // EDGE is a local Windows PC on the same LAN/Wi-Fi as the phone — there is no
 // fixed hostname. The user sets this once (Settings screen, not yet built) to
@@ -50,6 +93,10 @@ function makeClient(routePrefix: string) {
 
     const token = await getToken();
     if (token) cfg.headers.Authorization = `Bearer ${token}`;
+
+    // Cloud mode: which company (needed before login; harmless after — the token decides).
+    const orgCode = base === CLOUD_BASE_URL ? await getOrgCode() : null;
+    if (orgCode) cfg.headers['X-Org-Code'] = orgCode;
 
     return cfg;
   });

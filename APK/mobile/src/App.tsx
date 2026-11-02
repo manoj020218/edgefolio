@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { apiGet, getBaseUrl } from './lib/api';
+import { apiGet, getBaseUrl, getOrgCode, isCloudModeSync } from './lib/api';
 import { useAuth } from './lib/auth';
 import ServerSetupPage from './pages/ServerSetupPage';
 import LoginPage from './pages/LoginPage';
@@ -39,11 +39,15 @@ function ChangePasswordRoute() {
 // fetch it here rather than making the page itself route-aware.
 function AttendanceRoute() {
   const navigate = useNavigate();
-  const [workType, setWorkType] = useState<'tour' | 'wfh' | null | 'error'>(null);
+  const [workType, setWorkType] = useState<'tour' | 'wfh' | 'office' | null | 'error'>(null);
 
   useEffect(() => {
+    // Office PC (LAN) mode: office days use the attendance machine, so only tour/wfh may punch
+    // from the phone. Cloud mode: the company may have no machine — office punches are allowed
+    // (the cloud records/enforces the office location).
+    const allowed = (w: string) => w === 'tour' || w === 'wfh' || (w === 'office' && isCloudModeSync());
     apiGet<{ workType: string }>('/today-status')
-      .then((s) => setWorkType(s.workType === 'tour' || s.workType === 'wfh' ? s.workType : 'error'))
+      .then((s) => setWorkType(allowed(s.workType) ? (s.workType as 'tour' | 'wfh' | 'office') : 'error'))
       .catch(() => setWorkType('error'));
   }, []);
 
@@ -76,7 +80,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'admin' | 'employee'>('admin');
 
   useEffect(() => {
-    getBaseUrl().then(setBaseUrlState);
+    // Load the company code too, so isCloudModeSync() is valid for every render after this.
+    Promise.all([getBaseUrl(), getOrgCode()]).then(([base]) => setBaseUrlState(base));
   }, []);
 
   if (loading || baseUrl === 'loading') {

@@ -9,7 +9,7 @@ import { useAuth } from '../lib/auth';
 import { enqueue } from '../lib/offlineQueue';
 
 interface Props {
-  workType: 'tour' | 'wfh';
+  workType: 'tour' | 'wfh' | 'office';
   onBack: () => void;
 }
 
