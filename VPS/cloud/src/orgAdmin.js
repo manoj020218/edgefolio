@@ -20,18 +20,22 @@ function randomTempPassword() {
   return crypto.randomBytes(6).toString('base64url');   // 8 chars, shown once, must be changed
 }
 
+// Creates just the organisation record with a fresh, unique company code.
+async function createOrgRecord(fields) {
+  for (let i = 0; i < 5; i++) {
+    try { return await Organisation.create({ ...fields, orgCode: randomOrgCode() }); }
+    catch (e) { if (e.code !== 11000 || !e.keyPattern?.orgCode) throw e; }   // code collision: try another
+  }
+  throw new Error('Could not allocate a unique company code');
+}
+
 /**
  * Creates an organisation and its owner employee with a temporary password.
  * Returns { org, owner, tempPassword } — the temp password is only ever returned here.
  */
 async function createOrganisation({ name, ownerEmpCode = 'OWNER', ownerName, ownerEmail = null, tzOffsetMin = 330 }) {
   if (!name || !ownerName) throw new Error('name and ownerName are required');
-  let org;
-  for (let i = 0; i < 5 && !org; i++) {
-    try { org = await Organisation.create({ orgCode: randomOrgCode(), name, tzOffsetMin }); }
-    catch (e) { if (e.code !== 11000) throw e; }   // code collision: try another
-  }
-  if (!org) throw new Error('Could not allocate a unique company code');
+  const org = await createOrgRecord({ name, tzOffsetMin });
   const tempPassword = randomTempPassword();
   const db = forOrg(org._id);
   const owner = await db.Employee.create({
@@ -42,4 +46,4 @@ async function createOrganisation({ name, ownerEmpCode = 'OWNER', ownerName, own
   return { org, owner, tempPassword };
 }
 
-module.exports = { createOrganisation, randomOrgCode, randomTempPassword };
+module.exports = { createOrganisation, createOrgRecord, randomOrgCode, randomTempPassword };

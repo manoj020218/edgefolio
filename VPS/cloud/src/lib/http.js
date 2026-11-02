@@ -18,4 +18,11 @@ function sendCode(res, status, code, message) {
   res.status(status).json({ ok: false, error: code, message });
 }
 
-module.exports = { sendOk, httpError, sendCode };
+// Same as sendCode but thrown from deep inside a handler; app.js's error handler renders it.
+function codedError(status, code, message) {
+  const err = httpError(status, message);
+  err.errorCode = code;
+  return err;
+}
+
+module.exports = { sendOk, httpError, sendCode, codedError };

@@ -12,15 +12,20 @@ const { ObjectId } = Schema.Types;
 
 const org = { type: ObjectId, ref: 'Organisation', required: true, index: true };
 
-const Organisation = mongoose.model('Organisation', new Schema({
+const orgSchema = new Schema({
   orgCode:      { type: String, required: true, unique: true, uppercase: true, trim: true }, // typed once in the app
   name:         { type: String, required: true, trim: true },
   status:       { type: String, enum: ['active', 'suspended'], default: 'active' },
   plan:         { type: String, default: 'early_access' },        // never shown to users (plan §4)
   maxActiveEmployees: { type: Number, default: 50 },
   billingClientId: { type: String, default: null },               // IoT billing platform Client id (Phase 4)
-  licenseKey:   { type: String, default: null },                  // EdgeLicense the org was linked with
-  syncKeyHash:  { type: String, default: null },                  // EDGE sync key, hashed (Phase 3)
+  licenseKey:   { type: String },                                 // EdgeLicense the org was linked with
+  syncKeyHash:  { type: String },                                 // sha256 of EDGE sync key
+  edgeMachineId: { type: String, default: null },                 // the office PC linked to this org
+  edgeLinkedAt: { type: Date, default: null },
+  edgeVersion:  { type: String, default: null },
+  lastSyncAt:   { type: Date, default: null },
+  syncAckSeq:   { type: Number, default: 0 },                     // last punch seq EDGE confirmed
   tzOffsetMin:  { type: Number, default: 330 },                   // IST
   settings: {
     minApkVersion:      { type: String, default: '1.0.0' },
@@ -29,8 +34,13 @@ const Organisation = mongoose.model('Organisation', new Schema({
     weeklyOffDays:      { type: [Number], default: [0, 6] },
     allowOfficeMobile:  { type: Boolean, default: true },         // cloud orgs may have no machine
     requireWorkAssignment: { type: Boolean, default: false },     // EDGE-style tour/wfh gate, opt-in
+    enforceGeofence:    { type: Boolean, default: false },        // office punches must be inside an office radius
   },
-}, { timestamps: true }));
+}, { timestamps: true });
+// Partial (not sparse) unique indexes: only real strings are indexed, so unlinked orgs never clash.
+orgSchema.index({ syncKeyHash: 1 }, { unique: true, partialFilterExpression: { syncKeyHash: { $type: 'string' } } });
+orgSchema.index({ licenseKey: 1 }, { unique: true, partialFilterExpression: { licenseKey: { $type: 'string' } } });
+const Organisation = mongoose.model('Organisation', orgSchema);
 
 const PROFILE_FIELDS = [
   'gender', 'dateOfBirth', 'bloodGroup', 'anniversaryDate',
@@ -53,6 +63,10 @@ const employeeSchema = new Schema({
   passwordHash:       { type: String, default: null },
   tempPasswordHash:   { type: String, default: null },
   passwordMustChange: { type: Boolean, default: false },
+  // Last password hash EDGE pushed. EDGE's hash is applied only when it differs from this (HR
+  // changed it in EDGE) — so a password the employee changed in the app isn't overwritten.
+  edgePasswordHash: { type: String, default: null },
+  source: { type: String, enum: ['edge', 'cloud'], default: 'cloud' },   // who created the row
   fcmToken: { type: String, default: null },
   profile: Object.fromEntries(PROFILE_FIELDS.map((f) => [f, { type: String, default: null }])),
 }, { timestamps: true });
@@ -86,8 +100,12 @@ const punchSchema = new Schema({
   geofenceOk: { type: Boolean, default: null },        // null = no geofence to check against
   deviceId:  { type: String, default: null },
   clientRef: { type: String, default: null },          // dedupe key for offline re-sends
+  // Per-organisation sequence number = EDGE's pull cursor. A counter, not ObjectId order, so the
+  // cursor stays gap-free even with several API instances (plan §10: stateless, can scale out).
+  seq: { type: Number, required: true },
 }, { timestamps: { createdAt: true, updatedAt: false } });
 punchSchema.index({ orgId: 1, empId: 1, date: 1, at: 1 });
+punchSchema.index({ orgId: 1, seq: 1 }, { unique: true });
 punchSchema.index({ orgId: 1, clientRef: 1 }, { unique: true, partialFilterExpression: { clientRef: { $type: 'string' } } });
 const Punch = mongoose.model('Punch', punchSchema);
 
@@ -135,6 +153,11 @@ const holidaySchema = new Schema({ orgId: org, date: { type: String, required: t
 holidaySchema.index({ orgId: 1, date: 1 }, { unique: true });
 const Holiday = mongoose.model('Holiday', holidaySchema);
 
+// Per-org atomic counters (punch sequence).
+const counterSchema = new Schema({ orgId: org, name: { type: String, required: true }, value: { type: Number, default: 0 } });
+counterSchema.index({ orgId: 1, name: 1 }, { unique: true });
+const Counter = mongoose.model('Counter', counterSchema);
+
 const AuditLog = mongoose.model('AuditLog', new Schema({
   orgId: org,
   actor: { type: String, required: true },     // empId, 'edge-sync', 'support:<name>'
@@ -143,6 +166,6 @@ const AuditLog = mongoose.model('AuditLog', new Schema({
 }, { timestamps: { createdAt: true, updatedAt: false } }));
 
 module.exports = {
-  Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, AuditLog,
+  Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, AuditLog, Counter,
   PROFILE_FIELDS,
 };

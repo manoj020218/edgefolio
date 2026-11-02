@@ -5,7 +5,7 @@
  * company, walks the main app flow, then deletes the company and every row it created.
  * Prints PASS/FAIL lines only — no passwords or tokens.
  *
- *   node scripts/smoke-test.js
+ *   node scripts/smoke.js
  */
 const path = require('path');
 const crypto = require('crypto');

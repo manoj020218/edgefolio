@@ -9,7 +9,7 @@
 const mongoose = require('mongoose');
 const models = require('./models');
 
-const TENANT_MODELS = ['Employee', 'FaceProfile', 'Punch', 'AttendanceDay', 'Office', 'WorkAssignment', 'Holiday', 'AuditLog'];
+const TENANT_MODELS = ['Employee', 'FaceProfile', 'Punch', 'AttendanceDay', 'Office', 'WorkAssignment', 'Holiday', 'AuditLog', 'Counter'];
 
 function scope(Model, orgId) {
   const f = (filter = {}) => ({ ...filter, orgId });
@@ -43,7 +43,13 @@ function guard(update = {}) {
 function forOrg(orgId) {
   if (!orgId || !mongoose.isValidObjectId(orgId)) throw new Error('forOrg: a valid orgId is required');
   const id = new mongoose.Types.ObjectId(String(orgId));
-  return Object.fromEntries(TENANT_MODELS.map((name) => [name, scope(models[name], id)]));
+  const db = Object.fromEntries(TENANT_MODELS.map((name) => [name, scope(models[name], id)]));
+  // Next value of a per-org counter, atomically (used for the punch sequence / EDGE pull cursor).
+  db.nextSeq = async (name) => {
+    const c = await db.Counter.findOneAndUpdate({ name }, { $inc: { value: 1 } }, { upsert: true, new: true });
+    return c.value;
+  };
+  return db;
 }
 
 module.exports = { forOrg, TENANT_MODELS };

@@ -11,7 +11,7 @@ const express = require('express');
 const { forOrg } = require('../tenancy');
 const { PROFILE_FIELDS } = require('../models');
 const { resolveOrg, signToken, requireAuth, requireRole } = require('../auth');
-const { sendOk, sendCode, httpError } = require('../lib/http');
+const { sendOk, sendCode, httpError, codedError } = require('../lib/http');
 const { verifySecret } = require('../lib/password');
 const { toLocalParts, todayLocal, minutesOf, hoursBetween } = require('../lib/time');
 
@@ -26,7 +26,8 @@ function metresBetween(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-// CLOUD: geofence is recorded, not enforced, in Phase 2 (enforcement + HR flagging in Phase 3).
+// CLOUD: geofence result is recorded on every punch (geofenceOk); enforced only when the org
+// turns on settings.enforceGeofence (office punches outside every office radius are refused).
 async function geofenceOk(db, org, location) {
   const offices = await db.Office.find({ lat: { $ne: null }, lng: { $ne: null } }).lean();
   if (!offices.length) return null;
@@ -56,7 +57,13 @@ async function recordCheckIn(db, org, emp, { workType, timestamp, similarity, li
   if (last?.eventType === 'in') return { alreadyMarked: true, checkedInAt: last.time };
 
   const geo = location ? await geofenceOk(db, org, location) : null;
+  // Phase 3: when the org enforces it, an office punch must be inside an office's radius.
+  if (org.settings?.enforceGeofence && workType === 'office' && geo === false) {
+    throw codedError(422, 'OUTSIDE_GEOFENCE', 'You are not at an office location. Move closer to the office and retry.');
+  }
+  const seq = await db.nextSeq('punch');
   const [punch] = await db.Punch.create([{
+    seq,
     empId: emp.empId, eventType: 'in', at: new Date(timestamp), date, time, workType,
     source, faceMatch: Number(similarity || 0), liveness: liveness || null,
     location: location ? { lat: location.lat, lon: location.lon, accuracy: location.accuracy ?? null } : undefined,
@@ -203,6 +210,7 @@ function apkRouter(config) {
     if (!day || !day.checkIn) throw httpError(404, 'No check-in found for today');
 
     await db.Punch.create({
+      seq: await db.nextSeq('punch'),
       empId: req.user.empId, eventType: 'out', at: new Date(timestamp), date, time,
       workType: last.workType, source: 'app', clientRef: req.body.clientRef || null,
     });

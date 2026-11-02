@@ -11,6 +11,7 @@ const express = require('express');
 const { createMetrics } = require('./metrics');
 const { apkRouter } = require('./routes/apk');
 const { authRouter } = require('./routes/authRoutes');
+const { syncRouter } = require('./routes/sync');
 
 function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) {
   const app = express();
@@ -50,6 +51,7 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) 
 
   app.use('/api/v1/apk', apkRouter(config));
   app.use('/api/v1/auth', authRouter(config));
+  app.use('/api/v1/sync', syncRouter());
 
   // Same envelope as EDGE's API ({ ok, data } / { ok:false, error }), so the app parses both alike.
   app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found' }));
@@ -57,6 +59,7 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) 
   app.use((err, req, res, next) => {
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error('[error]', err.stack || err.message);
+    if (err.errorCode && status < 500) return res.status(status).json({ ok: false, error: err.errorCode, message: err.message });
     res.status(status).json({ ok: false, error: status >= 500 ? 'Internal error' : err.message });
   });
 

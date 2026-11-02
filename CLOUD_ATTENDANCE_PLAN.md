@@ -238,7 +238,7 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   allowed (`settings.allowOfficeMobile`), EDGE's tour/wfh assignment gate opt-in
   (`settings.requireWorkAssignment`); geofence recorded (`geofenceOk`), not enforced yet.
   Tests: 19/19 on in-memory MongoDB 4.4 (`node --test --test-concurrency=1`; first run downloads the
-  binary — Avast may lock it once → rerun). Live: `node scripts/smoke-test.js` on the VPS → 10/10 PASS
+  binary — Avast may lock it once → rerun). Live: `node scripts/smoke.js` on the VPS → 10/10 PASS
   (median 22 ms). Backups: `deploy/backup.sh` (encrypted, 30 days, `/root/backups/edgefolio-cloud`),
   cron 02:30 via `deploy/install-backup-cron.sh`; restore verified to decrypt. **Owner action:** copy
   `BACKUP_PASSPHRASE` from `VPS/cloud/.env` to a safe place off the server.
