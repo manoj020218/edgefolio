@@ -1,0 +1,187 @@
+# EdgeFolio Cloud Attendance (Option B) — Product & Build Plan
+
+**As of:** 2026-11-02 · **Status:** planned, not started · **Shared doc:** https://claude.ai/artifact/RPWuHSFMm4TgGpPpTgMwrh
+(this file is the repo copy so work can resume after a break; keep both in step)
+
+---
+
+## 1. Summary
+
+EdgeFolio Cloud Attendance is a cloud-backed attendance product: employees mark attendance from the
+phone app (or a U5 face machine) from anywhere, and the free EdgeFolio desktop (EDGE) on the office PC
+pulls that attendance for salary, payroll and HR.
+
+Launch = **free early access**, every feature included, to get people using it first.
+**Nothing about pricing, plans or future charges appears anywhere users can see** (app, website,
+onboarding, emails). Every organisation **registers on the IoT billing platform** so a monetisation
+decision can be made later from real usage.
+
+Build: turn the empty `VPS/src` backend into the cloud service, give the existing Android app a
+"Cloud" mode beside "Office PC", and add a cloud pull to EDGE's existing Machine Import pipeline.
+Rough size: ~14 weeks to public launch (section 9).
+
+## 2. Where we start from
+
+| Piece | Folder | State today | Role in Option B |
+|---|---|---|---|
+| EDGE desktop | `EDGE/` | Shipping, v1.0.7 live (v1.0.8 visitor auto-ID in test) | Stays free; payroll/salary/HR; pulls attendance from the cloud |
+| Android app | `APK/mobile/` | Built + signed: face + liveness + GPS, offline queue, push, HR screens | Gains a "Cloud" mode; same screens |
+| U5 machines + visitor auto-ID | `EDGE/backend/services/u5*` | Working on LAN | Optional input via EDGE |
+| Cloud backend | `VPS/src/` | **Empty skeleton** (blank files) | Built by this plan |
+| Billing/licensing | external repo `D:\IOT Device\Billing at IOT soft` (`EdgeLicense` model) | Live, shared by 16+ products | Organisation registration + usage record |
+| Marketing site | `VPS/marketing/` | Live | Gains early-access sign-up |
+
+Constraint today: the app is a client of the office PC (`ServerSetupPage.tsx`, key `edgefolio.baseUrl`);
+away from office Wi-Fi it only queues punches. No iPhone app (needs a Mac to build).
+
+## 3. Product definition
+
+- **For:** Indian SMEs with staff outside one building (field teams, multiple sites, contractors,
+  temporary labour); owners/HR who run EDGE for salary.
+- **Cloud does:** phone attendance anywhere (face + liveness, GPS, optional geofence per office,
+  offline queue to the cloud); live view for owners/HR (app + web dashboard); leave / missed-punch /
+  visit requests; push alerts; machine punches beside phone punches.
+- **Stays free on EDGE:** salary structures, payroll, PF/ESI/PT, slips, leave, cashbook, reports,
+  local machines. EDGE keeps working offline; the cloud is one more attendance source.
+- **Access during early access:** every feature free for every registered organisation, up to
+  **50 active employees each** (raised on request, per organisation, on the billing record).
+
+## 4. Launch: free early access
+
+- Free for any registered organisation; no end date, plan or price mentioned anywhere.
+- **Active organisation** = ≥3 employees marked attendance on ≥3 different days (internal metric).
+- Internal goal (not public): 500 active organisations.
+- Registration through the IoT billing platform: owner phone OTP, business name, city,
+  GSTIN/Udyam when available. One organisation per owner phone; duplicates merged.
+- Inactive 60 days → two reminders → cloud data archived (EDGE data never touched).
+- Word of mouth: referral link per organisation (counted, to thank/feature referrers);
+  "Early member" badge; WhatsApp-shareable monthly summary with "Made with EdgeFolio";
+  early members' WhatsApp group; setup call if no punches 3 days after registering.
+- Monetisation: not decided, not mentioned. Usage data on the billing platform informs it later.
+
+## 5. Architecture
+
+```
+ Employee phone app ──punches──▶ ┌──────── EdgeFolio Cloud (shared VPS first) ────────┐
+ Owner/HR app + web ──views────▶ │  App API /api/v1/apk/*   Database   Sync API      │──▶ IoT billing platform
+ Website sign-up ───────────────────────────────────────────────────────────────────▶   (org registration,
+                                 └──────────────────────────────────┬────────────────┘    plan, usage)
+                                                                    │ EDGE calls OUT only
+ U5 machines (LAN) ──▶ EDGE desktop (office PC, free) ◀─────────────┘ pulls punches, pushes employees
+```
+
+- The cloud serves the **same `/api/v1/apk/*` contract** the app already uses with EDGE → one app build,
+  mode chosen at setup.
+- EDGE only makes outbound calls → no fixed IP / port-forwarding at offices.
+
+## 6. Cloud API and data model
+
+**App endpoints (today in `EDGE/backend/routes/apk.js`) — owner in Cloud mode:**
+
+| Group | Endpoints | Owner |
+|---|---|---|
+| Setup/login | `GET /config`, `GET /login-check`, `GET /offices`, `POST /auth/login`, `PATCH /fcm-token` | Cloud |
+| Attendance | `POST /attendance`, `POST /attendance/checkout`, `POST /attendance/batch-sync`, `GET /today-status`, `GET /attendance-history`, `GET /attendance-calendar` | Cloud (EDGE pulls a copy) |
+| Faces | `POST/GET /faces/self-enroll`, `GET /faces/:empId/embedding` | Cloud |
+| HR/owner | `GET /live-feed`, `GET /analytics`, `GET/PATCH /employees`, work assignments, alert subscriptions, `POST /broadcast` | Cloud |
+| Payroll views | `GET /payroll`, `GET /payroll/:runId`, `GET /payslips`, `GET /leave-balance` | EDGE (pushed to cloud after payroll run — later phase) |
+| Profile | `GET/PATCH /profile` | Cloud, synced to EDGE |
+
+**Sync contract with EDGE** (`/api/v1/sync/*`, org sync key stored in EDGE):
+1. `PUT /sync/employees` — EDGE pushes the employee master. **EDGE owns the employee master.**
+2. `GET /sync/punches?after=<cursor>` — EDGE pulls pages, stages into Machine Import with
+   `source_type = 'cloud_app'`. Cursor is server-issued (no gaps, no duplicates).
+3. `POST /sync/ack` — EDGE confirms the last committed cursor.
+4. `PUT /sync/payslips` — later phase.
+
+**Collections (MongoDB):**
+
+| Collection | Key fields | Notes |
+|---|---|---|
+| `organisations` | id, name, billing_org_id, plan, sync_key_hash, created_at | plan = `early_access` for all at launch |
+| `employees` | org_id, emp_code, name, dept, status, app_role, password_hash | copied from EDGE |
+| `face_profiles` | org_id, emp_code, embedding (192 floats), enrolled_at | no photos by default |
+| `punches` | org_id, emp_code, at (UTC), type, source, gps, geofence_ok, liveness_ok, cursor | append-only |
+| `offices` | org_id, name, lat, lng, radius_m | geofences |
+| `requests` | org_id, emp_code, kind, dates, status, approver | leave / missed punch / visits |
+| `devices` | org_id, emp_code, fcm_token, app_version, last_seen | push + support |
+| `audit_log` | org_id, actor, action, at | who changed what |
+
+## 7. Security, privacy, compliance
+
+- Tenant isolation: every record has `org_id`; one data-access layer filters by the token's org;
+  automated test that tries cross-org reads.
+- Face data: phone computes the 192-number MobileFaceNet embedding; only that is sent. Punch photos off
+  by default (90-day retention if an org enables them).
+- DPDP Act 2023: first-launch notice + recorded consent; employees can see their data and ask HR to
+  delete it; leaving the company deletes the face profile.
+- HTTPS only in Cloud mode (LAN mode keeps plain HTTP); hashed passwords and sync keys; no secrets in git.
+- Nightly encrypted DB backup, 30 days kept, monthly restore test.
+- Support access to an org's data only with the owner's in-app approval, logged.
+
+## 8. Registration on the IoT billing platform
+
+- Website and app sign-up create the organisation on the billing platform (extend `EdgeLicense` with a
+  cloud plan, value `early_access`); the cloud stores `billing_org_id`.
+- Recorded: owner phone, business details, sign-up date, daily usage report (active employees,
+  punches, features used).
+- 50-employee cap held on the billing record (raise per org without a release).
+- Never block attendance: past the cap, keep recording and alert **our** team, not the customer.
+- EDGE: the sync key ties EDGE to the registered org; EDGE stays free and works if the cloud is down.
+- Later, if monetisation is chosen: plans/payment through the billing platform's existing flow.
+
+## 9. Phased build plan (rough; one full-time developer + review)
+
+1. **Decide and set up (weeks 1–2):** product name, cloud subdomain; cloud as its own PM2 process +
+   MongoDB database on the shared VPS, all addresses from env vars; skeleton in `VPS/src`.
+2. **Cloud core (weeks 2–6):** organisations, logins, employees, punches, faces, offices; App API
+   matching `apk.js`; tenant-isolation tests; nightly backups. **Gate: API passes isolation tests.**
+3. **App Cloud mode + EDGE sync (weeks 6–9):** mode choice at setup, HTTPS-only Cloud mode, offline queue
+   to cloud; EDGE "Cloud sync" settings, employee push, punch pull into Machine Import; geofence.
+4. **Sign-up + registration (weeks 8–11):** website + app sign-up with OTP; billing-platform registration
+   with early-access plan; usage reporting; consent screen; basic owner web dashboard.
+5. **Private beta (weeks 11–13):** 20 organisations (2–3 with U5); load test 500 orgs × 50 employees;
+   fix list. **Gate: 99.5% of beta punches synced, no data leaks.**
+6. **Public launch (week 14):** free early access opens; referral links; early members' WhatsApp group.
+
+## 10. Hosting: start shared, move when needed (CODE FOR THIS)
+
+- **Now:** existing shared VPS (154.61.69.200), own PM2 process + port, own MongoDB database, behind the
+  existing nginx on a subdomain (e.g. `cloud.edgefolio.iotsoft.in`). Check `pm2 list` and ports first
+  (see memory `project_vps.md` for used ports); the VPS has OOM'd on builds before → build locally, ship
+  `dist` (same approach as FireGuard).
+- **Portability rules for the code:**
+  - Every address from environment variables: `MONGO_URL`, `PUBLIC_BASE_URL`, `BILLING_API_URL`,
+    `BILLING_API_KEY`, `FILE_STORE_DIR`, `PORT`. No IP, hostname or absolute path in code.
+  - Stateless API: no per-request state in process memory (sessions = JWT; rate limits/caches in Mongo
+    or a pluggable store), so a 2nd instance / 2nd VPS can sit behind nginx.
+  - App and EDGE only ever know `PUBLIC_BASE_URL` → a move is invisible to them.
+  - Files (if photos ever enabled) behind one storage module, so local disk can later become object storage.
+  - Health endpoint `/health` + response-time logging from day one (needed for the move trigger).
+- **Move trigger:** median punch response > 500 ms at the morning peak, VPS memory > 80% for a week, or
+  200 active organisations — whichever first. Move = new VPS, restore latest backup, switch the
+  subdomain's DNS.
+
+## 11. Risks, open decisions, metrics
+
+| Risk | Mitigation |
+|---|---|
+| Shared VPS capacity at peak | Monitor from day one; move at the trigger (section 10) |
+| Photo spoofing | Liveness already in app; flag failed-liveness punches |
+| Sign-ups that never use it | Setup call after 3 days with no punches; reminders; archive after 60 days |
+| Two sources of employee data | EDGE is the only master |
+| Support load | In-app help, WhatsApp group, FAQs from beta |
+| Android only | iOS later (needs a Mac) |
+
+Open decisions:
+- [ ] Product name ("EdgeFolio Cloud" or a separate brand)
+- [ ] Cloud-only use without EDGE (attendance + Excel export)?
+- [ ] Exact subdomain; whether the DB moves first when load grows
+- [ ] Whether/how to monetise — later, from usage data; nothing published meanwhile
+
+Metrics: 500 active orgs in 6 months (internal) · ≥60% still active at month 6 · ≥30% of sign-ups by
+referral · ≥70% of each active org's employees punching daily · ≥99.5% punch success.
+
+## Progress log
+- 2026-11-02 — Plan written (doc + this file). Decisions: free early access, no pricing shown anywhere,
+  registration on IoT billing platform, 50 employees/org, start on shared VPS, code for portability.
