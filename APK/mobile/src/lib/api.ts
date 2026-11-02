@@ -22,12 +22,25 @@ export async function getOrgCode(): Promise<string | null> {
 export function isCloudModeSync(): boolean {
   return Boolean(cachedOrgCode) && cachedBaseUrl === CLOUD_BASE_URL;
 }
+export function cachedOrgCodeSync(): string | null {
+  return cachedOrgCode ?? null;
+}
 
 export async function setCloudMode(orgCode: string): Promise<void> {
   const code = orgCode.trim().toUpperCase();
   cachedOrgCode = code;
   await Preferences.set({ key: ORG_CODE_KEY, value: code });
   await setBaseUrl(CLOUD_BASE_URL);
+}
+
+// "Change company / server" on the login screen: forget the connection (and any token) so the
+// setup screen shows again on reload.
+export async function resetConnection(): Promise<void> {
+  cachedOrgCode = null;
+  cachedBaseUrl = null;
+  await Preferences.remove({ key: ORG_CODE_KEY });
+  await Preferences.remove({ key: BASE_URL_KEY });
+  await Preferences.remove({ key: TOKEN_KEY });
 }
 
 // Office-PC (LAN) mode: forget any company code.

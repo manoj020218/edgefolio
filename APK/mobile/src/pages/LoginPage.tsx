@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, User } from 'lucide-react';
-import { apiGet, ApiError } from '../lib/api';
+import { apiGet, ApiError, isCloudModeSync, cachedOrgCodeSync, resetConnection } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import ForgotPasswordPage from './ForgotPasswordPage';
 
@@ -107,6 +107,17 @@ export default function LoginPage() {
           >
             Forgot password?
           </button>
+          <p className="pt-3 text-center text-[12px] text-slate-500">
+            {isCloudModeSync() ? `Company code ${cachedOrgCodeSync() ?? ''}` : 'Office computer'}
+            {' · '}
+            <button
+              type="button"
+              className="font-medium text-brand-400"
+              onClick={async () => { await resetConnection(); window.location.reload(); }}
+            >
+              Change company / server
+            </button>
+          </p>
         </form>
       )}
 
