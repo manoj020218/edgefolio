@@ -299,3 +299,12 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   3. App: Create-company (Google sign-in via @capgo/capacitor-social-login@7), "Sign in with Google",
      Company screen (code, licence key, "Send PC software link", "Invite employees" via @capacitor/share),
      add-employee screen, export button (@capacitor/browser). Needs owner's Android OAuth client (step 4 above).
+- 2026-11-02 — Phase 4 app part **done** (bfab37c, app 1.0.24 installed on the test phone): Create company
+  (Google), "Owner / HR: Sign in with Google", admin **Company** tab (code, licence key, owner login,
+  Invite employees, Send PC software link, Add employee, CSV export), AddEmployeePage. androidx.browser
+  pinned to 1.8.0 in `android/build.gradle`. **Blocked / waiting on owner:** (1) approve the billing
+  platform production deploy — script ready at the session scratchpad
+  (`deploy-billing-cloud.sh`: backup → copy 4 files → generate EDGEFOLIO_CLOUD_KEY server-side → pm2
+  reload with auto-restore if not online → smoke → write BILLING_API_URL/KEY + GOOGLE_CLIENT_IDS into the
+  cloud .env); (2) create the Android OAuth client (package + SHA-1 above). Until both, "Create company"
+  and Google sign-in show a clear error; everything else works.
