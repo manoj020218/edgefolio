@@ -13,7 +13,9 @@ export async function googleIdToken(): Promise<string> {
     await SocialLogin.initialize({ google: { webClientId: GOOGLE_WEB_CLIENT_ID } });
     initialized = true;
   }
-  const res = await SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'], prompt: 'select_account' } });
+  // No `scopes`: on Android the plugin rejects ANY custom scopes unless MainActivity is modified, and
+  // it already requests email + profile + openid by default — all the ID token needs.
+  const res = await SocialLogin.login({ provider: 'google', options: { prompt: 'select_account' } });
   const result = res.result as { idToken?: string | null };
   if (!result?.idToken) throw new Error('Google sign-in did not return a token. Please try again.');
   return result.idToken;
