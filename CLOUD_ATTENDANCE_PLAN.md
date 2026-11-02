@@ -227,3 +227,21 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   Note: mongod listens on 127.0.0.1 **and the public IP** — check the firewall blocks 27017 from outside.
   **Next: Phase 2 — cloud core** (orgs, logins, employees, punches, faces, offices; App API matching
   `apk.js`; tenant-isolation tests; nightly backups).
+- 2026-11-02 — **Phase 2 DONE** (commits 2d1e255 … 3884367, deployed). In `VPS/cloud/src`:
+  `models.js` (orgs, employees, faces, punches, attendance days, offices, work assignments, holidays,
+  audit log), `tenancy.js` (`forOrg(orgId)` = the only route to tenant data), `auth.js` (company code
+  via `X-Org-Code`/`orgCode` for public endpoints; JWT with orgId after login), `routes/apk.js` (config,
+  login-check, offices, auth/login, fcm-token, today-status, attendance, checkout, batch-sync, live-feed,
+  faces ×3, employees, profile, attendance-history/calendar — EDGE shapes), `routes/authRoutes.js`
+  (change-password), `orgAdmin.js` + `scripts/create-org.js`. **Design decisions:** company code (6 chars,
+  no look-alikes) replaces the server address in the app; empId always from the token; office punches
+  allowed (`settings.allowOfficeMobile`), EDGE's tour/wfh assignment gate opt-in
+  (`settings.requireWorkAssignment`); geofence recorded (`geofenceOk`), not enforced yet.
+  Tests: 19/19 on in-memory MongoDB 4.4 (`node --test --test-concurrency=1`; first run downloads the
+  binary — Avast may lock it once → rerun). Live: `node scripts/smoke-test.js` on the VPS → 10/10 PASS
+  (median 22 ms). Backups: `deploy/backup.sh` (encrypted, 30 days, `/root/backups/edgefolio-cloud`),
+  cron 02:30 via `deploy/install-backup-cron.sh`; restore verified to decrypt. **Owner action:** copy
+  `BACKUP_PASSPHRASE` from `VPS/cloud/.env` to a safe place off the server.
+  Not yet built (later phases): work-assignment admin, alerts, broadcast, analytics, payroll views,
+  payslips, leave, requests/visits/support/documents, forgot-password, offices admin, login rate limit.
+  **Next: Phase 3 — app Cloud mode + EDGE sync.**
