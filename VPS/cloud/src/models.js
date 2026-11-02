@@ -163,6 +163,19 @@ alertSubSchema.index({ orgId: 1, watcherEmpId: 1, watchedEmpId: 1 }, { unique: t
 alertSubSchema.index({ orgId: 1, watchedEmpId: 1 });
 const AlertSubscription = mongoose.model('AlertSubscription', alertSubSchema);
 
+// Company announcements (EDGE announcements table). target 'all' or one empId.
+const announcementSchema = new Schema({
+  orgId: org,
+  type: { type: String, enum: ['sos', 'holiday', 'event', 'general', 'app_update'], required: true },
+  message: { type: String, required: true },
+  announcedByEmpId: { type: String, default: null },
+  announcedByName: { type: String, default: null },
+  announcedByDesignation: { type: String, default: null },
+  target: { type: String, default: 'all' },
+}, { timestamps: { createdAt: true, updatedAt: false } });
+announcementSchema.index({ orgId: 1, createdAt: -1 });
+const Announcement = mongoose.model('Announcement', announcementSchema);
+
 // In-app notifications inbox: every push is also stored per recipient, so nothing is lost if the
 // phone missed it. Pruned after 90 days.
 const notificationSchema = new Schema({
@@ -210,6 +223,6 @@ const AuditLog = mongoose.model('AuditLog', new Schema({
 
 module.exports = {
   Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, AuditLog, Counter,
-  AlertSubscription, FaceRecaptureRequest, AppNotification,
+  AlertSubscription, FaceRecaptureRequest, AppNotification, Announcement,
   PROFILE_FIELDS,
 };

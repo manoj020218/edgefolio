@@ -12,6 +12,7 @@ const { createMetrics } = require('./metrics');
 const { apkRouter } = require('./routes/apk');
 const { authRouter } = require('./routes/authRoutes');
 const { syncRouter } = require('./routes/sync');
+const { commonRouter } = require('./routes/common');
 const { appCors } = require('./cors');
 const { ownerRouter, reportsRouter } = require('./routes/owner');
 const { createGoogleVerifier } = require('./lib/google');
@@ -63,6 +64,7 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0', de
   app.use('/api/v1/reports', reportsRouter(config));
   app.use('/api/v1/auth', cors, authRouter(config));
   app.use('/api/v1/sync', syncRouter({ billing }));
+  app.use('/api/v1', cors, commonRouter(config));                              // announcements, holidays
 
   // Same envelope as EDGE's API ({ ok, data } / { ok:false, error }), so the app parses both alike.
   app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found' }));

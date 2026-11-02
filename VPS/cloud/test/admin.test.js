@@ -186,3 +186,37 @@ test('notifications inbox: stored per recipient, unread count, mark read, own ro
   assert.strictEqual((await client.post('/api/v1/apk/notifications/read', { token: hr, body: { all: true } })).body.data.updated, 1);
   push.setTransport(null);
 });
+
+test('broadcast: announcement stored, everyone notified, Home can read it', async () => {
+  const push = require('../src/lib/push');
+  const sent = [];
+  push.setTransport(async (m) => { sent.push(m); });
+  const db = forOrg(org._id);
+  await db.AppNotification.deleteMany({});
+
+  assert.strictEqual((await client.post('/api/v1/apk/broadcast', { token: emp, body: { type: 'general', message: 'x' } })).status, 403);
+  assert.strictEqual((await client.post('/api/v1/apk/broadcast', { token: owner, body: { type: 'party', message: 'x' } })).status, 400);
+  const b = await client.post('/api/v1/apk/broadcast', { token: owner, body: { type: 'holiday', message: 'Office closed Friday' } });
+  assert.strictEqual(b.status, 200);
+  assert.strictEqual(b.body.data.sentTo, 4);                       // every active employee
+  await new Promise((r) => setTimeout(r, 300));
+  assert.strictEqual(sent.at(-1).channel, 'ef_general');
+  assert.strictEqual(sent.at(-1).title, 'Holiday Notice');
+
+  const inbox = await client.get('/api/v1/apk/notifications', { token: emp });
+  assert.deepStrictEqual([inbox.body.data[0].type, inbox.body.data[0].body], ['ANNOUNCEMENT', 'Office closed Friday']);
+  const ann = await client.get('/api/v1/announcements', { token: emp, query: { target: 'e1' } });
+  assert.strictEqual(ann.body.data[0].message, 'Office closed Friday');
+  assert.strictEqual(ann.body.data[0].announcedByName, 'Olga');
+  assert.strictEqual((await client.get('/api/v1/announcements')).status, 401);
+
+  // A notice targeted at one employee is not visible to others.
+  await client.post('/api/v1/apk/broadcast', { token: hr, body: { type: 'general', message: 'Only Asha', target: 'e1' } });
+  assert.strictEqual((await client.get('/api/v1/announcements', { token: emp })).body.data[0].message, 'Only Asha');
+  const bala = await client.login('ADMN23', 'E2');
+  assert.ok(!(await client.get('/api/v1/announcements', { token: bala, query: { target: 'e1' } })).body.data.some((a) => a.message === 'Only Asha'));
+
+  await db.Holiday.create({ date: '2026-12-25', name: 'Christmas' });
+  assert.deepStrictEqual((await client.get('/api/v1/holidays', { token: emp, query: { year: 2026 } })).body.data.map((h) => h.name), ['Christmas']);
+  push.setTransport(null);
+});

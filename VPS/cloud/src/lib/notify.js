@@ -10,6 +10,7 @@ const CHANNEL_BY_TYPE = {
   ATTENDANCE_ALERT: 'ef_alerts',
   FACE_RECAPTURE_REQUEST: 'ef_requests',
   FACE_RECAPTURE_DECISION: 'ef_requests',
+  ANNOUNCEMENT: 'ef_general',
 };
 const channelFor = (type) => CHANNEL_BY_TYPE[type] || 'ef_general';
 const KEEP_DAYS = 90;

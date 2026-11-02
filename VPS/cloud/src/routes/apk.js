@@ -574,6 +574,31 @@ function apkRouter(config) {
     sendOk(res, { deleted: true });
   }));
 
+  // ── Broadcast — EDGE broadcastHandler (stores an announcement + notifies everyone) ──
+  const ANNOUNCEMENT_LABELS = { sos: 'URGENT', holiday: 'Holiday Notice', event: 'Announcement', general: 'Notice', app_update: 'App Update' };
+  r.post('/broadcast', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const { type, message, target = 'all' } = req.body || {};
+    if (!type || !message || !String(message).trim()) throw httpError(400, 'type and message are required');
+    if (!ANNOUNCEMENT_LABELS[type]) throw httpError(400, 'type must be sos | holiday | event | general | app_update');
+    const db = forOrg(req.user.orgId);
+    const admin = await db.Employee.findOne({ empId: req.user.empId }, { empId: 1, name: 1, designation: 1 }).lean();
+    if (!admin) throw httpError(404, 'Admin employee not found');
+    const tgt = target && target !== 'all' ? String(target) : 'all';
+    const a = await db.Announcement.create({
+      type, message: String(message).trim().slice(0, 1000), target: tgt,
+      announcedByEmpId: admin.empId, announcedByName: admin.name, announcedByDesignation: admin.designation || null,
+    });
+    // CLOUD: every active employee gets an inbox row (EDGE only stores for phones with a push token).
+    const recipients = tgt === 'all'
+      ? (await db.Employee.find({ status: 'active' }, { empId: 1 }).lean()).map((e) => e.empId)
+      : [tgt];
+    await notifyEmployees(db, recipients, {
+      type: 'ANNOUNCEMENT', title: ANNOUNCEMENT_LABELS[type], body: a.message,
+      data: { announcementType: type, id: String(a._id) },
+    });
+    sendOk(res, { id: String(a._id), sentTo: recipients.length });
+  }));
+
   // ── Notifications inbox (own rows only) ──────────────────────────────────
   const serializeNotification = (n) => ({
     id: String(n._id), type: n.type, title: n.title, body: n.body || null, data: n.data || {},
