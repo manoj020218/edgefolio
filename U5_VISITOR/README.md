@@ -1,5 +1,12 @@
 # U5 Visitor Auto-ID — live machine test
 
+> **Now built into EdgeFolio (v1.0.8).** Settings → U5 Machines: tick "Visitor machine" on the
+> device and set the ID format under "Visitor auto-ID"; visitors are listed under **Visitors**
+> in the menu (`EDGE/backend/services/u5VisitorService.js`). `u5-visitor-auto-enroll.js` below
+> is the original demo script, kept for reference. **Never run it while a machine is in visitor
+> mode** — both would enroll the same stranger. IDs it created (e.g. V0001) are adopted
+> automatically when visitor mode starts, if they match the configured prefix.
+
 Goal: let unknown (not enrolled) temporary workers be auto-assigned a visitor ID by the U5 face
 terminal, and get attendance on later visits with no enrollment flow.
 
