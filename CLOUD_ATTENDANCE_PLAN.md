@@ -217,3 +217,13 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   **disconnected** until the Mongo user exists. Marketing site + downloads verified still 200.
   Found existing EdgeFolio registration in the billing platform → §8 rewritten to reuse it.
   **Still waiting on owner:** Mongo user `edgefolio_cloud` + password in `.env`.
+- 2026-11-02 — **Phase 1 DONE.** Mongo user `edgefolio_cloud` created in `admin` db (readWrite on
+  `edgefolio_cloud` only, same `authSource=admin` pattern as the other apps), random password written
+  straight into `VPS/cloud/.env` on the server (never printed). Public
+  `https://edgefolio.iotsoft.in/cloud/health` → 200, db connected, ~66 MB RSS.
+  How Mongo users get created on this VPS: admin user `mongoAdmin` (credentials in the Jenix Community
+  One project memory, `reference_mongodb_credentials.md`); write the JS to a file and run
+  `mongo admin -u mongoAdmin -p … --authenticationDatabase admin file.js` (avoids quoting problems).
+  Note: mongod listens on 127.0.0.1 **and the public IP** — check the firewall blocks 27017 from outside.
+  **Next: Phase 2 — cloud core** (orgs, logins, employees, punches, faces, offices; App API matching
+  `apk.js`; tenant-isolation tests; nightly backups).
