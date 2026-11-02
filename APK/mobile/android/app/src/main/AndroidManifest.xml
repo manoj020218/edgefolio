@@ -28,6 +28,7 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+        <service android:name="com.jenix.cap.location.LocationForegroundService" tools:node="remove" />
     </application>
 
     <!-- Permissions -->
@@ -43,4 +44,15 @@
          FINE location as entirely undeclared on any Android 12+ (API 31+)
          device. Declaring it here, unqualified, restores it for all versions. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="replace" />
+
+    <!-- Play compliance: this app reads location ONCE while marking attendance and shows no ads.
+         Strip what shared plugins / Firebase pull in (background tracking, advertising ID), so the
+         app needs no background-location declaration and declares no ad-ID use. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE" tools:node="remove" />
 </manifest>
