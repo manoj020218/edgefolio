@@ -28,6 +28,7 @@ const machinesRoutes      = require('./routes/machines');
 const paymentsRoutes      = require('./routes/payments');
 const u5machinesRoutes    = require('./routes/u5machines');
 const m68Routes           = require('./routes/m68');
+const cloudSyncRoutes     = require('./routes/cloudSync');
 const apkRoutes           = require('./routes/apk');
 
 function createServer() {
@@ -85,6 +86,7 @@ function createServer() {
   app.use(`${API_PREFIX}/payments`,     paymentsRoutes);
   app.use(`${API_PREFIX}/u5`,           u5machinesRoutes);
   app.use(`${API_PREFIX}/m68`,          m68Routes);
+  app.use(`${API_PREFIX}/cloud-sync`,   cloudSyncRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

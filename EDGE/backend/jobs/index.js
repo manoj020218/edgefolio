@@ -18,6 +18,7 @@ const { startPayrollScheduler } = require('./payrollScheduler');
 const { startCleanupScheduler } = require('./cleanupScheduler');
 const { startLicenseHeartbeatScheduler } = require('./licenseHeartbeatScheduler');
 const { startM68TimeSyncScheduler } = require('./m68TimeSyncScheduler');
+const { startCloudSyncScheduler } = require('./cloudSyncScheduler');
 
 function startSchedulers() {
   if (!SCHEDULERS_ENABLED) {
@@ -49,6 +50,7 @@ function startSchedulers() {
     }),
     startLicenseHeartbeatScheduler(),
     startM68TimeSyncScheduler(),
+    startCloudSyncScheduler(),
   ];
 
   logger.info('All schedulers started', {

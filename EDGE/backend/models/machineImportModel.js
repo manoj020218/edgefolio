@@ -34,7 +34,9 @@ function stageRecords(batchId, sourceType, records) {
   const tx = db.transaction((rows) => {
     let count = 0;
     for (const r of rows) {
-      const mapped = knownMappings[r.machineEmpId] || null;
+      // A source that already knows the EDGE employee (cloud app punches carry EDGE's own
+      // employee id) passes mappedEmployeeId; machines rely on the HR-made ID mappings.
+      const mapped = r.mappedEmployeeId || knownMappings[r.machineEmpId] || null;
       insert.run({
         importBatch:    batchId,
         sourceType,
