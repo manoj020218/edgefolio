@@ -121,8 +121,25 @@ away from office Wi-Fi it only queues punches. No iPhone app (needs a Mac to bui
 
 ## 8. Registration on the IoT billing platform
 
-- Website and app sign-up create the organisation on the billing platform (extend `EdgeLicense` with a
-  cloud plan, value `early_access`); the cloud stores `billing_org_id`.
+**Already exists (found on the VPS 2026-11-02, `/var/www/billing-platform`, deployed by pscp, not git):**
+`POST /api/edgefolio/signup` (creates `Client` + free `EdgeLicense` with `licenseKey`; used by the
+website `/onboard`), `POST /api/edgefolio/activate` (binds licence to the office PC `machineId`),
+`POST /api/edgefolio/heartbeat` (daily: `activeEmployees`, `appVersion`, `lastPayrollRun`; returns the
+announcement), superadmin `/licenses` list/extend/block/reset + `/announcement`. Models: `EdgeLicense`
+(licenseKey, clientId, plan{name:'free', maxEmployees:null}, status trial|active|expired|blocked,
+machineId, activatedAt, appVersion, createdVia), `EdgeHeartbeat`, `EdgeAnnouncement`, `CommissionLedger`.
+→ **Every EDGE user is already registered.** Reuse, don't rebuild:
+
+- **Existing EDGE users:** EDGE "Cloud sync" setup sends its `licenseKey`; the cloud verifies it with the
+  billing platform, creates/links the cloud organisation to the same `clientId`, and returns the sync
+  key. No second sign-up.
+- **New cloud-first users:** the existing `/api/edgefolio/signup`, then the same link step.
+- Billing-platform change (Phase 4, small): add a cloud plan to `EdgeLicense` (e.g. `cloud: { plan:
+  'early_access', orgId, maxActiveEmployees: 50, linkedAt }`) + a server-to-server verify endpoint for the
+  cloud. Follow the platform rules: own files per EdgeFolio feature, backup before pscp, `pm2 reload`.
+- The cloud stores `billing_org_id` = the `Client` id (plus the `licenseKey` it was linked with).
+- Also noted: `community/SAMA/EDGEFOLIO_REUSE.md` (Jul 2026) plans a SAMA→EdgeFolio bridge — keep the
+  sync API generic enough for a second consumer.
 - Recorded: owner phone, business details, sign-up date, daily usage report (active employees,
   punches, features used).
 - 50-employee cap held on the billing record (raise per org without a release).
@@ -194,3 +211,9 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   Code pulled and deps installed on the VPS. **Waiting on owner:** (a) create Mongo user
   `edgefolio_cloud` (readWrite on `edgefolio_cloud`) and put its password in `VPS/cloud/.env`;
   (b) run `deploy/first-time-setup.sh` on the VPS (nginx + PM2 changes need owner approval).
+- 2026-11-02 — Setup script run on the VPS with owner approval: `.env` created (JWT generated),
+  nginx `location /cloud/` added (backup `/root/nginx-edgefolio.bak.20261102-054417`), PM2
+  `edgefolio-cloud` online (81 MB). `https://edgefolio.iotsoft.in/cloud/health` answers; db
+  **disconnected** until the Mongo user exists. Marketing site + downloads verified still 200.
+  Found existing EdgeFolio registration in the billing platform → §8 rewritten to reuse it.
+  **Still waiting on owner:** Mongo user `edgefolio_cloud` + password in `.env`.
