@@ -7,12 +7,14 @@
 const push = require('./push');
 
 const CHANNEL_BY_TYPE = {
-  ATTENDANCE_ALERT: 'ef_alerts',
-  FACE_RECAPTURE_REQUEST: 'ef_requests',
-  FACE_RECAPTURE_DECISION: 'ef_requests',
-  ANNOUNCEMENT: 'ef_general',
+  ATTENDANCE_ALERT: 'ef_alerts_v2',
+  FACE_RECAPTURE_REQUEST: 'ef_requests_v2',
+  FACE_RECAPTURE_DECISION: 'ef_requests_v2',
 };
-const channelFor = (type) => CHANNEL_BY_TYPE[type] || 'ef_general';
+// Announcements get their own sound per kind: SOS = gong, holiday = happy chime, others = strong buzz.
+const ANNOUNCE_CHANNEL = { sos: 'ef_sos_v2', holiday: 'ef_holiday_v2' };
+const channelFor = (type, data = {}) =>
+  type === 'ANNOUNCEMENT' ? (ANNOUNCE_CHANNEL[data.announcementType] || 'ef_announce') : (CHANNEL_BY_TYPE[type] || 'ef_general');
 const KEEP_DAYS = 90;
 
 async function notifyEmployees(db, empIds, { type, title, body = null, data = {} }) {
@@ -22,7 +24,7 @@ async function notifyEmployees(db, empIds, { type, title, body = null, data = {}
     await db.AppNotification.create(ids.map((empId) => ({ empId, type, title, body, data: { ...data, type } })));
     await db.AppNotification.deleteMany({ empId: { $in: ids }, createdAt: { $lt: new Date(Date.now() - KEEP_DAYS * 86400000) } });
     const rows = await db.Employee.find({ empId: { $in: ids }, status: 'active', fcmToken: { $ne: null } }, { fcmToken: 1 }).lean();
-    await push.sendToTokens(rows.map((r) => r.fcmToken), title, body || '', { ...data, type }, { channel: channelFor(type) });
+    await push.sendToTokens(rows.map((r) => r.fcmToken), title, body || '', { ...data, type }, { channel: channelFor(type, data) });
   } catch (e) {
     console.warn('[notify] failed:', e.message);
   }

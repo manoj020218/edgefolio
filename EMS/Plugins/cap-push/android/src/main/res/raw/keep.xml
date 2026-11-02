@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification sounds are referenced by NAME (android.resource://pkg/raw/ef_x) from
+     NotificationChannels.kt, which R8's resource shrinker can't see — keep them explicitly. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@raw/ef_*" />

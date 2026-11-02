@@ -174,7 +174,7 @@ test('notifications inbox: stored per recipient, unread count, mark read, own ro
   assert.strictEqual(forOwner.body.meta.unread, 1);
   assert.strictEqual((await client.get('/api/v1/apk/notifications', { token: hr })).body.data.length, 1);
   assert.strictEqual((await client.get('/api/v1/apk/notifications', { token: emp })).body.data.length, 0);
-  assert.strictEqual(sent.at(-1).channel, 'ef_requests');
+  assert.strictEqual(sent.at(-1).channel, 'ef_requests_v2');
 
   // Someone else can't mark my row; I can.
   const id = forOwner.body.data[0].id;
@@ -200,7 +200,7 @@ test('broadcast: announcement stored, everyone notified, Home can read it', asyn
   assert.strictEqual(b.status, 200);
   assert.strictEqual(b.body.data.sentTo, 4);                       // every active employee
   await new Promise((r) => setTimeout(r, 300));
-  assert.strictEqual(sent.at(-1).channel, 'ef_general');
+  assert.strictEqual(sent.at(-1).channel, 'ef_holiday_v2');
   assert.strictEqual(sent.at(-1).title, 'Holiday Notice');
 
   const inbox = await client.get('/api/v1/apk/notifications', { token: emp });

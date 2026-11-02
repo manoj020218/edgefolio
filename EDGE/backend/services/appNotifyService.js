@@ -3,11 +3,14 @@ const logger = require('../utils/logger');
 const fcm = require('./fcmService');
 
 const CHANNELS = {
-  ATTENDANCE_ALERT: 'ef_alerts',
-  FACE_RECAPTURE_REQUEST: 'ef_requests',
-  FACE_RECAPTURE_DECISION: 'ef_requests',
+  ATTENDANCE_ALERT: 'ef_alerts_v2',
+  FACE_RECAPTURE_REQUEST: 'ef_requests_v2',
+  FACE_RECAPTURE_DECISION: 'ef_requests_v2',
 };
-const channelFor = (type) => CHANNELS[type] || 'ef_general';
+// Announcements get their own sound per kind: SOS = gong, holiday = happy chime, others = strong buzz.
+const ANNOUNCE_CHANNEL = { sos: 'ef_sos_v2', holiday: 'ef_holiday_v2' };
+const channelFor = (type, data = {}) =>
+  type === 'ANNOUNCEMENT' ? (ANNOUNCE_CHANNEL[data && data.announcementType] || 'ef_announce') : (CHANNELS[type] || 'ef_general');
 
 /**
  * Store one inbox row per recipient, then push to their FCM tokens.
@@ -17,7 +20,7 @@ async function notifyEmployees(db, empIds, { type, title, body, data, channel } 
   try {
     const ids = [...new Set((empIds || []).filter(Boolean).map(String))];
     if (!ids.length) return;
-    const ch = channel || channelFor(type);
+    const ch = channel || channelFor(type, data);
     const dataObj = data && typeof data === 'object' ? data : {};
     const dataJson = JSON.stringify(dataObj);
 
