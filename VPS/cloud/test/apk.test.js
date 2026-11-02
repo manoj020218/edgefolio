@@ -112,7 +112,7 @@ test('batch-sync: offline re-sends are skipped, other people\'s records refused'
 });
 
 test('faces: enroll status, enroll, own embedding only', async () => {
-  assert.deepStrictEqual((await client.get('/api/v1/apk/faces/self-enroll', { token })).body.data, { enrolled: false, enrolledAt: null });
+  assert.deepStrictEqual((await client.get('/api/v1/apk/faces/self-enroll', { token })).body.data, { enrolled: false, enrolledAt: null, recapture: null, canEnroll: true });
   assert.strictEqual((await client.post('/api/v1/apk/faces/self-enroll', { token, body: { embedding: [1, 2] } })).status, 400);
   const e = await client.post('/api/v1/apk/faces/self-enroll', { token, body: { embedding: embedding(3) } });
   assert.strictEqual(e.body.data.saved, true);

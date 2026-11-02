@@ -108,3 +108,49 @@ test('alert subscriptions: watch, push on check-in/out, unwatch', async () => {
   assert.strictEqual((await client.del(`/api/v1/apk/alert-subscriptions/${made.body.data.id}`, { token: owner })).status, 200);
   push.setTransport(null);
 });
+
+test('face re-capture needs an approved request (24 h, one use)', async () => {
+  const { embedding } = require('./helpers');
+  const enroll = (seed) => client.post('/api/v1/apk/faces/self-enroll', { token: emp, body: { embedding: embedding(seed) } });
+  const status = async () => (await client.get('/api/v1/apk/faces/self-enroll', { token: emp })).body.data;
+
+  // Not enrolled yet: can't request, first enrollment is free.
+  assert.strictEqual((await client.post('/api/v1/apk/faces/recapture-request', { token: emp, body: {} })).body.error, 'NOT_ENROLLED');
+  assert.strictEqual((await status()).canEnroll, true);
+  assert.strictEqual((await enroll(1)).status, 200);
+
+  // Enrolled: re-capture blocked.
+  const blocked = await enroll(2);
+  assert.strictEqual(blocked.status, 403);
+  assert.strictEqual(blocked.body.error, 'RECAPTURE_NOT_APPROVED');
+  assert.deepStrictEqual([(await status()).canEnroll, (await status()).recapture], [false, null]);
+
+  // Request → duplicate refused → admin sees it.
+  const req1 = await client.post('/api/v1/apk/faces/recapture-request', { token: emp, body: { reason: 'New glasses' } });
+  assert.strictEqual(req1.body.data.status, 'pending');
+  assert.strictEqual((await client.post('/api/v1/apk/faces/recapture-request', { token: emp, body: {} })).status, 409);
+  assert.strictEqual((await client.get('/api/v1/apk/faces/recapture-requests', { token: emp })).status, 403);
+  const pending = (await client.get('/api/v1/apk/faces/recapture-requests', { token: hr })).body.data;
+  assert.deepStrictEqual(pending.map((p) => [p.id, p.empCode, p.reason]), [[req1.body.data.id, 'E1', 'New glasses']]);
+  assert.strictEqual((await status()).recapture.status, 'pending');
+  assert.strictEqual((await enroll(2)).status, 403);
+
+  // Reject → still blocked; new request → approve → one re-capture allowed.
+  assert.strictEqual((await client.post(`/api/v1/apk/faces/recapture-requests/${req1.body.data.id}/reject`, { token: owner })).body.data.status, 'rejected');
+  assert.strictEqual((await client.post(`/api/v1/apk/faces/recapture-requests/${req1.body.data.id}/approve`, { token: owner })).status, 404);
+  const req2 = await client.post('/api/v1/apk/faces/recapture-request', { token: emp, body: {} });
+  const ok = await client.post(`/api/v1/apk/faces/recapture-requests/${req2.body.data.id}/approve`, { token: hr });
+  assert.strictEqual(ok.body.data.status, 'approved');
+  assert.strictEqual((await status()).canEnroll, true);
+  assert.strictEqual((await enroll(3)).status, 200);
+  assert.strictEqual((await status()).recapture.status, 'used');
+  assert.strictEqual((await enroll(4)).status, 403);            // used up
+
+  // Expired approval: reported as 'expired' and blocks.
+  const req3 = await client.post('/api/v1/apk/faces/recapture-request', { token: emp, body: {} });
+  await client.post(`/api/v1/apk/faces/recapture-requests/${req3.body.data.id}/approve`, { token: hr });
+  await forOrg(org._id).FaceRecaptureRequest.updateOne({ status: 'approved' }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+  const st = await status();
+  assert.deepStrictEqual([st.recapture.status, st.canEnroll], ['expired', false]);
+  assert.strictEqual((await enroll(5)).status, 403);
+});

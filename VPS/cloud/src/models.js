@@ -163,7 +163,21 @@ alertSubSchema.index({ orgId: 1, watcherEmpId: 1, watchedEmpId: 1 }, { unique: t
 alertSubSchema.index({ orgId: 1, watchedEmpId: 1 });
 const AlertSubscription = mongoose.model('AlertSubscription', alertSubSchema);
 
-const holidaySchema =new Schema({ orgId: org, date: { type: String, required: true }, name: String });
+// Face ID re-capture needs HR/owner approval (fraud guard). First enrollment is free.
+const recaptureSchema = new Schema({
+  orgId: org,
+  empId: { type: String, required: true },
+  reason: { type: String, default: null },
+  status: { type: String, enum: ['pending', 'approved', 'rejected', 'used'], default: 'pending' },
+  requestedAt: { type: Date, default: Date.now },
+  decidedAt: { type: Date, default: null },
+  decidedBy: { type: String, default: null },
+  expiresAt: { type: Date, default: null },          // approvals are valid 24 h, one use
+});
+recaptureSchema.index({ orgId: 1, empId: 1, status: 1 });
+const FaceRecaptureRequest = mongoose.model('FaceRecaptureRequest', recaptureSchema);
+
+const holidaySchema = new Schema({ orgId: org, date: { type: String, required: true }, name: String });
 holidaySchema.index({ orgId: 1, date: 1 }, { unique: true });
 const Holiday = mongoose.model('Holiday', holidaySchema);
 
@@ -181,6 +195,6 @@ const AuditLog = mongoose.model('AuditLog', new Schema({
 
 module.exports = {
   Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, AuditLog, Counter,
-  AlertSubscription,
+  AlertSubscription, FaceRecaptureRequest,
   PROFILE_FIELDS,
 };

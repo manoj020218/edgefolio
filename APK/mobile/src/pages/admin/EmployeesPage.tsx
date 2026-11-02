@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, ScanFace } from 'lucide-react';
 import { apiGet, apiPatch, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -60,12 +60,20 @@ export default function EmployeesPage() {
     <div className="animate-enter px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-100">Employees</h1>
-        <Link
-          to="/admin/password-resets"
-          className="flex items-center gap-1.5 rounded-md bg-surface-light px-3 py-1.5 text-sm text-slate-200"
-        >
-          <KeyRound size={16} /> Resets
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            to="/admin/face-requests"
+            className="flex items-center gap-1.5 rounded-md bg-surface-light px-3 py-1.5 text-sm text-slate-200"
+          >
+            <ScanFace size={16} /> Face ID
+          </Link>
+          <Link
+            to="/admin/password-resets"
+            className="flex items-center gap-1.5 rounded-md bg-surface-light px-3 py-1.5 text-sm text-slate-200"
+          >
+            <KeyRound size={16} /> Resets
+          </Link>
+        </div>
       </div>
 
       {issued && (

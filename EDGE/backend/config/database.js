@@ -347,6 +347,23 @@ function runMigrations(db) {
       FOREIGN KEY(watched_emp_id) REFERENCES employees(id) ON DELETE CASCADE
     )
   `);
+  // Admin-approved Face ID re-capture requests (first enrollment is free)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS face_recapture_requests (
+      id TEXT PRIMARY KEY,
+      emp_id TEXT NOT NULL,
+      reason TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      decided_at TEXT,
+      decided_by TEXT,
+      expires_at TEXT
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_face_recapture_emp_status
+    ON face_recapture_requests(emp_id, status)
+  `);
   // APK runtime config: min version, geofence radius, etc.
   db.exec(`
     CREATE TABLE IF NOT EXISTS apk_config (

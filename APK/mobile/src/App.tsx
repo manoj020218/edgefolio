@@ -17,6 +17,7 @@ import AlertsPage from './pages/admin/AlertsPage';
 import AnalyticsPage from './pages/admin/AnalyticsPage';
 import BroadcastPage from './pages/admin/BroadcastPage';
 import PasswordResetsPage from './pages/admin/PasswordResetsPage';
+import FaceRequestsPage from './pages/admin/FaceRequestsPage';
 import PayrollPage from './pages/admin/PayrollPage';
 import EmployeeShell from './pages/employee/EmployeeShell';
 import HomePage from './pages/employee/HomePage';
@@ -170,6 +171,7 @@ export default function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="broadcast" element={<BroadcastPage />} />
         <Route path="password-resets" element={<PasswordResetsPage />} />
+        <Route path="face-requests" element={<FaceRequestsPage />} />
         <Route path="payroll" element={<PayrollPage />} />
         <Route path="company" element={<CompanyPage />} />
         <Route path="employees/new" element={<AddEmployeePage />} />

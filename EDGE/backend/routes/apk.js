@@ -24,6 +24,10 @@ const {
   getEmbeddingHandler,
   selfEnrollFaceHandler,
   getMyFaceEnrollStatusHandler,
+  createRecaptureRequestHandler,
+  listRecaptureRequestsHandler,
+  approveRecaptureHandler,
+  rejectRecaptureHandler,
   broadcastHandler,
   getEmployeesHandler,
   patchEmployeeHandler,
@@ -85,6 +89,10 @@ router.delete('/alert-subscriptions/:id', requireRole('hr-admin', 'owner'), dele
 router.get('/faces/:empId/embedding', getEmbeddingHandler);
 router.post('/faces/self-enroll',     selfEnrollFaceHandler);
 router.get('/faces/self-enroll',      getMyFaceEnrollStatusHandler);
+router.post('/faces/recapture-request', createRecaptureRequestHandler);
+router.get('/faces/recapture-requests', requireRole('hr-admin', 'owner'), listRecaptureRequestsHandler);
+router.post('/faces/recapture-requests/:id/approve', requireRole('hr-admin', 'owner'), approveRecaptureHandler);
+router.post('/faces/recapture-requests/:id/reject',  requireRole('hr-admin', 'owner'), rejectRecaptureHandler);
 
 // Broadcast announcement + FCM to all employees (hr-admin / owner)
 router.post('/broadcast', requireRole('hr-admin', 'owner'), broadcastHandler);

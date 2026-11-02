@@ -685,7 +685,21 @@ function selfEnrollFaceHandler(req, res, next) {
     }
 
     const db = getDb();
-    const existing = db.prepare('SELECT emp_id FROM face_enrollments WHERE emp_id = ?').get(empId);
+    const existing = db.prepare('SELECT emp_id, embedding_json FROM face_enrollments WHERE emp_id = ?').get(empId);
+
+    // A RE-capture (an embedding already exists) needs an unexpired HR/owner approval.
+    let usedRequestId = null;
+    if (existing && existing.embedding_json) {
+      const approved = findActiveApproval(db, empId);
+      if (!approved) {
+        return res.status(403).json({
+          ok: false,
+          error: 'RECAPTURE_NOT_APPROVED',
+          message: 'Re-capturing Face ID needs approval from HR. Send a request from the Face ID screen.',
+        });
+      }
+      usedRequestId = approved.id;
+    }
 
     if (existing) {
       db.prepare(
@@ -695,6 +709,10 @@ function selfEnrollFaceHandler(req, res, next) {
       db.prepare(
         `INSERT INTO face_enrollments (emp_id, embedding_json, embedding_enrolled_at) VALUES (?, ?, CURRENT_TIMESTAMP)`,
       ).run(empId, JSON.stringify(embedding));
+    }
+
+    if (usedRequestId) {
+      db.prepare("UPDATE face_recapture_requests SET status = 'used' WHERE id = ?").run(usedRequestId);
     }
 
     const row = db.prepare('SELECT embedding_enrolled_at FROM face_enrollments WHERE emp_id = ?').get(empId);
@@ -715,14 +733,170 @@ function getMyFaceEnrollStatusHandler(req, res, next) {
 
     const db = getDb();
     const row = db.prepare('SELECT embedding_enrolled_at FROM face_enrollments WHERE emp_id = ?').get(empId);
+    const enrolled = Boolean(row?.embedding_enrolled_at);
+    const latest = db
+      .prepare(
+        `SELECT id, status, reason, requested_at, decided_at, expires_at
+         FROM face_recapture_requests WHERE emp_id = ?
+         ORDER BY requested_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(empId);
+    let recapture = null;
+    if (latest) {
+      let status = latest.status;
+      if (status === 'approved' && isExpired(latest.expires_at)) status = 'expired';
+      recapture = {
+        id: latest.id,
+        status,
+        reason: latest.reason || null,
+        requestedAt: latest.requested_at,
+        decidedAt: latest.decided_at || null,
+        expiresAt: latest.expires_at || null,
+      };
+    }
     return sendOk(res, {
-      enrolled: Boolean(row?.embedding_enrolled_at),
+      enrolled,
       enrolledAt: row?.embedding_enrolled_at || null,
+      recapture,
+      canEnroll: !enrolled || Boolean(findActiveApproval(db, empId)),
     });
   } catch (err) {
     return next(err);
   }
 }
+
+// ─── Face ID re-capture approval ─────────────────────────────────────────────
+
+function isExpired(expiresAt) {
+  return !expiresAt || new Date(expiresAt).getTime() <= Date.now();
+}
+
+// The employee's approved, still-unexpired re-capture request (if any).
+function findActiveApproval(db, empId) {
+  const rows = db
+    .prepare("SELECT id, expires_at FROM face_recapture_requests WHERE emp_id = ? AND status = 'approved' ORDER BY requested_at DESC")
+    .all(empId);
+  return rows.find((r) => !isExpired(r.expires_at)) || null;
+}
+
+// POST /apk/faces/recapture-request
+function createRecaptureRequestHandler(req, res, next) {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
+    const db = getDb();
+
+    const enr = db.prepare('SELECT embedding_json FROM face_enrollments WHERE emp_id = ?').get(empId);
+    if (!enr || !enr.embedding_json) {
+      return res.status(400).json({
+        ok: false,
+        error: 'NOT_ENROLLED',
+        message: 'Face ID is not set up yet — set it up directly.',
+      });
+    }
+
+    const pending = db
+      .prepare("SELECT id FROM face_recapture_requests WHERE emp_id = ? AND status = 'pending'")
+      .get(empId);
+    if (pending || findActiveApproval(db, empId)) {
+      return res.status(409).json({ ok: false, error: 'REQUEST_OPEN', message: 'A request is already open.' });
+    }
+
+    const reason = String((req.body || {}).reason || '').trim().slice(0, 300) || null;
+    const id = randomUUID();
+    const requestedAt = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO face_recapture_requests (id, emp_id, reason, status, requested_at) VALUES (?, ?, ?, 'pending', ?)`,
+    ).run(id, empId, reason, requestedAt);
+
+    // Fire-and-forget push to HR / owners.
+    try {
+      const emp = db.prepare('SELECT name, emp_code FROM employees WHERE id = ?').get(empId);
+      const tokens = db
+        .prepare(
+          `SELECT fcm_token FROM employees
+           WHERE status = 'active' AND app_role IN ('hr-admin', 'owner') AND fcm_token IS NOT NULL AND fcm_token != ''`,
+        )
+        .all().map((r) => r.fcm_token);
+      if (tokens.length) {
+        Promise.resolve(
+          fcm.sendToTokens(
+            tokens,
+            'Face ID re-capture request',
+            `${emp?.name || 'An employee'} (${emp?.emp_code || ''}) wants to re-capture Face ID`,
+            { type: 'FACE_RECAPTURE_REQUEST', requestId: id },
+          ),
+        ).catch(() => {});
+      }
+    } catch { /* never fail the request */ }
+
+    return sendOk(res, { id, status: 'pending', requestedAt });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /apk/faces/recapture-requests (hr-admin / owner)
+function listRecaptureRequestsHandler(_req, res, next) {
+  try {
+    const db = getDb();
+    const rows = db
+      .prepare(
+        `SELECT r.id, r.emp_id AS empId, e.emp_code AS empCode, e.name, e.department AS dept,
+                r.reason, r.requested_at AS requestedAt
+         FROM face_recapture_requests r
+         LEFT JOIN employees e ON e.id = r.emp_id
+         WHERE r.status = 'pending'
+         ORDER BY r.requested_at ASC, r.rowid ASC`,
+      )
+      .all();
+    return sendOk(res, rows);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+function decideRecapture(approve) {
+  return (req, res, next) => {
+    try {
+      const db = getDb();
+      const reqRow = db
+        .prepare("SELECT id, emp_id FROM face_recapture_requests WHERE id = ? AND status = 'pending'")
+        .get(req.params.id);
+      if (!reqRow) throw createHttpError(404, 'Request not found');
+
+      const decidedAt = new Date().toISOString();
+      const decidedBy = req.user?.empCode || req.user?.empId || null;
+      const status = approve ? 'approved' : 'rejected';
+      const expiresAt = approve ? new Date(Date.now() + 24 * 3600 * 1000).toISOString() : null;
+      db.prepare(
+        `UPDATE face_recapture_requests SET status = ?, decided_at = ?, decided_by = ?, expires_at = ? WHERE id = ?`,
+      ).run(status, decidedAt, decidedBy, expiresAt, reqRow.id);
+
+      try {
+        const emp = db.prepare('SELECT fcm_token FROM employees WHERE id = ?').get(reqRow.emp_id);
+        if (emp?.fcm_token) {
+          Promise.resolve(
+            fcm.sendToTokens(
+              [emp.fcm_token],
+              approve ? 'Face ID re-capture approved' : 'Face ID re-capture declined',
+              approve
+                ? 'Open Profile → Face ID within 24 hours to re-capture.'
+                : 'Contact HR if you still need to change it.',
+              { type: 'FACE_RECAPTURE_DECISION', status },
+            ),
+          ).catch(() => {});
+        }
+      } catch { /* push is best-effort */ }
+
+      return sendOk(res, approve ? { id: reqRow.id, status, expiresAt } : { id: reqRow.id, status });
+    } catch (err) {
+      return next(err);
+    }
+  };
+}
+const approveRecaptureHandler = decideRecapture(true);
+const rejectRecaptureHandler = decideRecapture(false);
 
 // ─── Broadcast ───────────────────────────────────────────────────────────────
 
@@ -1082,6 +1256,10 @@ function getMyAttendanceCalendarHandler(req, res, next) {
 }
 
 module.exports = {
+  createRecaptureRequestHandler,
+  listRecaptureRequestsHandler,
+  approveRecaptureHandler,
+  rejectRecaptureHandler,
   getConfigHandler,
   getAnalyticsHandler,
   getPayrollSummaryHandler,

@@ -301,9 +301,33 @@ function apkRouter(config) {
   }));
 
   // ── Faces (192-number embeddings only, never photos) ──────────────────────
+  // Re-capture guard: first enrollment is free; changing an existing Face ID needs an HR/owner
+  // approval (valid 24 h, one use) so nobody can swap in someone else's face and punch for them.
+  const RECAPTURE_TTL_MS = 24 * 60 * 60 * 1000;
+  const activeApproval = (db, empId) =>
+    db.FaceRecaptureRequest.findOne({ empId, status: 'approved', expiresAt: { $gt: new Date() } }).sort({ decidedAt: -1 });
+  const serializeRecapture = (r) => r && {
+    id: String(r._id),
+    status: r.status === 'approved' && r.expiresAt && r.expiresAt <= new Date() ? 'expired' : r.status,
+    reason: r.reason || null, requestedAt: r.requestedAt, decidedAt: r.decidedAt || null, expiresAt: r.expiresAt || null,
+  };
+  async function pushToEmployees(db, filter, title, body, data) {
+    const rows = await db.Employee.find({ ...filter, status: 'active', fcmToken: { $ne: null } }, { fcmToken: 1 }).lean();
+    await push.sendToTokens(rows.map((r) => r.fcmToken), title, body, data);
+  }
+
   r.get('/faces/self-enroll', ah(async (req, res) => {
-    const row = await forOrg(req.user.orgId).FaceProfile.findOne({ empId: req.user.empId }).lean();
-    sendOk(res, { enrolled: Boolean(row), enrolledAt: row ? row.enrolledAt : null });
+    const db = forOrg(req.user.orgId);
+    const [row, latest, approval] = await Promise.all([
+      db.FaceProfile.findOne({ empId: req.user.empId }).lean(),
+      db.FaceRecaptureRequest.findOne({ empId: req.user.empId }).sort({ requestedAt: -1 }).lean(),
+      activeApproval(db, req.user.empId).lean(),
+    ]);
+    sendOk(res, {
+      enrolled: Boolean(row), enrolledAt: row ? row.enrolledAt : null,
+      recapture: serializeRecapture(latest) || null,
+      canEnroll: !row || Boolean(approval),
+    });
   }));
 
   r.post('/faces/self-enroll', ah(async (req, res) => {
@@ -312,11 +336,70 @@ function apkRouter(config) {
       throw httpError(400, 'embedding must be a 192-element float array');
     }
     const db = forOrg(req.user.orgId);
+    const existing = await db.FaceProfile.exists({ empId: req.user.empId });
+    let approval = null;
+    if (existing) {
+      approval = await activeApproval(db, req.user.empId).lean();
+      if (!approval) {
+        return sendCode(res, 403, 'RECAPTURE_NOT_APPROVED', 'Re-capturing Face ID needs approval from HR. Send a request from the Face ID screen.');
+      }
+    }
     const enrolledAt = new Date();
     await db.FaceProfile.updateOne({ empId: req.user.empId }, { $set: { embedding, enrolledAt } }, { upsert: true });
-    await db.AuditLog.create({ actor: req.user.empId, action: 'face-enrolled' });
+    if (approval) await db.FaceRecaptureRequest.updateOne({ _id: approval._id }, { $set: { status: 'used' } });
+    await db.AuditLog.create({ actor: req.user.empId, action: existing ? 'face-recaptured' : 'face-enrolled', detail: approval ? { requestId: String(approval._id) } : null });
     sendOk(res, { empId: req.user.empId, saved: true, embeddingEnrolledAt: enrolledAt });
   }));
+
+  r.post('/faces/recapture-request', ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    if (!(await db.FaceProfile.exists({ empId: req.user.empId }))) {
+      return sendCode(res, 400, 'NOT_ENROLLED', 'Face ID is not set up yet — set it up directly.');
+    }
+    const open = await db.FaceRecaptureRequest.exists({
+      empId: req.user.empId,
+      $or: [{ status: 'pending' }, { status: 'approved', expiresAt: { $gt: new Date() } }],
+    });
+    if (open) return sendCode(res, 409, 'REQUEST_OPEN', 'A request is already open.');
+    const reason = req.body?.reason ? String(req.body.reason).trim().slice(0, 300) || null : null;
+    const r0 = await db.FaceRecaptureRequest.create({ empId: req.user.empId, reason });
+    const me = await db.Employee.findOne({ empId: req.user.empId }, { name: 1, empCode: 1 }).lean();
+    pushToEmployees(db, { appRole: { $in: ['hr-admin', 'owner'] } }, 'Face ID re-capture request',
+      `${me?.name || 'An employee'} (${me?.empCode || req.user.empId}) wants to re-capture Face ID`,
+      { type: 'FACE_RECAPTURE_REQUEST', requestId: String(r0._id) }).catch(() => {});
+    sendOk(res, { id: String(r0._id), status: 'pending', requestedAt: r0.requestedAt });
+  }));
+
+  r.get('/faces/recapture-requests', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    const rows = await db.FaceRecaptureRequest.find({ status: 'pending' }).sort({ requestedAt: 1 }).lean();
+    const emps = await db.Employee.find({ empId: { $in: rows.map((x) => x.empId) } }, { empId: 1, empCode: 1, name: 1, department: 1 }).lean();
+    const byId = new Map(emps.map((e) => [e.empId, e]));
+    sendOk(res, rows.filter((x) => byId.has(x.empId)).map((x) => {
+      const e = byId.get(x.empId);
+      return { id: String(x._id), empId: e.empId, empCode: e.empCode, name: e.name, dept: e.department || null, reason: x.reason || null, requestedAt: x.requestedAt };
+    }));
+  }));
+
+  for (const action of ['approve', 'reject']) {
+    r.post(`/faces/recapture-requests/:id/${action}`, requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+      const id = String(req.params.id);
+      if (!/^[a-f0-9]{24}$/i.test(id)) throw httpError(404, 'Request not found');
+      const db = forOrg(req.user.orgId);
+      const now = new Date();
+      const $set = action === 'approve'
+        ? { status: 'approved', decidedAt: now, decidedBy: req.user.empCode || req.user.empId, expiresAt: new Date(now.getTime() + RECAPTURE_TTL_MS) }
+        : { status: 'rejected', decidedAt: now, decidedBy: req.user.empCode || req.user.empId };
+      const doc = await db.FaceRecaptureRequest.findOneAndUpdate({ _id: id, status: 'pending' }, { $set }, { new: true }).lean();
+      if (!doc) throw httpError(404, 'Request not found');
+      await db.AuditLog.create({ actor: req.user.empId, action: `face-recapture-${action}d`, detail: { requestId: id, empId: doc.empId } });
+      pushToEmployees(db, { empId: doc.empId },
+        action === 'approve' ? 'Face ID re-capture approved' : 'Face ID re-capture declined',
+        action === 'approve' ? 'Open Profile → Face ID within 24 hours to re-capture.' : 'Contact HR if you still need to change it.',
+        { type: 'FACE_RECAPTURE_DECISION', status: doc.status }).catch(() => {});
+      sendOk(res, { id, status: doc.status, ...(doc.expiresAt ? { expiresAt: doc.expiresAt } : {}) });
+    }));
+  }
 
   r.get('/faces/:empId/embedding', ah(async (req, res) => {
     const { empId } = req.params;
