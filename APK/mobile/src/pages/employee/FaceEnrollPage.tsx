@@ -77,11 +77,11 @@ export default function FaceEnrollPage() {
   async function handleCapture() {
     setStep({ kind: 'capturing' });
     try {
-      const captured = await FaceLiveness.capture({ timeoutMs: 30000 }).catch((err) => {
+      const captured = await FaceLiveness.capture({ timeoutMs: 45000 }).catch((err) => {
         const code = (err as { code?: string })?.code;
         const messages: Record<string, string> = {
           PERMISSION_DENIED: 'Camera permission is required to set up Face ID.',
-          LIVENESS_TIMEOUT: 'Liveness check timed out. Please try again.',
+          LIVENESS_TIMEOUT: 'We could not see a blink. Face the light, blink slowly, and try again.',
           EMBEDDING_FAILED: 'Face analysis failed. Please try again.',
           MODEL_MISSING: 'Face recognition isn’t set up on this build yet.',
           CANCELLED: 'Cancelled.',

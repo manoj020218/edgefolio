@@ -97,6 +97,9 @@ class FaceCaptureActivity : AppCompatActivity() {
     private var bestScore = -1f
     private var lastGuidance: String? = null
     private val enrollRounds = mutableListOf<FloatArray>()
+    private var livenessStartedAt = 0L
+    private var lastBlinkCount = 0
+    private var lastBlinkAt = 0L
     private val retryTips = listOf(
         "Come a little closer to the camera",
         "Blink once and hold still",
@@ -130,7 +133,8 @@ class FaceCaptureActivity : AppCompatActivity() {
             return
         }
 
-        livenessDetector = LivenessDetector(timeoutMs)
+        livenessDetector = LivenessDetector(Long.MAX_VALUE / 4)
+        livenessStartedAt = System.currentTimeMillis()
         setContentView(buildLayout())
 
         cameraManager = CameraXManager(applicationContext, ::onFrame)
@@ -210,11 +214,13 @@ class FaceCaptureActivity : AppCompatActivity() {
         bottomBar.addView(scoreBar)
 
         hintView = TextView(this).apply {
-            text = "Position your face in the oval, then blink twice"
+            text = "Look at the oval and blink your eyes, please 👀"
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#99000000"))
-            setPadding(32, 24, 32, 24)
-            textSize = 16f
+            setPadding(32, 28, 32, 36)
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -271,8 +277,21 @@ class FaceCaptureActivity : AppCompatActivity() {
         }
 
         when (livenessDetector.process(face)) {
-            LivenessState.CHECKING -> mainHandler.post {
-                hintView.text = "Blink twice (${livenessDetector.blinkCount}/2) or turn your head slightly"
+            LivenessState.CHECKING -> {
+                val now = System.currentTimeMillis()
+                val blinks = livenessDetector.blinkCount
+                if (blinks != lastBlinkCount) { lastBlinkCount = blinks; lastBlinkAt = now }
+                val sinceBlink = now - maxOf(lastBlinkAt, livenessStartedAt)
+                val hint = when {
+                    blinks >= 1 -> "Great! One more blink 😊"
+                    sinceBlink > 12_000L -> "Face the light so we can see your eyes, then blink"
+                    sinceBlink > 6_000L -> "Close your eyes fully, then open them"
+                    else -> "Look at the oval and blink your eyes, please 👀"
+                }
+                mainHandler.post {
+                    guideView.blinks = blinks
+                    hintView.text = hint
+                }
             }
             LivenessState.PASSED -> {
                 // blinkCount/head-turn stay "passed" on every subsequent frame once
@@ -281,6 +300,7 @@ class FaceCaptureActivity : AppCompatActivity() {
                 // stacking up concurrent captures.
                 if (capturing) return
                 livenessPassed = true
+                mainHandler.post { guideView.blinks = 2 }
                 // Enrollment: the first round also waits for good framing (the retry branch above).
                 if (referenceEmbedding == null) {
                     nextAttemptAt = System.currentTimeMillis()
@@ -444,6 +464,23 @@ private class FaceGuideOverlayView(context: Context) : View(context) {
         isAntiAlias = true
     }
 
+    /** Blinks seen so far (0..2), drawn as two dots under the oval during the liveness step. */
+    var blinks: Int = 0
+        set(value) { if (field != value) { field = value; invalidate() } }
+    private val dotPaint = Paint().apply { isAntiAlias = true }
+    private val dotRingPaint = Paint().apply {
+        isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = 4f; color = Color.WHITE
+    }
+    private val breathe = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = 1400L
+        repeatMode = android.animation.ValueAnimator.REVERSE
+        repeatCount = android.animation.ValueAnimator.INFINITE
+        addUpdateListener { if (progress < 0.001f) invalidate() }
+        start()
+    }
+
+    override fun onDetachedFromWindow() { breathe.cancel(); animator?.cancel(); super.onDetachedFromWindow() }
+
     /** 0..1 share of the perimeter painted; 1 = full ring = matched. */
     private var progress = 0f
     private var animator: android.animation.ValueAnimator? = null
@@ -497,7 +534,29 @@ private class FaceGuideOverlayView(context: Context) : View(context) {
         canvas.drawOval(rect, clearPaint)
         canvas.restoreToCount(layerId)
 
+        if (progress < 0.001f) {
+            // Waiting for blinks: soft breathing glow around the oval so the screen feels alive.
+            val t = breathe.animatedValue as Float
+            ovalStrokePaint.color = Color.argb((90 + 120 * t).toInt(), 255, 255, 255)
+            ovalStrokePaint.strokeWidth = 6f + 6f * t
+        } else {
+            ovalStrokePaint.color = Color.parseColor("#66FFFFFF")
+            ovalStrokePaint.strokeWidth = 8f
+        }
         canvas.drawOval(rect, ovalStrokePaint)
+        if (progress < 0.001f) {
+            val r = w * 0.022f
+            val y = rect.bottom + r * 3.2f
+            for (i in 0 until 2) {
+                val x = cx + (if (i == 0) -1 else 1) * r * 1.9f
+                if (i < blinks) {
+                    dotPaint.color = Color.parseColor("#34D399")
+                    canvas.drawCircle(x, y, r, dotPaint)
+                } else {
+                    canvas.drawCircle(x, y, r, dotRingPaint)
+                }
+            }
+        }
         if (progress > 0.001f) {
             progressPaint.color = colorFor(progress)
             // Start at the top of the oval and fill clockwise.

@@ -63,7 +63,7 @@ export default function AttendancePage({ workType, onBack }: Props) {
         throw new Error('Could not load your enrolled face data.');
       });
 
-      const captured = await FaceLiveness.capture({ timeoutMs: 25000, referenceEmbedding: reference.embedding }).catch((err) => {
+      const captured = await FaceLiveness.capture({ timeoutMs: 40000, referenceEmbedding: reference.embedding }).catch((err) => {
         const code = (err as { code?: string })?.code;
         const messages: Record<string, string> = {
           PERMISSION_DENIED: 'Camera permission is required to mark attendance.',
