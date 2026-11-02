@@ -13,8 +13,14 @@ const { apkRouter } = require('./routes/apk');
 const { authRouter } = require('./routes/authRoutes');
 const { syncRouter } = require('./routes/sync');
 const { appCors } = require('./cors');
+const { ownerRouter, reportsRouter } = require('./routes/owner');
+const { createGoogleVerifier } = require('./lib/google');
+const { createBilling } = require('./lib/billing');
 
-function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) {
+// deps: injectable outside services (tests pass fakes): google(idToken) → {email,name,sub}, billing.
+function createApp({ config, getDbState = () => 'unknown', version = '0.0.0', deps = {} }) {
+  const google = deps.google || createGoogleVerifier(config.googleClientIds);
+  const billing = deps.billing || createBilling({ baseUrl: config.billingApiUrl, apiKey: config.billingApiKey });
   const app = express();
   const metrics = createMetrics();
   const startedAt = Date.now();
@@ -52,9 +58,11 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0' }) 
     });
   });
 
+  app.use('/api/v1/apk', cors, ownerRouter(config, { google, billing }));   // before apkRouter's auth wall
   app.use('/api/v1/apk', cors, apkRouter(config));
+  app.use('/api/v1/reports', reportsRouter(config));
   app.use('/api/v1/auth', cors, authRouter(config));
-  app.use('/api/v1/sync', syncRouter());
+  app.use('/api/v1/sync', syncRouter({ billing }));
 
   // Same envelope as EDGE's API ({ ok, data } / { ok:false, error }), so the app parses both alike.
   app.use((req, res) => res.status(404).json({ ok: false, error: 'Not found' }));

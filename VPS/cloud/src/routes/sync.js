@@ -40,7 +40,7 @@ function requireSync() {
   });
 }
 
-function syncRouter() {
+function syncRouter({ billing } = {}) {
   const r = express.Router();
 
   r.post('/connect', ah(async (req, res) => {
@@ -49,6 +49,18 @@ function syncRouter() {
     const companyName = str(req.body?.companyName, 120) || 'My Company';
     if (!licenseKey || licenseKey.length < 8) throw httpError(400, 'licenseKey is required');
     if (!machineId) throw httpError(400, 'machineId is required');
+    // Phase 4: the licence must exist on the billing platform. If billing can't be reached we let
+    // the PC connect anyway (never block attendance on our own outage) and log it.
+    if (billing?.configured) {
+      try {
+        const lic = await billing.verifyLicense(licenseKey);
+        if (!lic.valid) throw codedError(403, 'LICENCE_INVALID', 'This EdgeFolio licence is not active. Check Settings → License.');
+      } catch (e) {
+        if (e.errorCode) throw e;
+        if (e.status === 404) throw codedError(403, 'LICENCE_INVALID', 'This EdgeFolio licence was not found. Check Settings → License.');
+        console.warn('[sync/connect] licence check skipped:', e.message);
+      }
+    }
     const tz = Number.isFinite(Number(req.body?.tzOffsetMin)) ? Number(req.body.tzOffsetMin) : 330;
     const syncKey = newSyncKey();
     const linkFields = { syncKeyHash: sha256(syncKey), edgeMachineId: machineId, edgeLinkedAt: new Date(), edgeVersion: str(req.body?.edgeVersion, 40) };
@@ -64,6 +76,7 @@ function syncRouter() {
       await Organisation.updateOne({ _id: org._id }, { $set: linkFields });   // same PC reconnecting: new key
     }
     await forOrg(org._id).AuditLog.create({ actor: 'edge-sync', action: created ? 'edge-connected-new-org' : 'edge-reconnected', detail: { machineId } });
+    if (billing?.configured) billing.link({ licenseKey, orgCode: org.orgCode, maxActiveEmployees: org.maxActiveEmployees }).catch(() => {});
     sendOk(res, { orgCode: org.orgCode, syncKey, created, companyName: org.name });
   }));
 

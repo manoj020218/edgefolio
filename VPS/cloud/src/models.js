@@ -67,6 +67,7 @@ const employeeSchema = new Schema({
   // changed it in EDGE) — so a password the employee changed in the app isn't overwritten.
   edgePasswordHash: { type: String, default: null },
   source: { type: String, enum: ['edge', 'cloud'], default: 'cloud' },   // who created the row
+  googleSub: { type: String, default: null },                            // owners who sign in with Google
   fcmToken: { type: String, default: null },
   profile: Object.fromEntries(PROFILE_FIELDS.map((f) => [f, { type: String, default: null }])),
 }, { timestamps: true });

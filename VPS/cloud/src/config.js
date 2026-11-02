@@ -29,6 +29,11 @@ function loadConfig(env = process.env) {
     fileStoreDir: env.FILE_STORE_DIR || '',           // only if punch photos are ever enabled
     slowRequestMs: Number(env.SLOW_REQUEST_MS || 500), // the "move to another VPS" trigger watches this
     corsOrigins: String(env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    // Google OAuth client IDs whose ID tokens we accept (the web client ID the app requests tokens for).
+    googleClientIds: String(env.GOOGLE_CLIENT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    // Shared on the owner's Company screen.
+    pcDownloadUrl: env.PC_DOWNLOAD_URL || 'https://edgefolio.iotsoft.in/download',
+    appDownloadUrl: env.APP_DOWNLOAD_URL || 'https://edgefolio.iotsoft.in/download/apk',
   };
   if (nodeEnv === 'production' && cfg.jwtSecret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');

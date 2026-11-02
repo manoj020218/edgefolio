@@ -11,12 +11,12 @@ const { Organisation } = require('../src/models');
 const { forOrg } = require('../src/tenancy');
 const { hashSecret } = require('../src/lib/password');
 
-async function startServer() {
+async function startServer(deps = {}) {
   const mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri('edgefolio_cloud_test'));
   await Promise.all(Object.values(mongoose.models).map((m) => m.syncIndexes()));
   const config = loadConfig({ PUBLIC_BASE_URL: 'https://example.test/cloud', MONGO_URL: 'unused', JWT_SECRET: 'test-secret-test-secret-test-secret' });
-  const app = createApp({ config, getDbState: () => 'connected', version: 'test' });
+  const app = createApp({ config, getDbState: () => 'connected', version: 'test', deps });
   const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const url = `http://127.0.0.1:${server.address().port}`;
   return {
