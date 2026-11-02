@@ -152,7 +152,7 @@ app.get('/delete-account', (_req, res) => {
   const fs = require('fs')
   const email = process.env.SUPPORT_EMAIL || 'support (see the Contact section on our home page)'
   const wa = process.env.SUPPORT_WHATSAPP || ''
-  const html = fs.readFileSync(path.join(__dirname, 'delete-account.html'), 'utf8')
+  const html = fs.readFileSync(path.join(__dirname, 'templates', 'delete-account.html'), 'utf8')
     .replaceAll('{{SUPPORT_EMAIL}}', email)
     .replaceAll('{{SUPPORT_WHATSAPP}}', wa)
     .replaceAll('{{SUPPORT_WHATSAPP_DIGITS}}', wa.replace(/\D/g, ''))
