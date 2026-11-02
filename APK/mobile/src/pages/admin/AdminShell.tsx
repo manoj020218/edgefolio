@@ -1,5 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, BarChart3, Bell, LogOut, Users, CalendarClock, UserCircle } from 'lucide-react';
+import { useEffect } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Activity, BarChart3, Bell, LogOut, Users, CalendarClock, UserCircle, Building2 } from 'lucide-react';
+import { isCloudModeSync } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 const tabs = [
@@ -8,6 +10,8 @@ const tabs = [
   { to: '/admin/assignments', label: 'Assign', icon: CalendarClock },
   { to: '/admin/alerts', label: 'Alerts', icon: Bell },
   { to: '/admin/analytics', label: 'Stats', icon: BarChart3 },
+  // Cloud mode only: company code, licence, invites, export (VPS/cloud GET /apk/company).
+  { to: '/admin/company', label: 'Company', icon: Building2, cloudOnly: true },
 ];
 
 interface Props {
@@ -16,6 +20,14 @@ interface Props {
 
 export default function AdminShell({ onSwitchToEmployee }: Props) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const visibleTabs = tabs.filter((t) => !('cloudOnly' in t) || isCloudModeSync());
+
+  // Right after creating a company, open the Company screen once (code + invites).
+  useEffect(() => {
+    if (localStorage.getItem('edgefolio.justCreated') === '1') navigate('/admin/company');
+  }, [navigate]);
+
 
   return (
     <div className="flex min-h-full flex-col">
@@ -56,7 +68,7 @@ export default function AdminShell({ onSwitchToEmployee }: Props) {
         className="fixed inset-x-0 bottom-0 flex border-t border-surface-light bg-surface"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {tabs.map(({ to, label, icon: Icon, end }) => (
+        {visibleTabs.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}

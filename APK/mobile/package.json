@@ -1,6 +1,6 @@
 {
   "name": "edgefolio-mobile",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "private": true,
   "type": "module",
   "description": "EdgeFolio field-employee attendance app — React+TS wrapped in Capacitor. Rebuild of APK/android (native Kotlin/Compose, kept in place as reference) per client's requested tech stack.",
@@ -15,8 +15,11 @@
   "dependencies": {
     "@capacitor/android": "^7.0.0",
     "@capacitor/app": "^7.0.0",
+    "@capacitor/browser": "7.0.5",
     "@capacitor/core": "^7.0.0",
     "@capacitor/preferences": "^7.0.0",
+    "@capacitor/share": "7.0.4",
+    "@capgo/capacitor-social-login": "7.20.0",
     "@jenix/cap-core": "file:../../EMS/Plugins/cap-core",
     "@jenix/cap-device-health": "file:../../EMS/Plugins/cap-device-health",
     "@jenix/cap-face-liveness": "file:./native-plugins/cap-face-liveness",

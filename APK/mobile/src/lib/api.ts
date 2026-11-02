@@ -49,6 +49,37 @@ export async function clearOrgCode(): Promise<void> {
   await Preferences.remove({ key: ORG_CODE_KEY });
 }
 
+// ── Cloud sign-up / Google sign-in (pre-login; VPS/cloud/src/routes/owner.js) ──────────────────
+export interface CloudSession {
+  token: string;
+  orgCode: string;
+  companyName: string;
+  licenseKey?: string;
+  created?: boolean;
+  user: {
+    empId: string; empCode: string; name: string; department: string | null; designation: string | null;
+    role: 'owner' | 'hr-admin' | 'employee'; isFieldEmployee: boolean; passwordMustChange: boolean;
+  };
+}
+
+async function cloudPost<T>(path: string, body: unknown, orgCode?: string): Promise<T> {
+  const res = await axios.post<ApiEnvelope<T>>(`${CLOUD_BASE_URL}/apk${path}`, body, {
+    headers: orgCode ? { 'X-Org-Code': orgCode } : {},
+    validateStatus: () => true,
+    timeout: 30000,
+  });
+  if (!res.data?.ok) throw toApiError(res.data ?? { ok: false, error: 'Could not reach EdgeFolio Cloud' });
+  return res.data.data as T;
+}
+
+export function cloudSignup(body: { idToken: string; companyName: string; phone?: string; ownerName?: string; licenseKey?: string }): Promise<CloudSession> {
+  return cloudPost<CloudSession>('/signup', body);
+}
+
+export function cloudGoogleLogin(idToken: string, orgCode?: string): Promise<CloudSession | { chooseCompany: { orgCode: string; companyName: string }[] }> {
+  return cloudPost('/auth/google', { idToken }, orgCode);
+}
+
 // Pre-setup check of a company code: returns the company's name, or throws ApiError.
 export async function checkCompanyCode(orgCode: string): Promise<{ companyName: string }> {
   const res = await axios.get<ApiEnvelope<{ company_name?: string }>>(`${CLOUD_BASE_URL}/apk/config`, {

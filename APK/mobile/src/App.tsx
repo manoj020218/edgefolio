@@ -3,6 +3,9 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { apiGet, getBaseUrl, getOrgCode, isCloudModeSync } from './lib/api';
 import { useAuth } from './lib/auth';
 import ServerSetupPage from './pages/ServerSetupPage';
+import CreateCompanyPage from './pages/CreateCompanyPage';
+import CompanyPage from './pages/admin/CompanyPage';
+import AddEmployeePage from './pages/admin/AddEmployeePage';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import AttendancePage from './pages/AttendancePage';
@@ -78,6 +81,7 @@ export default function App() {
   // throws "Rendered fewer hooks than expected" the moment a render takes a different
   // branch than the previous one.
   const [viewMode, setViewMode] = useState<'admin' | 'employee'>('admin');
+  const [creatingCompany, setCreatingCompany] = useState(false);
 
   useEffect(() => {
     // Load the company code too, so isCloudModeSync() is valid for every render after this.
@@ -93,7 +97,8 @@ export default function App() {
   }
 
   if (!baseUrl) {
-    return <ServerSetupPage onDone={setBaseUrlState} />;
+    if (creatingCompany) return <CreateCompanyPage onDone={setBaseUrlState} onBack={() => setCreatingCompany(false)} />;
+    return <ServerSetupPage onDone={setBaseUrlState} onCreateCompany={() => setCreatingCompany(true)} />;
   }
 
   // Forced gate — intercepts every route until the temp password is replaced.
@@ -166,6 +171,8 @@ export default function App() {
         <Route path="broadcast" element={<BroadcastPage />} />
         <Route path="password-resets" element={<PasswordResetsPage />} />
         <Route path="payroll" element={<PayrollPage />} />
+        <Route path="company" element={<CompanyPage />} />
+        <Route path="employees/new" element={<AddEmployeePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

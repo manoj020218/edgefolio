@@ -3,6 +3,7 @@ import { setBaseUrl, setCloudMode, clearOrgCode, checkCompanyCode, CLOUD_BASE_UR
 
 interface Props {
   onDone: (baseUrl: string) => void;
+  onCreateCompany?: () => void;   // new company, app only (CreateCompanyPage)
 }
 
 // First-run screen. Two ways to connect:
@@ -10,7 +11,7 @@ interface Props {
 //   EdgeFolio desktop app under Settings → Cloud Attendance.
 // - Office computer (Wi-Fi): the phone talks straight to the EdgeFolio PC on the office network
 //   (the original LAN mode, unchanged).
-export default function ServerSetupPage({ onDone }: Props) {
+export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
   const [mode, setMode] = useState<'cloud' | 'lan'>('cloud');
   const [code, setCode] = useState('');
   const [company, setCompany] = useState<string | null>(null);
@@ -145,6 +146,13 @@ export default function ServerSetupPage({ onDone }: Props) {
             {checking ? 'Checking…' : 'Connect'}
           </button>
         </form>
+      )}
+
+      {onCreateCompany && (
+        <p className="mt-8 text-center text-sm text-slate-400">
+          New company?{' '}
+          <button type="button" onClick={onCreateCompany} className="font-medium text-brand-400">Create it here</button>
+        </p>
       )}
     </div>
   );

@@ -30,6 +30,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   login: (empCode: string, password: string) => Promise<AuthUser>;
+  // Cloud sign-up / Google sign-in return a ready session (token + user) — store it as a login.
+  startSession: (token: string, user: AuthUser) => Promise<void>;
   logout: () => Promise<void>;
   markPasswordChanged: () => void;
 }
@@ -67,6 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res.user;
   }
 
+  async function startSession(token: string, next: AuthUser): Promise<void> {
+    await persistToken(token);
+    localStorage.setItem(USER_KEY, JSON.stringify(next));
+    setUser(next);
+    void registerPushToken();
+  }
+
   async function logout(): Promise<void> {
     await persistToken(null);
     localStorage.removeItem(USER_KEY);
@@ -86,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, markPasswordChanged }}>
+    <AuthContext.Provider value={{ user, loading, login, startSession, logout, markPasswordChanged }}>
       {children}
     </AuthContext.Provider>
   );

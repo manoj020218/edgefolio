@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, User } from 'lucide-react';
-import { apiGet, ApiError, isCloudModeSync, cachedOrgCodeSync, resetConnection } from '../lib/api';
+import { apiGet, ApiError, isCloudModeSync, cachedOrgCodeSync, resetConnection, cloudGoogleLogin } from '../lib/api';
+import { googleIdToken } from '../lib/google';
 import { useAuth } from '../lib/auth';
 import ForgotPasswordPage from './ForgotPasswordPage';
 
@@ -12,7 +13,7 @@ interface LoginCheckResponse {
 }
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, startSession } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<'empCode' | 'password' | 'forgot'>('empCode');
@@ -57,6 +58,26 @@ export default function LoginPage() {
       navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Login failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Cloud mode: owners/HR whose Google email is on the company (VPS/cloud POST /apk/auth/google).
+  async function handleGoogle() {
+    setError(null);
+    setBusy(true);
+    try {
+      const idToken = await googleIdToken();
+      const res = await cloudGoogleLogin(idToken, cachedOrgCodeSync() ?? undefined);
+      if ('chooseCompany' in res) {
+        setError('This Google account belongs to several companies — enter the right company code first (Change company / server).');
+        return;
+      }
+      await startSession(res.token, res.user);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : 'Google sign-in failed.');
     } finally {
       setBusy(false);
     }
@@ -107,6 +128,16 @@ export default function LoginPage() {
           >
             Forgot password?
           </button>
+          {isCloudModeSync() && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleGoogle}
+              className="w-full rounded-2xl border border-surface-light bg-surface py-3 text-[14px] font-medium text-slate-100 disabled:opacity-50"
+            >
+              Owner / HR: Sign in with Google
+            </button>
+          )}
           <p className="pt-3 text-center text-[12px] text-slate-500">
             {isCloudModeSync() ? `Company code ${cachedOrgCodeSync() ?? ''}` : 'Office computer'}
             {' · '}
