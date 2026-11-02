@@ -33,6 +33,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Explicit, unrestricted override: some dependency (Google Play Services
          location, most likely) contributes its own ACCESS_FINE_LOCATION entry

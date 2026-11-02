@@ -6,6 +6,7 @@ import { formatDateTime } from '../../lib/format';
 import { useAuth } from '../../lib/auth';
 import { useNetworkStatus } from '../../lib/network';
 import { enqueue } from '../../lib/offlineQueue';
+import { celebrate } from '../../lib/feedback';
 import AttendanceCalendarDrawer from '../../components/AttendanceCalendarDrawer';
 
 interface TodayAttendance {
@@ -148,12 +149,14 @@ export default function HomePage() {
       // happens.
       await enqueue({ kind: 'checkout', id: crypto.randomUUID(), queuedAt: timestamp, payload: { timestamp } });
       setQueuedCheckout(true);
+      celebrate('offline');
       setCheckingOut(false);
       return;
     }
 
     try {
       await apiPost('/attendance/checkout', { timestamp });
+      celebrate('success');
       refreshStatus();
     } catch (err) {
       // The screen's WORKING/not-working state can go stale if attendance was

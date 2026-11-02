@@ -7,6 +7,7 @@ import { apiGet, apiPost, ApiError } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { useAuth } from '../lib/auth';
 import { enqueue } from '../lib/offlineQueue';
+import { celebrate } from '../lib/feedback';
 
 interface Props {
   workType: 'tour' | 'wfh' | 'office';
@@ -219,6 +220,12 @@ function AttendanceSuccess({
   onDone: () => void;
 }) {
   const [show, setShow] = useState(false);
+
+  // Vibration + happy chime the moment the punch lands (lib/feedback.ts).
+  useEffect(() => {
+    celebrate(offline ? 'offline' : alreadyMarked ? 'already' : 'success');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setShow(true));
