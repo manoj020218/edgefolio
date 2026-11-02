@@ -36,15 +36,20 @@ export default function AdminShell({ onSwitchToEmployee }: Props) {
           tuned against this app's status bar across every other screen) — match that
           same top inset here instead of the bare py-3 this had, which put the header
           text right under the status bar/clock. */}
-      <header className="flex items-center justify-between border-b border-surface-light px-4 pb-3" style={{ paddingTop: '52px' }}>
-        <div>
-          <p className="text-sm font-medium text-slate-100">{user?.name}</p>
-          <p className="text-xs capitalize text-slate-400">{user?.role}</p>
+      <header className="mx-3 mt-0 flex items-center justify-between rounded-3xl border border-white/[0.08] bg-white/[0.045] px-3 pb-3 pt-3 backdrop-blur-xl" style={{ marginTop: '52px' }}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-base font-extrabold text-white shadow-glow">
+            {(user?.name || '?').trim().charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="text-sm font-bold text-[#f4f5fb]">{user?.name}</p>
+            <span className="chip mt-0.5 !px-2 !py-0.5 text-[10px] capitalize">{user?.role}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button
             onClick={onSwitchToEmployee}
-            className="rounded-md p-2 text-slate-300 hover:bg-surface hover:text-slate-100"
+            className="btn-ghost h-10 w-10 !rounded-full text-slate-200"
             aria-label="Switch to my attendance"
             title="Switch to my attendance"
           >
@@ -52,7 +57,7 @@ export default function AdminShell({ onSwitchToEmployee }: Props) {
           </button>
           <button
             onClick={() => void logout()}
-            className="rounded-md p-2 text-slate-300 hover:bg-surface hover:text-slate-100"
+            className="btn-ghost h-10 w-10 !rounded-full text-slate-200"
             aria-label="Sign out"
           >
             <LogOut size={20} />
@@ -60,13 +65,13 @@ export default function AdminShell({ onSwitchToEmployee }: Props) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
+      <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom))' }}>
         <Outlet />
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 flex border-t border-surface-light bg-surface"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="fixed inset-x-3 z-40 flex h-16 items-center gap-1 rounded-full border border-white/[0.1] bg-[#11131c]/80 p-1.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
+        style={{ bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
       >
         {visibleTabs.map(({ to, label, icon: Icon, end }) => (
           <NavLink
@@ -74,12 +79,12 @@ export default function AdminShell({ onSwitchToEmployee }: Props) {
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-1 py-2 text-xs ${
-                isActive ? 'text-brand-500' : 'text-slate-400'
+              `flex h-full flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[10px] font-semibold transition duration-150 active:scale-[0.96] ${
+                isActive ? 'bg-brand text-white shadow-glow' : 'text-[#9aa0b8]'
               }`
             }
           >
-            <Icon size={20} />
+            <Icon size={19} />
             {label}
           </NavLink>
         ))}

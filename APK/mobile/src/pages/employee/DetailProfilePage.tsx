@@ -30,7 +30,7 @@ function field(label: string, key: keyof Profile, profile: Profile, setProfile: 
         type={type}
         value={profile[key] ?? ''}
         onChange={(e) => setProfile({ ...profile, [key]: e.target.value })}
-        className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+        className="w-full input !py-2.5 text-sm "
       />
     </div>
   );
@@ -68,15 +68,15 @@ export default function DetailProfilePage() {
   const set = (next: Profile) => setProfile(next);
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
       <h1 className="mb-3 text-xl font-bold text-slate-100">Detailed Profile</h1>
 
-      <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-brand-700 bg-brand-500/10 p-3">
-        <Info size={15} className="mt-0.5 flex-shrink-0 text-sky-300" />
-        <p className="text-xs text-sky-200">Everything below is optional — fill in what you&rsquo;d like on record.</p>
+      <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-3">
+        <Info size={15} className="mt-0.5 flex-shrink-0 text-brand-300" />
+        <p className="text-xs text-brand-200">Everything below is optional — fill in what you&rsquo;d like on record.</p>
       </div>
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
@@ -103,7 +103,7 @@ export default function DetailProfilePage() {
                   value={p.currentAddress ?? ''}
                   onChange={(e) => set({ ...p, currentAddress: e.target.value })}
                   rows={2}
-                  className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+                  className="w-full input !py-2.5 text-sm "
                 />
               </div>
               <div>
@@ -112,7 +112,7 @@ export default function DetailProfilePage() {
                   value={p.permanentAddress ?? ''}
                   onChange={(e) => set({ ...p, permanentAddress: e.target.value })}
                   rows={2}
-                  className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+                  className="w-full input !py-2.5 text-sm "
                 />
               </div>
             </div>
@@ -135,7 +135,7 @@ export default function DetailProfilePage() {
           <button
             disabled={busy}
             onClick={() => void handleSave()}
-            className="rounded-xl bg-brand-500 py-3.5 text-sm font-bold text-white disabled:opacity-50"
+            className="btn-primary py-3.5 text-sm font-bold text-white disabled:opacity-50"
           >
             {busy ? 'Saving…' : 'Save Profile'}
           </button>

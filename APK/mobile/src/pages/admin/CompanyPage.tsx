@@ -79,72 +79,74 @@ export default function CompanyPage() {
   if (error && !c) return <p className="p-6 text-sm text-danger">{error}</p>;
   if (!c) return <p className="p-6 text-slate-400">Loading…</p>;
 
-  const row = 'flex items-center justify-between gap-3 rounded-xl border border-surface-light bg-surface px-4 py-3';
-  const btn = 'flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold transition active:scale-[0.98]';
+  const row = 'flex items-center justify-between gap-3 glass px-4 py-3';
+  const btn = 'flex w-full items-center justify-center gap-2.5 rounded-2xl py-3.5 text-[14px] font-semibold transition duration-150 active:scale-[0.97]';
 
   return (
-    <div className="space-y-5 px-5 py-6">
+    <div className="animate-enter space-y-5 px-5 py-6">
       <div className="flex items-center gap-3">
-        <Building2 className="h-6 w-6 text-brand-400" />
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand shadow-glow"><Building2 className="h-5 w-5 text-white" /></div>
         <div>
-          <h1 className="text-lg font-semibold text-slate-100">{c.companyName}</h1>
+          <h1 className="text-lg font-extrabold text-[#f4f5fb]">{c.companyName}</h1>
           <p className="text-xs text-slate-400">{c.activeEmployees} active employee{c.activeEmployees === 1 ? '' : 's'}</p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-brand-500/40 bg-brand-500/10 p-4">
-        <p className="text-xs uppercase tracking-wide text-slate-400">Company code — staff type this in the app</p>
+      <div className="rounded-4xl bg-brand p-[1.5px] shadow-glow">
+       <div className="rounded-[26.5px] bg-[#0d0f18]/95 p-5 backdrop-blur-xl">
+        <p className="label-caps">Company code — staff type this in the app</p>
         <div className="mt-1 flex items-center justify-between">
-          <span className="font-mono text-3xl font-bold tracking-[0.2em] text-sky-300">{c.orgCode}</span>
-          <button type="button" onClick={() => copy('code', c.orgCode)} className="rounded-lg p-2 text-slate-300" aria-label="Copy company code">
-            {copied === 'code' ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
+          <span className="font-mono text-5xl font-extrabold tracking-[0.18em] text-gradient">{c.orgCode}</span>
+          <button type="button" onClick={() => copy('code', c.orgCode)} className="btn-ghost h-10 w-10 !rounded-full text-slate-200" aria-label="Copy company code">
+            {copied === 'code' ? <Check size={18} className="text-success" /> : <Copy size={18} />}
           </button>
         </div>
+       </div>
       </div>
 
       <div className="space-y-2">
         {c.licenseKey && (
           <div className={row}>
             <div className="min-w-0">
-              <p className="text-xs text-slate-400">Licence key (for EdgeFolio for Windows)</p>
+              <p className="label-caps">Licence key (for EdgeFolio for Windows)</p>
               <p className="truncate font-mono text-[13px] text-slate-100">{c.licenseKey}</p>
             </div>
-            <button type="button" onClick={() => copy('key', c.licenseKey!)} className="rounded-lg p-2 text-slate-300" aria-label="Copy licence key">
-              {copied === 'key' ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
+            <button type="button" onClick={() => copy('key', c.licenseKey!)} className="btn-ghost h-9 w-9 flex-shrink-0 !rounded-full text-slate-200" aria-label="Copy licence key">
+              {copied === 'key' ? <Check size={18} className="text-success" /> : <Copy size={18} />}
             </button>
           </div>
         )}
         <div className={row}>
           <div className="min-w-0">
-            <p className="text-xs text-slate-400">Owner login</p>
+            <p className="label-caps">Owner login</p>
             <p className="truncate text-[13px] text-slate-100">{c.ownerEmail ? `${c.ownerEmail} (Sign in with Google)` : '—'}</p>
           </div>
         </div>
       </div>
 
       <div className="space-y-2.5">
-        <button type="button" onClick={shareInvite} className={`${btn} bg-brand-500 text-white`}>
-          <Send size={17} /> Invite employees
+        <button type="button" onClick={shareInvite} className={`${btn} btn-primary`}>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20"><Send size={15} /></span> Invite employees
         </button>
         {c.employeesManagedIn === 'app' ? (
-          <button type="button" onClick={() => navigate('/admin/employees/new')} className={`${btn} border border-surface-light bg-surface text-slate-100`}>
-            <UserPlus size={17} /> Add employee
+          <button type="button" onClick={() => navigate('/admin/employees/new')} className={`${btn} btn-ghost`}>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500/25 text-brand-300"><UserPlus size={15} /></span> Add employee
           </button>
         ) : (
           <p className="px-1 text-xs text-slate-400">Employees are managed in EdgeFolio for Windows on your office computer.</p>
         )}
-        <button type="button" onClick={sharePc} className={`${btn} border border-surface-light bg-surface text-slate-100`}>
-          <Monitor size={17} /> Send PC software link (payroll &amp; HR)
+        <button type="button" onClick={sharePc} className={`${btn} btn-ghost`}>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500/25 text-brand-300"><Monitor size={15} /></span> Send PC software link (payroll &amp; HR)
         </button>
-        {c.linkedToPc && <p className="px-1 text-xs text-green-400">Connected to EdgeFolio for Windows — attendance flows into payroll.</p>}
+        {c.linkedToPc && <p className="px-1 text-xs text-success">Connected to EdgeFolio for Windows — attendance flows into payroll.</p>}
       </div>
 
-      <div className="space-y-2 rounded-2xl border border-surface-light bg-surface p-4">
-        <p className="text-sm font-medium text-slate-100">Export attendance</p>
+      <div className="space-y-2 glass p-4">
+        <p className="text-sm font-bold text-[#f4f5fb]">Export attendance</p>
         <div className="flex gap-2">
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-            className="flex-1 rounded-lg border border-surface-light bg-surface px-3 py-2 text-slate-100" />
-          <button type="button" onClick={exportMonth} disabled={exporting || !month} className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            className="flex-1 input !py-2.5 " />
+          <button type="button" onClick={exportMonth} disabled={exporting || !month} className="btn-primary gap-1.5 px-3.5 py-2 text-sm disabled:opacity-50">
             <Download size={15} /> {exporting ? '…' : 'Excel (CSV)'}
           </button>
         </div>

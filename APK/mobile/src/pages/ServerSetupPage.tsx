@@ -74,16 +74,21 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
     }
   }
 
-  const input = 'w-full rounded-md border border-surface-light bg-surface px-3 py-2.5 text-slate-100 outline-none focus:border-brand-500';
+  const input = 'input';
   const tab = (active: boolean) =>
-    `flex-1 rounded-md py-2 text-sm font-medium transition ${active ? 'bg-brand-500 text-white' : 'text-slate-300'}`;
+    `flex-1 rounded-xl py-2.5 text-sm font-semibold transition duration-150 ${active ? 'bg-brand text-white shadow-glow' : 'text-[#9aa0b8]'}`;
 
   return (
-    <div className="flex min-h-full flex-col justify-center px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold text-slate-100">Connect to EdgeFolio</h1>
-      <p className="mb-6 text-sm text-slate-300">Ask your HR/admin which one your company uses.</p>
+    <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">
+      <div className="mb-8 flex flex-col items-center text-center">
+        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
+          E
+        </div>
+        <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Connect to <span className="text-gradient">EdgeFolio</span></h1>
+        <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">Ask your HR/admin which one your company uses.</p>
+      </div>
 
-      <div className="mb-6 flex gap-1 rounded-lg bg-surface p-1">
+      <div className="glass mb-5 flex gap-1 !rounded-2xl p-1">
         <button type="button" className={tab(mode === 'cloud')} onClick={() => { setMode('cloud'); setError(null); }}>Company code</button>
         <button type="button" className={tab(mode === 'lan')} onClick={() => { setMode('lan'); setError(null); }}>Office computer</button>
       </div>
@@ -91,7 +96,7 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
       {mode === 'cloud' ? (
         <form onSubmit={handleCloud} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm text-slate-300" htmlFor="code">Company code</label>
+            <label className="label-caps mb-1.5 ml-1 block" htmlFor="code">Company code</label>
             <input
               id="code"
               className={`${input} font-mono text-lg uppercase tracking-widest`}
@@ -106,8 +111,8 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
           </div>
 
           {company !== null && (
-            <div className="rounded-md border border-brand-500/50 bg-brand-500/10 px-3 py-2.5">
-              <p className="text-xs text-slate-400">Company</p>
+            <div className="rounded-2xl border border-brand-500/50 bg-brand-500/10 px-4 py-3">
+              <p className="label-caps">Company</p>
               <p className="font-medium text-slate-100">{company}</p>
             </div>
           )}
@@ -117,7 +122,7 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
           <button
             type="submit"
             disabled={checking}
-            className="w-full rounded-md bg-brand-500 py-2.5 font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
+            className="w-full btn-primary py-3.5 text-[15px] disabled:opacity-50"
           >
             {checking ? 'Checking…' : company !== null ? 'Yes, this is my company' : 'Continue'}
           </button>
@@ -128,11 +133,11 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
             Only works on the office Wi-Fi. The address is shown on the EdgeFolio desktop app&rsquo;s Settings page.
           </p>
           <div>
-            <label className="mb-1 block text-sm text-slate-300" htmlFor="ip">Office computer IP address</label>
+            <label className="label-caps mb-1.5 ml-1 block" htmlFor="ip">Office computer IP address</label>
             <input id="ip" className={input} placeholder="192.168.1.50" value={ip} onChange={(e) => setIp(e.target.value)} autoCapitalize="none" autoCorrect="off" />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-slate-300" htmlFor="port">Port</label>
+            <label className="label-caps mb-1.5 ml-1 block" htmlFor="port">Port</label>
             <input id="port" className={input} value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" />
           </div>
 
@@ -141,7 +146,7 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
           <button
             type="submit"
             disabled={checking}
-            className="w-full rounded-md bg-brand-500 py-2.5 font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
+            className="w-full btn-primary py-3.5 text-[15px] disabled:opacity-50"
           >
             {checking ? 'Checking…' : 'Connect'}
           </button>
@@ -151,7 +156,7 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
       {onCreateCompany && (
         <p className="mt-8 text-center text-sm text-slate-400">
           New company?{' '}
-          <button type="button" onClick={onCreateCompany} className="font-medium text-brand-400">Create it here</button>
+          <button type="button" onClick={onCreateCompany} className="font-semibold text-brand-300">Create it here</button>
         </p>
       )}
     </div>

@@ -19,12 +19,12 @@ export default function AnalyticsPage() {
   }, []);
 
   return (
-    <div className="px-4 py-4">
+    <div className="animate-enter px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-100">Analytics</h1>
         <Link
           to="/admin/payroll"
-          className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white"
+          className="flex items-center gap-1.5 btn-primary px-3 py-1.5 text-sm font-medium text-white"
         >
           <Wallet size={16} /> Payroll
         </Link>
@@ -57,7 +57,7 @@ export default function AnalyticsPage() {
           <h2 className="mb-2 text-sm font-medium text-slate-300">Today by department</h2>
           <ul className="space-y-2">
             {data.departmentBreakdown.map((d) => (
-              <li key={d.dept} className="rounded-lg border border-surface-light bg-surface p-3">
+              <li key={d.dept} className="glass p-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-100">{d.dept}</span>
                   <span className="text-slate-400">

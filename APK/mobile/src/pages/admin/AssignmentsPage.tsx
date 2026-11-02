@@ -53,13 +53,13 @@ export default function AssignmentsPage() {
   }
 
   return (
-    <div className="px-4 py-4">
+    <div className="animate-enter px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-100">Work Assignments</h1>
         {canEdit && (
           <button
             onClick={() => setShowForm((v) => !v)}
-            className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white"
+            className="btn-primary px-3 py-1.5 text-sm font-medium text-white"
           >
             {showForm ? 'Close' : '+ New'}
           </button>
@@ -70,7 +70,7 @@ export default function AssignmentsPage() {
         type="date"
         value={date}
         onChange={(e) => setDate(e.target.value)}
-        className="mb-4 rounded-md border border-surface-light bg-surface px-3 py-2 text-sm text-slate-100"
+        className="mb-4 input !py-2.5 text-sm "
       />
 
       {showForm && employees && (
@@ -89,7 +89,7 @@ export default function AssignmentsPage() {
 
       <ul className="space-y-2">
         {rows?.map((r) => (
-          <li key={r.id} className="rounded-lg border border-surface-light bg-surface p-3">
+          <li key={r.id} className="glass p-3">
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-medium text-slate-100">{r.employee.name}</p>
@@ -142,11 +142,11 @@ function NewAssignmentForm({
   }
 
   return (
-    <div className="mb-4 space-y-3 rounded-lg border border-surface-light bg-surface p-3">
+    <div className="mb-4 space-y-3 glass p-3">
       <select
         value={employeeId}
         onChange={(e) => setEmployeeId(Number(e.target.value))}
-        className="w-full rounded-md border border-surface-light bg-surface-bg px-3 py-2 text-sm text-slate-100"
+        className="w-full input !py-2.5 text-sm "
       >
         {employees.map((e) => (
           <option key={e.id} value={e.id}>
@@ -159,7 +159,7 @@ function NewAssignmentForm({
         <select
           value={workType}
           onChange={(e) => setWorkType(e.target.value as 'tour' | 'wfh')}
-          className="flex-1 rounded-md border border-surface-light bg-surface-bg px-3 py-2 text-sm text-slate-100"
+          className="flex-1 input !py-2.5 text-sm "
         >
           <option value="tour">Tour</option>
           <option value="wfh">WFH</option>
@@ -171,13 +171,13 @@ function NewAssignmentForm({
           type="date"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
-          className="flex-1 rounded-md border border-surface-light bg-surface-bg px-3 py-2 text-sm text-slate-100"
+          className="flex-1 input !py-2.5 text-sm "
         />
         <input
           type="date"
           value={toDate}
           onChange={(e) => setToDate(e.target.value)}
-          className="flex-1 rounded-md border border-surface-light bg-surface-bg px-3 py-2 text-sm text-slate-100"
+          className="flex-1 input !py-2.5 text-sm "
         />
       </div>
 
@@ -185,13 +185,13 @@ function NewAssignmentForm({
         placeholder="Notes (optional)"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        className="w-full rounded-md border border-surface-light bg-surface-bg px-3 py-2 text-sm text-slate-100"
+        className="w-full input !py-2.5 text-sm "
       />
 
       <button
         disabled={busy}
         onClick={() => void submit()}
-        className="w-full rounded-md bg-brand-500 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="w-full btn-primary py-2 text-sm font-medium text-white disabled:opacity-50"
       >
         {busy ? 'Saving…' : 'Create Assignment'}
       </button>

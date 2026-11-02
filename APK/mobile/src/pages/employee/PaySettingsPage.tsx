@@ -51,7 +51,7 @@ export default function PaySettingsPage() {
     .reduce((sum, r) => sum + (r.details?.amount || 0), 0);
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
@@ -60,7 +60,7 @@ export default function PaySettingsPage() {
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
       {latest && (
-        <div className="mb-5 rounded-2xl border border-surface-light bg-surface p-4.5">
+        <div className="mb-5 glass p-4.5">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-[13px] font-semibold text-slate-300">Latest Payslip</span>
             <span className="text-[11px] text-slate-500">{formatMonth(latest.month)}</span>
@@ -80,7 +80,7 @@ export default function PaySettingsPage() {
       {advances && advances.length > 0 && (
         <>
           <p className="mb-2.5 text-[11px] font-bold tracking-wide text-slate-500">ADVANCE SALARY</p>
-          <div className="mb-5 rounded-2xl border border-surface-light bg-surface p-4.5">
+          <div className="mb-5 glass p-4.5">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-bold text-slate-100">Total Advance Taken</span>
               <span className="text-lg font-bold text-warning">&#8377;{totalAdvanceTaken.toLocaleString('en-IN')}</span>
@@ -112,7 +112,7 @@ export default function PaySettingsPage() {
       <div className="mb-5 flex flex-col gap-2">
         {!payslips && !error && <p className="text-sm text-slate-400">Loading…</p>}
         {payslips?.map((p) => (
-          <div key={p.id} className="flex items-center justify-between rounded-xl border border-surface-light bg-surface p-3.5">
+          <div key={p.id} className="flex items-center justify-between glass p-3.5">
             <span className="text-[13.5px] font-medium text-slate-100">{formatMonth(p.month)}</span>
             <Download size={16} className="text-brand-400" />
           </div>
@@ -123,7 +123,7 @@ export default function PaySettingsPage() {
       <p className="mb-2.5 text-[11px] font-bold tracking-wide text-slate-500">ATTENDANCE HISTORY</p>
       <div className="flex flex-col gap-2">
         {attendance?.map((a) => (
-          <div key={a.month} className="flex items-center justify-between rounded-xl border border-surface-light bg-surface p-3.5">
+          <div key={a.month} className="flex items-center justify-between glass p-3.5">
             <span className="text-[13.5px] font-medium text-slate-100">{formatMonth(a.month)}</span>
             <span className="text-xs text-slate-400">
               <span className="text-success">{a.present} present</span>

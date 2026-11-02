@@ -35,13 +35,15 @@ export default function ForgotPasswordPage({ onBack }: Props) {
 
   if (done) {
     return (
-      <div className="flex min-h-full flex-col justify-center px-6 py-10">
-        <h1 className="mb-2 text-xl font-semibold text-slate-100">Request sent</h1>
-        <p className="mb-8 text-sm text-slate-300">
-          Your HR-admin has been notified. They&rsquo;ll share a temporary password with you
-          directly.
-        </p>
-        <button onClick={onBack} className="text-sm text-brand-500 underline">
+      <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
+            E
+          </div>
+          <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Request <span className="text-gradient">sent</span></h1>
+          <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">Your HR-admin has been notified. They&rsquo;ll share a temporary password with you directly.</p>
+        </div>
+        <button onClick={onBack} className="btn-ghost w-full py-3.5 text-[15px]">
           ← Back to sign in
         </button>
       </div>
@@ -49,20 +51,22 @@ export default function ForgotPasswordPage({ onBack }: Props) {
   }
 
   return (
-    <div className="flex min-h-full flex-col justify-center px-6 py-10">
-      <button onClick={onBack} className="mb-6 self-start text-sm text-brand-500 underline">
+    <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">
+      <button onClick={onBack} className="mb-4 self-start text-sm font-semibold text-brand-300">
         ← Back
       </button>
 
-      <h1 className="mb-1 text-xl font-semibold text-slate-100">Forgot Password</h1>
-      <p className="mb-8 text-sm text-slate-300">
-        Enter your Employee ID or email. Your HR-admin will approve the request and share a
-        temporary password with you.
-      </p>
+      <div className="mb-8 flex flex-col items-center text-center">
+        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
+          E
+        </div>
+        <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Forgot <span className="text-gradient">Password</span></h1>
+        <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">Enter your Employee ID or email. Your HR-admin will approve the request and share a temporary password with you.</p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="glass space-y-4 p-5">
         <input
-          className="w-full rounded-md border border-surface-light bg-surface px-3 py-2.5 text-slate-100 outline-none focus:border-brand-500"
+          className="input"
           placeholder="Employee ID or email"
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
@@ -76,7 +80,7 @@ export default function ForgotPasswordPage({ onBack }: Props) {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-md bg-brand-500 py-2.5 font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
+          className="w-full btn-primary py-3.5 text-[15px] disabled:opacity-50"
         >
           {busy ? 'Submitting…' : 'Request Reset'}
         </button>

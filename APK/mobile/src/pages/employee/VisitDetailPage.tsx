@@ -68,7 +68,7 @@ function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-surface-light bg-surface">
+    <div className="overflow-hidden glass">
       <canvas
         ref={canvasRef}
         width={320}
@@ -121,7 +121,7 @@ export default function VisitDetailPage() {
   }
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
@@ -134,13 +134,13 @@ export default function VisitDetailPage() {
           onChange={(e) => setRemarks(e.target.value)}
           rows={3}
           placeholder="What happened at this visit?"
-          className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+          className="w-full input !py-2.5 text-sm "
         />
       </div>
 
       <div className="mb-4">
         <label className="mb-1.5 block text-xs font-semibold text-slate-400">Photo</label>
-        <label className="flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed border-slate-600 bg-surface p-4">
+        <label className="flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed border-slate-600 glass p-4">
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/15">
             <Upload size={18} className="text-brand-400" />
           </div>
@@ -165,7 +165,7 @@ export default function VisitDetailPage() {
       <button
         disabled={busy}
         onClick={() => void handleComplete()}
-        className="w-full rounded-xl bg-brand-500 py-3.5 text-sm font-bold text-white disabled:opacity-50"
+        className="w-full btn-primary py-3.5 text-sm font-bold text-white disabled:opacity-50"
       >
         {busy ? 'Saving…' : 'Mark Visit Complete'}
       </button>

@@ -57,7 +57,7 @@ export default function EmployeesPage() {
   }
 
   return (
-    <div className="px-4 py-4">
+    <div className="animate-enter px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-100">Employees</h1>
         <Link
@@ -69,13 +69,13 @@ export default function EmployeesPage() {
       </div>
 
       {issued && (
-        <div className="mb-4 rounded-lg border border-success bg-surface p-3">
+        <div className="mb-4 glass !border-success p-3">
           <p className="text-sm text-slate-300">
             Temporary password for <span className="font-medium text-slate-100">{issued.empName}</span> (new
             account):
           </p>
           <p className="mt-1 font-mono text-lg text-slate-100">{issued.tempPassword}</p>
-          <button onClick={() => setIssued(null)} className="mt-2 text-xs text-brand-500 underline">
+          <button onClick={() => setIssued(null)} className="mt-2 text-xs font-semibold text-brand-300">
             Dismiss
           </button>
         </div>
@@ -86,7 +86,7 @@ export default function EmployeesPage() {
 
       <ul className="space-y-2">
         {rows?.map((r) => (
-          <li key={r.id} className="rounded-lg border border-surface-light bg-surface p-3">
+          <li key={r.id} className="glass p-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-slate-100">{r.name}</p>

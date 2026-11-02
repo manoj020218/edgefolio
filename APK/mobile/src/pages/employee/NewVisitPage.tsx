@@ -34,7 +34,7 @@ export default function NewVisitPage() {
   }
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
@@ -46,7 +46,7 @@ export default function NewVisitPage() {
           <input
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
-            className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+            className="w-full input !py-2.5 text-sm "
             autoFocus
           />
         </div>
@@ -56,7 +56,7 @@ export default function NewVisitPage() {
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             placeholder="Area, city"
-            className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+            className="w-full input !py-2.5 text-sm "
           />
         </div>
         <div>
@@ -64,7 +64,7 @@ export default function NewVisitPage() {
           <input
             value={contactPerson}
             onChange={(e) => setContactPerson(e.target.value)}
-            className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+            className="w-full input !py-2.5 text-sm "
           />
         </div>
         <div>
@@ -72,7 +72,7 @@ export default function NewVisitPage() {
           <input
             value={purpose}
             onChange={(e) => setPurpose(e.target.value)}
-            className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+            className="w-full input !py-2.5 text-sm "
           />
         </div>
 
@@ -81,7 +81,7 @@ export default function NewVisitPage() {
         <button
           type="submit"
           disabled={busy}
-          className="mt-2 rounded-xl bg-brand-500 py-3.5 text-sm font-bold text-white disabled:opacity-50"
+          className="mt-2 btn-primary py-3.5 text-sm font-bold text-white disabled:opacity-50"
         >
           {busy ? 'Adding…' : 'Add Visit'}
         </button>

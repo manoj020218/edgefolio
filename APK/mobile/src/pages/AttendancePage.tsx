@@ -153,11 +153,11 @@ export default function AttendancePage({ workType, onBack }: Props) {
   // underneath rather than a bare "Getting your location…" line.
   if (step.kind === 'locating') {
     return (
-      <div className="flex min-h-full flex-col items-center justify-center px-6 text-center">
+      <div className="animate-enter flex min-h-full flex-col items-center justify-center px-6 text-center">
         <div className="relative flex h-24 w-24 items-center justify-center">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500/30" />
           <span className="absolute inline-flex h-16 w-16 animate-ping rounded-full bg-brand-500/25 [animation-delay:300ms]" />
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700">
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-brand shadow-glow">
             <MapPin size={24} className="text-white" />
           </div>
         </div>
@@ -169,16 +169,16 @@ export default function AttendancePage({ workType, onBack }: Props) {
 
   if (step.kind === 'submitting') {
     return (
-      <div className="flex min-h-full flex-col items-center justify-center px-6 text-center">
-        <Loader2 size={36} className="animate-spin text-brand-500" />
+      <div className="animate-enter flex min-h-full flex-col items-center justify-center px-6 text-center">
+        <Loader2 size={36} className="animate-spin text-brand-400" />
         <p className="mt-5 text-base font-semibold text-slate-100">Submitting attendance…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-full flex-col px-6 py-8">
-      <button onClick={onBack} className="mb-6 self-start text-sm text-brand-500 underline">
+    <div className="animate-enter flex min-h-full flex-col px-6 py-8">
+      <button onClick={onBack} className="mb-6 self-start text-sm font-semibold text-brand-300">
         ← Back
       </button>
 
@@ -186,18 +186,18 @@ export default function AttendancePage({ workType, onBack }: Props) {
       <p className="mb-8 text-sm text-slate-300 capitalize">{workType}</p>
 
       {step.kind === 'not-enrolled' && (
-        <div className="rounded-lg border border-danger bg-surface p-4">
+        <div className="glass !border-danger p-4">
           <p className="text-slate-100">Face ID isn&rsquo;t set up on this account yet.</p>
-          <button onClick={() => navigate('/profile/face-id')} className="mt-3 text-sm text-brand-500 underline">
+          <button onClick={() => navigate('/profile/face-id')} className="mt-3 text-sm font-semibold text-brand-300">
             Set up Face ID
           </button>
         </div>
       )}
 
       {step.kind === 'error' && (
-        <div className="rounded-lg border border-danger bg-surface p-4">
+        <div className="glass !border-danger p-4">
           <p className="text-slate-100">{step.message}</p>
-          <button onClick={() => void handleStart()} className="mt-3 text-sm text-brand-500 underline">
+          <button onClick={() => void handleStart()} className="mt-3 text-sm font-semibold text-brand-300">
             Try again
           </button>
         </div>
@@ -233,7 +233,7 @@ function AttendanceSuccess({
   }, [onDone]);
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center px-6 text-center">
+    <div className="animate-enter flex min-h-full flex-col items-center justify-center px-6 text-center">
       <div
         className={`flex h-24 w-24 items-center justify-center rounded-full ${offline ? 'bg-amber-500/15' : 'bg-success/15'} transition-all duration-500 ease-out ${
           show ? 'scale-100 opacity-100' : 'scale-50 opacity-0'

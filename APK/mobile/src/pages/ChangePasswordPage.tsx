@@ -46,21 +46,24 @@ export default function ChangePasswordPage({ onDone }: Props) {
   }
 
   return (
-    <div className="flex min-h-full flex-col justify-center px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold text-slate-100">Set a New Password</h1>
-      <p className="mb-8 text-sm text-slate-300">
-        You&rsquo;re using a temporary password. Set your own before continuing.
-      </p>
+    <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">
+      <div className="mb-8 flex flex-col items-center text-center">
+        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
+          E
+        </div>
+        <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Set a New <span className="text-gradient">Password</span></h1>
+        <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">You&rsquo;re using a temporary password. Set your own before continuing.</p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="glass space-y-4 p-5">
         <div>
-          <label className="mb-1 block text-sm text-slate-300" htmlFor="current">
+          <label className="label-caps mb-1.5 ml-1 block" htmlFor="current">
             Temporary password
           </label>
           <input
             id="current"
             type="password"
-            className="w-full rounded-md border border-surface-light bg-surface px-3 py-2.5 text-slate-100 outline-none focus:border-brand-500"
+            className="input"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             autoFocus
@@ -68,26 +71,26 @@ export default function ChangePasswordPage({ onDone }: Props) {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm text-slate-300" htmlFor="new">
+          <label className="label-caps mb-1.5 ml-1 block" htmlFor="new">
             New password
           </label>
           <input
             id="new"
             type="password"
-            className="w-full rounded-md border border-surface-light bg-surface px-3 py-2.5 text-slate-100 outline-none focus:border-brand-500"
+            className="input"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm text-slate-300" htmlFor="confirm">
+          <label className="label-caps mb-1.5 ml-1 block" htmlFor="confirm">
             Confirm new password
           </label>
           <input
             id="confirm"
             type="password"
-            className="w-full rounded-md border border-surface-light bg-surface px-3 py-2.5 text-slate-100 outline-none focus:border-brand-500"
+            className="input"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
@@ -98,7 +101,7 @@ export default function ChangePasswordPage({ onDone }: Props) {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-md bg-brand-500 py-2.5 font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
+          className="w-full btn-primary py-3.5 text-[15px] disabled:opacity-50"
         >
           {busy ? 'Saving…' : 'Set Password'}
         </button>

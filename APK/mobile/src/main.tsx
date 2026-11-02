@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './lib/auth';
 import { NetworkStatusProvider } from './lib/network';
+import '@fontsource-variable/plus-jakarta-sans';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(

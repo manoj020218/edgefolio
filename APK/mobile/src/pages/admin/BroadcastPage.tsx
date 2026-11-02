@@ -35,15 +35,15 @@ export default function BroadcastPage() {
   }
 
   return (
-    <div className="px-4 py-4">
-      <button onClick={() => navigate(-1)} className="mb-4 text-sm text-brand-500 underline">
+    <div className="animate-enter px-4 py-4">
+      <button onClick={() => navigate(-1)} className="mb-4 text-sm font-semibold text-brand-300">
         ← Back
       </button>
 
       <h1 className="mb-4 text-lg font-semibold text-slate-100">Broadcast</h1>
 
       {sentTo !== null && (
-        <p className="mb-4 rounded-md border border-success bg-surface p-3 text-sm text-slate-100">
+        <p className="mb-4 rounded-md glass !border-success p-3 text-sm text-slate-100">
           Sent to {sentTo} device{sentTo === 1 ? '' : 's'}.
         </p>
       )}
@@ -55,7 +55,7 @@ export default function BroadcastPage() {
             key={t.value}
             onClick={() => setType(t.value)}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-              type === t.value ? 'bg-brand-500 text-white' : 'bg-surface-light text-slate-300'
+              type === t.value ? 'bg-brand text-white shadow-glow' : 'bg-surface-light text-slate-300'
             }`}
           >
             {t.label}
@@ -68,13 +68,13 @@ export default function BroadcastPage() {
         onChange={(e) => setMessage(e.target.value)}
         placeholder="Message for all employees…"
         rows={5}
-        className="mb-4 w-full rounded-md border border-surface-light bg-surface px-3 py-2 text-sm text-slate-100"
+        className="mb-4 w-full input !py-2.5 text-sm "
       />
 
       <button
         disabled={busy || !message.trim()}
         onClick={() => void send()}
-        className="w-full rounded-md bg-brand-500 py-2.5 font-medium text-white disabled:opacity-50"
+        className="w-full btn-primary py-2.5 font-medium text-white disabled:opacity-50"
       >
         {busy ? 'Sending…' : 'Send Broadcast'}
       </button>

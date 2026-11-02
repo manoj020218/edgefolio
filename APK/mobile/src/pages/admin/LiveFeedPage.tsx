@@ -32,12 +32,12 @@ export default function LiveFeedPage() {
   }, []);
 
   return (
-    <div className="px-4 py-4">
+    <div className="animate-enter px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-100">Today</h1>
         <Link
           to="/admin/broadcast"
-          className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white"
+          className="flex items-center gap-1.5 btn-primary px-3 py-1.5 text-sm font-medium text-white"
         >
           <Megaphone size={16} /> Broadcast
         </Link>
@@ -57,7 +57,7 @@ export default function LiveFeedPage() {
 
           <ul className="space-y-2">
             {data.feed.map((r) => (
-              <li key={r.empId} className="rounded-lg border border-surface-light bg-surface p-3">
+              <li key={r.empId} className="glass p-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium text-slate-100">{r.name}</p>
@@ -82,7 +82,7 @@ export default function LiveFeedPage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-surface-light bg-surface p-2 text-center">
+    <div className="glass p-2 text-center">
       <p className="text-lg font-semibold text-slate-100">{value}</p>
       <p className="text-[11px] text-slate-400">{label}</p>
     </div>

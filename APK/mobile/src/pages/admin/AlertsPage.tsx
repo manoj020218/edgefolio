@@ -63,7 +63,7 @@ export default function AlertsPage() {
   }
 
   return (
-    <div className="px-4 py-4">
+    <div className="animate-enter px-4 py-4">
       <h1 className="mb-1 text-lg font-semibold text-slate-100">Alerts</h1>
       <p className="mb-4 text-xs text-slate-400">Get notified on your phone when someone checks in or out.</p>
 
@@ -73,7 +73,7 @@ export default function AlertsPage() {
         <select
           value={pickEmpId}
           onChange={(e) => setPickEmpId(e.target.value)}
-          className="flex-1 rounded-md border border-surface-light bg-surface px-3 py-2 text-sm text-slate-100"
+          className="flex-1 input !py-2.5 text-sm "
         >
           <option value="">Select employee to watch…</option>
           {availableEmployees.map((e) => (
@@ -85,7 +85,7 @@ export default function AlertsPage() {
         <button
           disabled={!pickEmpId || busy}
           onClick={() => void subscribe()}
-          className="rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="btn-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           Add
         </button>
@@ -97,7 +97,7 @@ export default function AlertsPage() {
         {rows?.map((r) => (
           <li
             key={r.id}
-            className="flex items-center justify-between rounded-lg border border-surface-light bg-surface p-3"
+            className="flex items-center justify-between glass p-3"
           >
             <div>
               <p className="font-medium text-slate-100">{r.watched.name}</p>

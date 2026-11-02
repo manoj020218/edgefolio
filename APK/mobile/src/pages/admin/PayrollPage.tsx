@@ -61,7 +61,7 @@ export default function PayrollPage() {
 
   if (selected) {
     return (
-      <div className="px-4 py-4">
+      <div className="animate-enter px-4 py-4">
         <button
           onClick={() => setSelected(null)}
           className="mb-3 flex items-center gap-1 text-sm text-slate-400"
@@ -76,7 +76,7 @@ export default function PayrollPage() {
 
         <ul className="space-y-2">
           {selected.payslips.map((p) => (
-            <li key={p.payslipId} className="rounded-lg border border-surface-light bg-surface p-3">
+            <li key={p.payslipId} className="glass p-3">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-slate-100">{p.employeeName}</p>
@@ -98,7 +98,7 @@ export default function PayrollPage() {
   }
 
   return (
-    <div className="px-4 py-4">
+    <div className="animate-enter px-4 py-4">
       <h1 className="mb-4 text-lg font-semibold text-slate-100">Payroll</h1>
 
       {error && <p className="text-sm text-danger">{error}</p>}
@@ -111,7 +111,7 @@ export default function PayrollPage() {
             <li key={r.runId}>
               <button
                 onClick={() => openRun(r.runId)}
-                className="w-full rounded-lg border border-surface-light bg-surface p-3 text-left"
+                className="w-full glass p-3 text-left"
               >
                 <div className="flex items-center justify-between">
                   <div>

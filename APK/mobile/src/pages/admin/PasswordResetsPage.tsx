@@ -39,7 +39,7 @@ export default function PasswordResetsPage() {
   }
 
   return (
-    <div className="px-4 py-4">
+    <div className="animate-enter px-4 py-4">
       <h1 className="mb-1 text-lg font-semibold text-slate-100">Password Resets</h1>
       <p className="mb-4 text-xs text-slate-400">
         Approving generates a one-time temporary password — share it with the employee
@@ -47,12 +47,12 @@ export default function PasswordResetsPage() {
       </p>
 
       {issued && (
-        <div className="mb-4 rounded-lg border border-success bg-surface p-3">
+        <div className="mb-4 glass !border-success p-3">
           <p className="text-sm text-slate-300">
             Temporary password for <span className="font-medium text-slate-100">{issued.empName}</span>:
           </p>
           <p className="mt-1 font-mono text-lg text-slate-100">{issued.tempPassword}</p>
-          <button onClick={() => setIssued(null)} className="mt-2 text-xs text-brand-500 underline">
+          <button onClick={() => setIssued(null)} className="mt-2 text-xs font-semibold text-brand-300">
             Dismiss
           </button>
         </div>
@@ -63,7 +63,7 @@ export default function PasswordResetsPage() {
 
       <ul className="space-y-2">
         {rows?.map((r) => (
-          <li key={r.id} className="rounded-lg border border-surface-light bg-surface p-3">
+          <li key={r.id} className="glass p-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-slate-100">{r.emp_name}</p>
@@ -74,7 +74,7 @@ export default function PasswordResetsPage() {
               <button
                 disabled={busyId === r.id}
                 onClick={() => void approve(r)}
-                className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                className="btn-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 {busyId === r.id ? 'Approving…' : 'Approve'}
               </button>

@@ -65,7 +65,7 @@ export default function FaceEnrollPage() {
   }
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
@@ -79,7 +79,7 @@ export default function FaceEnrollPage() {
       {step.kind === 'loading' && <p className="text-sm text-slate-400">Loading…</p>}
 
       {step.kind === 'enrolled' && (
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-surface-light bg-surface p-6 text-center">
+        <div className="flex flex-col items-center gap-4 glass p-6 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500/15">
             <ShieldCheck size={28} className="text-green-400" />
           </div>
@@ -101,13 +101,13 @@ export default function FaceEnrollPage() {
       )}
 
       {step.kind === 'not-enrolled' && (
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-slate-600 bg-surface p-6 text-center">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-slate-600 glass p-6 text-center">
           <p className="text-sm text-slate-300">
             Face ID isn&rsquo;t set up yet — you&rsquo;ll need it to mark attendance from this app.
           </p>
           <button
             onClick={() => void handleCapture()}
-            className="w-full rounded-xl bg-brand-500 py-3.5 text-sm font-bold text-white"
+            className="w-full btn-primary py-3.5 text-sm font-bold text-white"
           >
             Set Up Face ID
           </button>
@@ -118,9 +118,9 @@ export default function FaceEnrollPage() {
       {step.kind === 'submitting' && <p className="text-sm text-slate-300">Saving…</p>}
 
       {step.kind === 'error' && (
-        <div className="rounded-2xl border border-danger bg-surface p-4">
+        <div className="glass !border-danger p-4">
           <p className="text-sm text-slate-100">{step.message}</p>
-          <button onClick={() => void loadStatus()} className="mt-3 text-sm font-semibold text-brand-500">
+          <button onClick={() => void loadStatus()} className="mt-3 text-sm font-semibold text-brand-400">
             Try again
           </button>
         </div>

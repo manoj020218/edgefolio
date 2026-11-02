@@ -54,7 +54,7 @@ export default function DocumentsPage() {
   const self = docs?.filter((d) => d.source === 'self') ?? [];
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
@@ -68,7 +68,7 @@ export default function DocumentsPage() {
           <p className="mb-2.5 text-[11px] font-bold tracking-wide text-slate-500">FROM YOUR COMPANY</p>
           <div className="mb-5 flex flex-col gap-2">
             {company.map((d) => (
-              <div key={d.id} className="flex items-center gap-3 rounded-xl border border-surface-light bg-surface p-3.5">
+              <div key={d.id} className="flex items-center gap-3 glass p-3.5">
                 <FileText size={17} className="flex-shrink-0 text-brand-400" />
                 <span className="flex-1 text-[13.5px] font-medium text-slate-100">{d.title}</span>
               </div>
@@ -79,7 +79,7 @@ export default function DocumentsPage() {
           <p className="mb-2.5 text-[11px] font-bold tracking-wide text-slate-500">MY UPLOADS</p>
           <div className="mb-4 flex flex-col gap-2">
             {self.map((d) => (
-              <div key={d.id} className="flex items-center gap-3 rounded-xl border border-surface-light bg-surface p-3.5">
+              <div key={d.id} className="flex items-center gap-3 glass p-3.5">
                 <FileText size={17} className="flex-shrink-0 text-slate-400" />
                 <div className="flex-1">
                   <p className="text-[13.5px] font-medium text-slate-100">{d.title}</p>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Bell, Calendar, CalendarDays, CloudOff, Download, PartyPopper, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Bell, Calendar, CalendarDays, CloudOff, Download, PartyPopper, RefreshCw, ClipboardList, Umbrella, CalendarCheck } from 'lucide-react';
 import { apiGet, apiPost, rootApiGet, isCloudModeSync } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { useAuth } from '../../lib/auth';
@@ -168,7 +168,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col px-5 pb-4" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter flex min-h-full flex-col px-5 pb-4" style={{ paddingTop: '52px' }}>
       <div className="mb-3.5 flex items-center justify-between">
         <button onClick={() => navigate('/profile')} className="flex items-center gap-3 text-left">
           <div className="relative h-[42px] w-[42px] flex-shrink-0">
@@ -176,12 +176,12 @@ export default function HomePage() {
               <div
                 className="absolute -inset-[3px] animate-spin rounded-full"
                 style={{
-                  background: 'conic-gradient(from 0deg, transparent 0%, #38bdf8 12%, transparent 28%)',
+                  background: 'conic-gradient(from 0deg, transparent 0%, #a5b4fc 12%, transparent 28%)',
                   animationDuration: '2.4s',
                 }}
               />
             )}
-            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[15px] font-bold text-white ring-2 ring-surface-bg">
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-brand text-[15px] font-bold text-white ring-2 ring-surface-bg">
               {user?.name?.[0] ?? '?'}
             </div>
             {faceEnrolled === false && (
@@ -191,13 +191,13 @@ export default function HomePage() {
             )}
           </div>
           <div>
-            <p className="text-xs text-slate-400">{greeting()}</p>
-            <p className="text-base font-bold text-slate-100">{user?.name}</p>
+            <p className="text-xs text-[#9aa0b8]">{greeting()}</p>
+            <p className="text-base font-extrabold tracking-tight text-[#f4f5fb]">{user?.name}</p>
           </div>
         </button>
         <div className="flex items-center gap-2.5">
-          <div className="text-right">
-            <p className="text-sm font-bold tabular-nums text-slate-100">
+          <div className="glass !rounded-2xl px-3 py-1.5 text-right">
+            <p className="text-sm font-bold tabular-nums text-[#f4f5fb]">
               {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })}
             </p>
             <p className="text-xs text-slate-400">
@@ -206,7 +206,7 @@ export default function HomePage() {
           </div>
           <button
             onClick={() => setCalendarOpen(true)}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-surface-light bg-surface text-slate-300"
+            className="btn-ghost h-10 w-10 flex-shrink-0 !rounded-full text-slate-200"
           >
             <CalendarDays size={16} />
           </button>
@@ -217,10 +217,10 @@ export default function HomePage() {
           whether it actually answered just now, not just whether the phone has
           any network at all (see lib/network.tsx). */}
       <div
-        className={`mb-3.5 flex items-center gap-2 rounded-xl border p-2.5 text-xs font-medium ${
+        className={`mb-3.5 flex w-fit max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
           netStatus === 'offline'
             ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-            : 'border-surface-light bg-surface text-slate-400'
+            : 'border-white/[0.08] bg-white/[0.045] text-[#9aa0b8]'
         }`}
       >
         {netStatus === 'offline' ? (
@@ -243,35 +243,37 @@ export default function HomePage() {
           </>
         ) : (
           <>
-            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-400" />
+            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-success shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             <span>Online</span>
           </>
         )}
       </div>
 
       {/* Check-in card */}
-      <div className="relative mb-3.5 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${isWorking ? 'bg-green-400' : 'bg-slate-300'}`} />
-            <span className="text-xs font-bold text-white">
+      <div className="animate-enter delay-1 relative mb-3.5 overflow-hidden rounded-4xl bg-brand p-5 shadow-glow">
+        <div className="pointer-events-none absolute -right-10 -top-12 h-44 w-44 rounded-full bg-white/15" />
+        <div className="pointer-events-none absolute -bottom-16 -left-8 h-40 w-40 rounded-full bg-white/10" />
+        <div className="relative mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 rounded-full bg-black/25 px-3 py-1.5">
+            <span className={`h-2 w-2 rounded-full ${isWorking ? 'animate-pulse-ring bg-success' : 'bg-slate-300'}`} />
+            <span className="text-[11px] font-bold tracking-wider text-white">
               {isWorking ? 'WORKING' : att?.checkOut ? 'CHECKED OUT' : 'NOT CHECKED IN'}
             </span>
           </div>
         </div>
         {att?.checkIn ? (
-          <div className="mb-4 flex items-end justify-between">
+          <div className="relative mb-4 flex items-end justify-between">
             <div>
-              <p className="mb-0.5 text-[11px] text-sky-100">CHECKED IN AT</p>
-              <p className="text-xl font-bold text-white">{att.checkIn}</p>
+              <p className="label-caps mb-0.5 !text-white/80">CHECKED IN AT</p>
+              <p className="text-4xl font-extrabold tabular-nums tracking-tight text-white">{att.checkIn}</p>
             </div>
             <div className="text-right">
-              <p className="mb-0.5 text-[11px] text-sky-100">HOURS TODAY</p>
-              <p className="text-xl font-bold text-white">{att.hoursWorked.toFixed(1)}h</p>
+              <p className="label-caps mb-0.5 !text-white/80">HOURS TODAY</p>
+              <p className="text-4xl font-extrabold tabular-nums tracking-tight text-white">{att.hoursWorked.toFixed(1)}h</p>
             </div>
           </div>
         ) : (
-          <p className="mb-4 text-sm text-sky-100">
+          <p className="relative mb-4 text-sm text-white/90">
             {status === null
               ? 'Loading…'
               : canMarkFromPhone
@@ -282,7 +284,7 @@ export default function HomePage() {
         {canMarkFromPhone && !isWorking && (
           <button
             onClick={() => navigate('/attendance')}
-            className="w-full rounded-xl bg-white py-3 text-sm font-bold text-brand-700"
+            className="relative w-full rounded-full bg-white py-3.5 text-sm font-bold text-brand-700 shadow-lg transition duration-150 active:scale-[0.97]"
           >
             {att?.checkIn ? 'Check In Again' : 'Mark Attendance'}
           </button>
@@ -291,29 +293,32 @@ export default function HomePage() {
           <button
             onClick={() => void handleCheckOut()}
             disabled={checkingOut || queuedCheckout}
-            className="w-full rounded-xl bg-white py-3 text-sm font-bold text-brand-700 disabled:opacity-60"
+            className="relative w-full rounded-full bg-white py-3.5 text-sm font-bold text-brand-700 shadow-lg transition duration-150 active:scale-[0.97] disabled:opacity-60"
           >
             {queuedCheckout ? 'Saved — will sync when online' : checkingOut ? 'Checking out…' : 'Check Out'}
           </button>
         )}
-        {checkOutError && <p className="mt-2 text-xs text-red-100">{checkOutError}</p>}
+        {checkOutError && <p className="relative mt-2 text-xs text-red-100">{checkOutError}</p>}
       </div>
 
       {/* quick stats */}
       <div className="mb-3.5 grid grid-cols-3 gap-2">
-        <div className="rounded-xl border border-surface-light bg-surface p-2.5 text-center">
-          <p className="text-lg font-bold text-slate-100">{pendingCount ?? '—'}</p>
-          <p className="text-[10px] text-slate-400">Pending tasks</p>
+        <div className="glass animate-enter delay-2 p-3 text-center">
+          <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-xl bg-warning/15 text-warning"><ClipboardList size={16} /></div>
+          <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">{pendingCount ?? '—'}</p>
+          <p className="text-[10px] text-[#9aa0b8]">Pending tasks</p>
         </div>
-        <div className="rounded-xl border border-surface-light bg-surface p-2.5 text-center">
-          <p className="text-lg font-bold text-slate-100">
+        <div className="glass animate-enter delay-3 p-3 text-center">
+          <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-xl bg-info/15 text-info"><Umbrella size={16} /></div>
+          <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">
             {leave ? `${leave.casual} / ${leave.sick}` : '—'}
           </p>
-          <p className="text-[10px] text-slate-400">CL / SL left</p>
+          <p className="text-[10px] text-[#9aa0b8]">CL / SL left</p>
         </div>
-        <div className="rounded-xl border border-surface-light bg-surface p-2.5 text-center">
-          <p className="text-lg font-bold text-slate-100">{leave?.annual ?? '—'}</p>
-          <p className="text-[10px] text-slate-400">Annual left</p>
+        <div className="glass animate-enter delay-4 p-3 text-center">
+          <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-xl bg-success/15 text-success"><CalendarCheck size={16} /></div>
+          <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">{leave?.annual ?? '—'}</p>
+          <p className="text-[10px] text-[#9aa0b8]">Annual left</p>
         </div>
       </div>
 
@@ -321,10 +326,12 @@ export default function HomePage() {
         const style = ANNOUNCEMENT_STYLES[announcement.type] ?? ANNOUNCEMENT_STYLES.general;
         const Icon = style.icon;
         return (
-          <div className="mb-3.5 flex items-start gap-3 rounded-xl border border-surface-light bg-surface p-3.5">
-            <Icon size={17} className={`mt-0.5 flex-shrink-0 ${style.iconClass}`} />
+          <div className="glass animate-enter delay-5 mb-3.5 flex items-start gap-3 p-3.5">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/[0.08]">
+              <Icon size={17} className={style.iconClass} />
+            </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{style.label}</p>
+              <p className="label-caps">{style.label}</p>
               <p className="text-[13px] font-semibold text-slate-100">{announcement.message}</p>
               <p className="mt-0.5 text-[11.5px] text-slate-400">
                 {formatDateTime(announcement.createdAt)}
@@ -335,8 +342,10 @@ export default function HomePage() {
       })()}
 
       {nextHoliday && (
-        <div className="flex items-center gap-3 rounded-xl border border-surface-light bg-surface p-3.5">
-          <Calendar size={17} className="flex-shrink-0 text-purple-400" />
+        <div className="glass animate-enter delay-5 flex items-center gap-3 p-3.5">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-purple-400/15">
+            <Calendar size={17} className="text-purple-400" />
+          </div>
           <div>
             <p className="text-[13px] font-semibold text-slate-100">{nextHoliday.name}</p>
             <p className="text-[11.5px] text-slate-400">

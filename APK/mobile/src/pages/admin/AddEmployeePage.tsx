@@ -62,13 +62,13 @@ export default function AddEmployeePage() {
     } catch { /* closed */ }
   }
 
-  const input = 'w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-slate-100 outline-none focus:border-brand-500';
+  const input = 'w-full input !py-2.5';
 
   if (created) {
     return (
-      <div className="space-y-5 px-5 py-6">
+      <div className="animate-enter space-y-5 px-5 py-6">
         <h1 className="text-lg font-semibold text-slate-100">{created.name} added</h1>
-        <div className="space-y-2 rounded-2xl border border-surface-light bg-surface p-4">
+        <div className="space-y-2 glass p-4">
           <p className="text-xs text-slate-400">Employee ID</p>
           <p className="font-mono text-lg text-slate-100">{created.empCode}</p>
           <p className="pt-2 text-xs text-slate-400">Temporary password — shown only now</p>
@@ -80,13 +80,13 @@ export default function AddEmployeePage() {
             </button>
           </div>
         </div>
-        <button type="button" onClick={sendInvite} className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 font-semibold text-white">
+        <button type="button" onClick={sendInvite} className="flex w-full items-center justify-center gap-2 btn-primary py-3 font-semibold text-white">
           <Send size={17} /> Send login to {created.name}
         </button>
         <div className="flex gap-2">
           <button type="button" onClick={() => { setCreated(null); setName(''); setEmpCode(''); setDepartment(''); setCopied(false); }}
-            className="flex-1 rounded-xl border border-surface-light bg-surface py-2.5 text-sm text-slate-100">Add another</button>
-          <button type="button" onClick={() => navigate('/admin/company')} className="flex-1 rounded-xl border border-surface-light bg-surface py-2.5 text-sm text-slate-100">Done</button>
+            className="flex-1 input !py-2.5 text-sm">Add another</button>
+          <button type="button" onClick={() => navigate('/admin/company')} className="flex-1 input !py-2.5 text-sm">Done</button>
         </div>
       </div>
     );
@@ -116,7 +116,7 @@ export default function AddEmployeePage() {
         </select>
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
-      <button type="submit" disabled={busy} className="w-full rounded-xl bg-brand-500 py-3 font-semibold text-white disabled:opacity-50">
+      <button type="submit" disabled={busy} className="w-full btn-primary py-3 font-semibold text-white disabled:opacity-50">
         {busy ? 'Adding…' : 'Add employee'}
       </button>
     </form>

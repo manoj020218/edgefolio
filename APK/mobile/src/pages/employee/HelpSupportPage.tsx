@@ -41,7 +41,7 @@ export default function HelpSupportPage() {
   }
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
@@ -52,7 +52,7 @@ export default function HelpSupportPage() {
           <button
             key={key}
             onClick={() => setComposing(key)}
-            className="flex items-center gap-3.5 rounded-2xl border border-surface-light bg-surface p-4 text-left"
+            className="flex items-center gap-3.5 glass p-4 text-left"
           >
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/15">
               <Icon size={18} className="text-brand-400" />
@@ -70,7 +70,7 @@ export default function HelpSupportPage() {
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex flex-col gap-2">
         {tickets?.map((t) => (
-          <div key={t.id} className="rounded-xl border border-surface-light bg-surface p-3.5">
+          <div key={t.id} className="glass p-3.5">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[13.5px] font-semibold text-slate-100">{t.subject}</span>
               <span
@@ -118,7 +118,7 @@ function ComposeTicket({ category, onBack, onSubmitted }: { category: Category; 
   }
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={onBack} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
@@ -130,7 +130,7 @@ function ComposeTicket({ category, onBack, onSubmitted }: { category: Category; 
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+            className="w-full input !py-2.5 text-sm "
             autoFocus
           />
         </div>
@@ -140,7 +140,7 @@ function ComposeTicket({ category, onBack, onSubmitted }: { category: Category; 
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={5}
-            className="w-full rounded-xl border border-surface-light bg-surface px-3 py-2.5 text-sm text-slate-100"
+            className="w-full input !py-2.5 text-sm "
           />
         </div>
 
@@ -156,7 +156,7 @@ function ComposeTicket({ category, onBack, onSubmitted }: { category: Category; 
         <button
           type="submit"
           disabled={busy}
-          className="mt-2 rounded-xl bg-brand-500 py-3.5 text-sm font-bold text-white disabled:opacity-50"
+          className="mt-2 btn-primary py-3.5 text-sm font-bold text-white disabled:opacity-50"
         >
           {busy ? 'Sending…' : 'Submit'}
         </button>

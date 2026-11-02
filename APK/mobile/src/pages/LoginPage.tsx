@@ -88,19 +88,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col justify-center px-7 py-10">
+    <div className="animate-enter flex min-h-full flex-col justify-center px-7 py-10">
       <div className="mb-10 flex flex-col items-center">
-        <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] bg-gradient-to-br from-brand-500 to-brand-700 text-3xl font-bold text-white shadow-lg shadow-brand-900/40">
+        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
           E
         </div>
-        <h1 className="mb-1 text-[22px] font-bold text-slate-100">Welcome to EdgeFolio</h1>
-        <p className="text-[13px] text-slate-400">Sign in to mark attendance &amp; view your pay</p>
+        <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Welcome to <span className="text-gradient">EdgeFolio</span></h1>
+        <p className="text-[13px] text-[#9aa0b8]">Sign in to mark attendance &amp; view your pay</p>
       </div>
 
       {step === 'empCode' && (
         <form onSubmit={handleCheckEmpCode} className="space-y-3.5">
-          <div className="flex items-center gap-3 rounded-2xl border border-surface-light bg-surface px-4 py-3.5 focus-within:border-brand-500">
-            <User size={18} className="flex-shrink-0 text-slate-500" />
+          <div className="flex items-center gap-3 glass !rounded-2xl px-4 py-3.5 focus-within:border-brand-500/70 focus-within:ring-2 focus-within:ring-brand-500/50">
+            <User size={18} className="flex-shrink-0 text-[#5d6380]" />
             <input
               id="empCode"
               className="w-full bg-transparent text-[15px] text-slate-100 outline-none placeholder:text-slate-500"
@@ -116,7 +116,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-brand-900/30 transition active:scale-[0.98] disabled:opacity-50"
+            className="w-full btn-primary py-3.5 text-[15px] disabled:opacity-50"
           >
             {busy ? 'Checking…' : 'Continue'}
             {!busy && <ArrowRight size={17} />}
@@ -124,7 +124,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setStep('forgot')}
-            className="w-full pt-1 text-center text-[13px] font-medium text-brand-400"
+            className="w-full pt-1 text-center text-[13px] font-semibold text-brand-300"
           >
             Forgot password?
           </button>
@@ -133,8 +133,14 @@ export default function LoginPage() {
               type="button"
               disabled={busy}
               onClick={handleGoogle}
-              className="w-full rounded-2xl border border-surface-light bg-surface py-3 text-[14px] font-medium text-slate-100 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2.5 rounded-full bg-white py-3.5 text-[14px] font-semibold text-slate-800 shadow-lg transition duration-150 active:scale-[0.97] disabled:opacity-50"
             >
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.3 5.7c4.3-4 6.8-9.9 7-17.1z"/>
+              <path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/>
+              <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2 1.4-4.9 2.3-8.6 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/>
+            </svg>
               Owner / HR: Sign in with Google
             </button>
           )}
@@ -154,9 +160,9 @@ export default function LoginPage() {
 
       {step === 'password' && (
         <form onSubmit={handleLogin} className="space-y-3.5">
-          <div className="flex items-center justify-between rounded-2xl border border-surface-light bg-surface px-4 py-3">
+          <div className="flex items-center justify-between glass !rounded-2xl px-4 py-3">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500/15 text-[13px] font-bold text-brand-400">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500/20 text-[13px] font-bold text-brand-300">
                 {empCode[0]?.toUpperCase() ?? '?'}
               </div>
               <span className="text-[14px] font-medium text-slate-100">{empCode}</span>
@@ -173,8 +179,8 @@ export default function LoginPage() {
               Change
             </button>
           </div>
-          <div className="flex items-center gap-3 rounded-2xl border border-surface-light bg-surface px-4 py-3.5 focus-within:border-brand-500">
-            <Lock size={18} className="flex-shrink-0 text-slate-500" />
+          <div className="flex items-center gap-3 glass !rounded-2xl px-4 py-3.5 focus-within:border-brand-500/70 focus-within:ring-2 focus-within:ring-brand-500/50">
+            <Lock size={18} className="flex-shrink-0 text-[#5d6380]" />
             <input
               id="password"
               type="password"
@@ -189,7 +195,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-brand-900/30 transition active:scale-[0.98] disabled:opacity-50"
+            className="w-full btn-primary py-3.5 text-[15px] disabled:opacity-50"
           >
             {busy ? 'Signing in…' : 'Sign In'}
             {!busy && <ArrowRight size={17} />}

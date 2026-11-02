@@ -23,9 +23,9 @@ export default function WorkPage() {
 
   if (!user?.isFieldEmployee) {
     return (
-      <div className="px-5" style={{ paddingTop: '52px' }}>
+      <div className="animate-enter px-5" style={{ paddingTop: '52px' }}>
         <h1 className="mb-4 text-xl font-bold text-slate-100">Work</h1>
-        <div className="rounded-2xl border border-surface-light bg-surface p-4">
+        <div className="glass p-4">
           <p className="text-sm text-slate-300">
             Your attendance is tracked from the office machine or the Home tab. There&rsquo;s nothing
             else to manage here for your role.
@@ -79,7 +79,7 @@ function VisitsList() {
   const completed = visits?.filter((v) => v.status === 'completed') ?? [];
 
   return (
-    <div className="px-5" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5" style={{ paddingTop: '52px' }}>
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-100">Today&rsquo;s Visits</h1>
@@ -91,7 +91,7 @@ function VisitsList() {
         </div>
         <button
           onClick={() => navigate('/work/new-visit')}
-          className="flex items-center gap-1.5 rounded-xl border border-surface-light bg-surface px-3 py-2 text-xs font-semibold text-brand-400"
+          className="flex items-center gap-1.5 glass px-3 py-2 text-xs font-semibold text-brand-400"
         >
           <Plus size={14} /> Add
         </button>
@@ -104,7 +104,7 @@ function VisitsList() {
         {scheduled.map((v) => (
           <div
             key={v.id}
-            className={`rounded-2xl border p-4 ${v.status === 'checked_in' ? 'border-brand-500' : 'border-surface-light'} bg-surface`}
+            className={`rounded-3xl border p-4 ${v.status === 'checked_in' ? 'border-brand-500' : 'border-white/[0.08]'} bg-white/[0.045] backdrop-blur-xl`}
           >
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-[15px] font-bold text-slate-100">{v.customerName}</span>
@@ -142,7 +142,7 @@ function VisitsList() {
               {v.status === 'checked_in' ? (
                 <button
                   onClick={() => navigate(`/work/visits/${v.id}`)}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-500 py-2.5 text-xs font-semibold text-white"
+                  className="flex flex-1 items-center justify-center gap-1.5 btn-primary py-2.5 text-xs font-semibold text-white"
                 >
                   Complete Visit
                 </button>
@@ -150,7 +150,7 @@ function VisitsList() {
                 <button
                   disabled={busyId === v.id}
                   onClick={() => void checkIn(v)}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-500 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-1.5 btn-primary py-2.5 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   {busyId === v.id ? 'Checking in…' : 'Check In'}
                 </button>
@@ -160,7 +160,7 @@ function VisitsList() {
         ))}
 
         {completed.map((v) => (
-          <div key={v.id} className="rounded-2xl border border-surface-light bg-surface p-4 opacity-70">
+          <div key={v.id} className="glass p-4 opacity-70">
             <div className="flex items-center justify-between">
               <span className="text-[15px] font-bold text-slate-100">{v.customerName}</span>
               <span className="rounded-full bg-success/15 px-2.5 py-1 text-[10px] font-bold text-success">COMPLETED</span>

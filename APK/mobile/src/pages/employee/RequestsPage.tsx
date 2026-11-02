@@ -45,7 +45,7 @@ export default function RequestsPage() {
   useEffect(load, [filter]);
 
   return (
-    <div className="px-5" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5" style={{ paddingTop: '52px' }}>
       <h1 className="mb-4 text-xl font-bold text-slate-100">Requests</h1>
 
       <p className="mb-2 text-[11px] font-bold tracking-wide text-slate-500">START A REQUEST</p>
@@ -56,7 +56,7 @@ export default function RequestsPage() {
             <button
               key={type}
               onClick={() => navigate(`/requests/new/${type}`)}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border border-surface-light bg-surface p-3"
+              className="flex flex-col items-center gap-1.5 glass p-3"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/15">
                 <Icon size={17} className="text-brand-400" />
@@ -73,7 +73,7 @@ export default function RequestsPage() {
             key={f}
             onClick={() => setFilter(f)}
             className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold capitalize ${
-              filter === f ? 'bg-brand-500 text-white' : 'border border-surface-light bg-surface text-slate-300'
+              filter === f ? 'bg-brand text-white shadow-glow' : 'border border-surface-light bg-surface text-slate-300'
             }`}
           >
             {f}
@@ -86,7 +86,7 @@ export default function RequestsPage() {
 
       <div className="flex flex-col gap-2">
         {rows?.map((r) => (
-          <div key={r.id} className="rounded-2xl border border-surface-light bg-surface p-3.5">
+          <div key={r.id} className="glass p-3.5">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-100">{r.title}</span>
               <span

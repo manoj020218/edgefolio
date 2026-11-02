@@ -308,3 +308,9 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
   reload with auto-restore if not online → smoke → write BILLING_API_URL/KEY + GOOGLE_CLIENT_IDS into the
   cloud .env); (2) create the Android OAuth client (package + SHA-1 above). Until both, "Create company"
   and Google sign-in show a clear error; everything else works.
+- 2026-11-02 — **Both unblocked.** Billing deploy done (backup /root/backups/billing-platform-20261102-102323;
+  billing runs on port **3010**; smoke: heartbeat 400, cloud verify no-key 401, bogus licence 404, public
+  https 404). Cloud .env has BILLING_API_URL/KEY + GOOGLE_CLIENT_IDS; edgefolio-cloud restarted healthy.
+  Owner created the Android OAuth client (project "edgfolio", client 676141356881-5muinn…; JSON kept
+  outside git in `Salary_On/goolgle/`). App 1.0.25 removed custom Google scopes. **Next:** live phone
+  test — Create company → Company screen → Add employee → employee login/punch → CSV export.

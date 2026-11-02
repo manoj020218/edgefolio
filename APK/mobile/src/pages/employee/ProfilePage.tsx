@@ -62,11 +62,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="px-5" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5" style={{ paddingTop: '52px' }}>
       <h1 className="mb-4 text-xl font-bold text-slate-100">Settings</h1>
 
-      <div className="mb-5 flex items-center gap-3.5 rounded-2xl border border-surface-light bg-gradient-to-br from-surface to-surface-bg p-4.5">
-        <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-xl font-bold text-white">
+      <div className="mb-5 flex items-center gap-3.5 glass p-4.5">
+        <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-brand shadow-glow text-xl font-bold text-white">
           {user?.name?.[0] ?? '?'}
         </div>
         <div className="min-w-0">
@@ -94,7 +94,7 @@ export default function ProfilePage() {
           </button>
         )}
         {items.map(({ to, label, hint, icon: Icon }) => (
-          <Link key={to} to={to} className="flex items-center gap-3.5 rounded-2xl border border-surface-light bg-surface p-4">
+          <Link key={to} to={to} className="flex items-center gap-3.5 glass p-4">
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/15">
               <Icon size={18} className="text-brand-400" />
             </div>
@@ -106,7 +106,7 @@ export default function ProfilePage() {
           </Link>
         ))}
 
-        <div className="flex items-center gap-3.5 rounded-2xl border border-surface-light bg-surface p-4">
+        <div className="flex items-center gap-3.5 glass p-4">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/15">
             <Globe size={18} className="text-brand-400" />
           </div>
@@ -119,7 +119,7 @@ export default function ProfilePage() {
           </span>
         </div>
 
-        <div className="rounded-2xl border border-surface-light bg-surface p-4">
+        <div className="glass p-4">
           <div className="flex items-center gap-3.5">
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500/15">
               <DownloadCloud size={18} className="text-brand-400" />

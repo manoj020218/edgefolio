@@ -80,12 +80,12 @@ export default function AttendanceCalendarDrawer({ open, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[85vh] w-full flex-col rounded-t-3xl bg-surface-bg px-5 pb-6 pt-3 shadow-2xl">
+      <div className="relative z-10 flex max-h-[85vh] w-full flex-col rounded-t-4xl border-t border-white/[0.1] bg-surface-raised px-5 pb-6 pt-3 shadow-2xl">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-surface-light" />
 
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-100">Attendance</h2>
-          <button onClick={onClose} className="rounded-full bg-surface p-1.5 text-slate-400">
+          <button onClick={onClose} className="rounded-full glass p-1.5 text-slate-400">
             <X size={16} />
           </button>
         </div>
@@ -93,7 +93,7 @@ export default function AttendanceCalendarDrawer({ open, onClose }: Props) {
         <div className="mb-3 flex items-center justify-between">
           <button
             onClick={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))}
-            className="rounded-full bg-surface p-2 text-slate-300"
+            className="rounded-full glass p-2 text-slate-300"
           >
             <ChevronLeft size={16} />
           </button>
@@ -102,7 +102,7 @@ export default function AttendanceCalendarDrawer({ open, onClose }: Props) {
           </p>
           <button
             onClick={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))}
-            className="rounded-full bg-surface p-2 text-slate-300"
+            className="rounded-full glass p-2 text-slate-300"
           >
             <ChevronRight size={16} />
           </button>
@@ -142,7 +142,7 @@ export default function AttendanceCalendarDrawer({ open, onClose }: Props) {
         {loading && <p className="mt-3 text-center text-[12px] text-slate-500">Loading…</p>}
 
         {selectedRecord && (
-          <div className="mt-4 rounded-2xl border border-surface-light bg-surface p-4">
+          <div className="mt-4 glass p-4">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[13.5px] font-semibold text-slate-100">
                 {new Date(selectedRecord.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}

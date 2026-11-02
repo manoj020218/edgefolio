@@ -27,13 +27,13 @@ interface Props {
 export default function EmployeeShell({ isAdmin, onSwitchToAdmin }: Props) {
   return (
     <div className="flex min-h-full flex-col">
-      <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
+      <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom))' }}>
         <Outlet context={{ isAdmin, onSwitchToAdmin } satisfies EmployeeShellContext} />
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 flex border-t border-surface-light bg-surface"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="fixed inset-x-3 z-40 flex h-16 items-center gap-1 rounded-full border border-white/[0.1] bg-[#11131c]/80 p-1.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
+        style={{ bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
       >
         {tabs.map(({ to, label, icon: Icon, end }) => (
           <NavLink
@@ -41,12 +41,12 @@ export default function EmployeeShell({ isAdmin, onSwitchToAdmin }: Props) {
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-1 py-2 text-xs ${
-                isActive ? 'text-brand-500' : 'text-slate-400'
+              `flex h-full flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[10px] font-semibold transition duration-150 active:scale-[0.96] ${
+                isActive ? 'bg-brand text-white shadow-glow' : 'text-[#9aa0b8]'
               }`
             }
           >
-            <Icon size={20} />
+            <Icon size={19} />
             {label}
           </NavLink>
         ))}

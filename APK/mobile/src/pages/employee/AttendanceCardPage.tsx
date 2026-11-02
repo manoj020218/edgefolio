@@ -45,13 +45,13 @@ export default function AttendanceCardPage() {
   }, [records]);
 
   return (
-    <div className="px-5 pb-8" style={{ paddingTop: '52px' }}>
+    <div className="animate-enter px-5 pb-8" style={{ paddingTop: '52px' }}>
       <button onClick={() => navigate(-1)} className="mb-5 flex items-center gap-1 text-sm font-medium text-slate-300">
         <ChevronLeft size={18} /> Back
       </button>
       <h1 className="mb-5 text-xl font-bold text-slate-100">Attendance Card</h1>
 
-      <div className="mb-5 flex items-center justify-between rounded-xl border border-surface-light bg-surface p-2">
+      <div className="mb-5 flex items-center justify-between glass p-2">
         <button onClick={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))} className="rounded-full p-2 text-slate-300">
           <ChevronLeft size={16} />
         </button>
@@ -63,52 +63,52 @@ export default function AttendanceCardPage() {
         </button>
       </div>
 
-      <div className="mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-5">
+      <div className="mb-5 overflow-hidden rounded-2xl bg-brand shadow-glow p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-base font-bold text-white">{user?.name}</p>
-            <p className="text-[11.5px] text-sky-100">
+            <p className="text-[11.5px] text-white/80">
               {user?.empCode} &middot; {user?.department}
             </p>
           </div>
-          <p className="text-[11.5px] font-semibold text-sky-100">
+          <p className="text-[11.5px] font-semibold text-white/80">
             {cursor.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
           </p>
         </div>
 
         {records === null ? (
-          <p className="text-sm text-sky-100">Loading…</p>
+          <p className="text-sm text-white/80">Loading…</p>
         ) : (
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <CheckCircle2 size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.present}</p>
-              <p className="text-[10px] text-sky-100">Present</p>
+              <p className="text-[10px] text-white/80">Present</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <XCircle size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.absent}</p>
-              <p className="text-[10px] text-sky-100">Absent</p>
+              <p className="text-[10px] text-white/80">Absent</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <TreePalm size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.leave}</p>
-              <p className="text-[10px] text-sky-100">Leave</p>
+              <p className="text-[10px] text-white/80">Leave</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <PartyPopper size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.holiday}</p>
-              <p className="text-[10px] text-sky-100">Holiday</p>
+              <p className="text-[10px] text-white/80">Holiday</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <CalendarOff size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.weeklyOff}</p>
-              <p className="text-[10px] text-sky-100">Weekly Off</p>
+              <p className="text-[10px] text-white/80">Weekly Off</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2.5 text-center">
               <Clock size={16} className="mx-auto mb-1 text-white" />
               <p className="text-lg font-bold text-white">{summary.hours.toFixed(0)}h</p>
-              <p className="text-[10px] text-sky-100">Hours</p>
+              <p className="text-[10px] text-white/80">Hours</p>
             </div>
           </div>
         )}
@@ -118,7 +118,7 @@ export default function AttendanceCardPage() {
       <div className="flex flex-col gap-2">
         {records?.length === 0 && <p className="text-sm text-slate-400">No attendance recorded this month.</p>}
         {records?.map((r) => (
-          <div key={r.date} className="flex items-center justify-between rounded-xl border border-surface-light bg-surface p-3.5">
+          <div key={r.date} className="flex items-center justify-between glass p-3.5">
             <span className="text-[13.5px] font-medium text-slate-100">
               {new Date(r.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
             </span>
