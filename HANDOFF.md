@@ -262,7 +262,16 @@ desktop-side behavior unaffected, that commit only touches the mobile build). Ve
 SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
 `/download` and `/download/portable` both return 200 on a full download.
 
-**Current live installer: v1.0.7, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
+**Current live installer: v1.0.10, deployed 2026-11-02.** `EdgeFolio-Setup.exe` SHA256
+`f3aa82fa1021dfee51f7925320ac424f4805e2a82a1d25f6089dad590c2e5abe`;
+`EdgeFolio-Portable.exe` SHA256
+`8dfe14a53037d4a4728940d3f6610279ef6d571e91ff73db388f45a4475734ff`. Verified: SHA256 matched
+local vs VPS (`sha256sum` over plink); `/download` and `/download/portable` return 200 with the
+new sizes. Adds (since v1.0.7): v1.0.8 visitor auto-ID, v1.0.9 Cloud Attendance connect, and the
+phone-app backend pieces — Face ID re-capture needs HR/owner approval, notifications inbox
+(`/apk/notifications*`), per-type Android channels on pushes. Not yet verified on a clean machine.
+
+**Previous: v1.0.7, deployed 2026-11-01.** `EdgeFolio-Setup.exe` SHA256
 `dc171341e8725f42837f65958f43cbcc832dfcba1c3606e337b013ab4a735f3a`;
 `EdgeFolio-Portable.exe` SHA256
 `9fdd1648e93cc855ccdcca1c43aeb0a7685b448ddbd0961b3c8a0239f0327bad`. Built from commit
