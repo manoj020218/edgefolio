@@ -12,7 +12,8 @@ CLOUD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$CLOUD_DIR/.env"
 [ -f "$ENV_FILE" ] || { echo "$(date -Is) backup: $ENV_FILE missing" >&2; exit 1; }
 
-getenv() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- | sed -E "s/^['\"](.*)['\"]$/\1/"; }
+# Missing optional keys must not abort the script (grep exits 1 on no match under pipefail).
+getenv() { { grep -E "^$1=" "$ENV_FILE" || true; } | tail -1 | cut -d= -f2- | sed -E "s/^['\"](.*)['\"]$/\1/"; }
 MONGO_URL="$(getenv MONGO_URL)"
 BACKUP_PASSPHRASE="$(getenv BACKUP_PASSPHRASE)"
 BACKUP_DIR="$(getenv BACKUP_DIR)"; BACKUP_DIR="${BACKUP_DIR:-/root/backups/edgefolio-cloud}"
