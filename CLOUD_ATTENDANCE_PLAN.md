@@ -268,3 +268,23 @@ referral · ≥70% of each active org's employees punching daily · ≥99.5% pun
     visitor code) and (2) a debug/release APK with Cloud mode, then a real phone + real EDGE test against
     the live cloud. No way to switch company/server inside the app yet (reinstall/clear data) — add a
     "Change company" option. **Next: Phase 4 — sign-up + billing-platform registration.**
+- 2026-11-02 — **Phase 4 started. Owner decisions:** Play Store name **"EdgeFolio by Jenix"** — Attendance,
+  Access Control, Payroll, HR roles, any machine (draft: `APK/PLAY_STORE_LISTING.md`, no pricing words);
+  **app-only companies allowed** (no PC needed); **Google sign-in** for owners; owner's Company screen
+  shows company code + licence key + login, with **"Send PC software link"** (edgefolio.iotsoft.in/download)
+  and **"Invite employees"** (app link /download/apk + company code). App icon = desktop logo (1.0.23).
+  **Phase 4 build list:**
+  1. Billing platform (own files, backup before pscp, `pm2 reload billing-platform`): server-to-server
+     `POST /api/edgefolio/cloud/verify-license` and `/cloud/link` (header X-Cloud-Key), `EdgeLicense.cloud`
+     sub-doc {plan 'early_access', orgCode, linkedAt}. Existing public `/signup` creates Client+licence.
+  2. Cloud: `POST /apk/signup` (Google ID token → billing signup or existing licence key → org + owner,
+     logged in), `POST /apk/auth/google` (owner/HR login; picks company if several), `GET /apk/company`,
+     employee management for app-only orgs (create with temp password, reset password, edit/deactivate;
+     409 MANAGED_IN_EDGE when the org is linked to EDGE), monthly attendance export (CSV via short-lived
+     link), `/sync/connect` verifies the licence with billing.
+  3. App: "Create a company" (Google sign-in), "Sign in with Google" on login, Company screen with the two
+     share buttons, add-employee screen (temp password + invite), export button. Plugins:
+     `@capgo/capacitor-social-login@7`, `@capacitor/share@7`, `@capacitor/browser@7`.
+  4. **Owner action:** in Google Cloud project 676141356881 (same as the website's GOOGLE_CLIENT_ID), create
+     an **Android OAuth client**: package `in.iotsoft.edgefolio`, SHA-1 (release key)
+     `33:1A:0E:20:A4:69:E8:EC:F7:B8:CC:D2:43:62:AC:1B:17:B5:1F:AF`.
