@@ -61,7 +61,7 @@ test('signup: Google + billing registration creates the company and signs the ow
     ['Ravi Builders', 'EF-TEST-1', 'ravi@gmail.com', 'app'],
   );
   assert.match(company.body.data.pcDownloadUrl, /\/download$/);
-  assert.match(company.body.data.appDownloadUrl, /\/download\/apk$/);
+  assert.match(company.body.data.appDownloadUrl, /play\.google\.com\/store\/apps\/details\?id=in\.iotsoft\.edgefolio$/);
 });
 
 test('signup: same Google email again → reuses its licence and signs in; phone of someone else → LICENCE_EXISTS', async () => {

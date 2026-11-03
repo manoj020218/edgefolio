@@ -33,7 +33,7 @@ function loadConfig(env = process.env) {
     googleClientIds: String(env.GOOGLE_CLIENT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
     // Shared on the owner's Company screen.
     pcDownloadUrl: env.PC_DOWNLOAD_URL || 'https://edgefolio.iotsoft.in/download',
-    appDownloadUrl: env.APP_DOWNLOAD_URL || 'https://edgefolio.iotsoft.in/download/apk',
+    appDownloadUrl: env.APP_DOWNLOAD_URL || 'https://play.google.com/store/apps/details?id=in.iotsoft.edgefolio',
   };
   if (nodeEnv === 'production' && cfg.jwtSecret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');

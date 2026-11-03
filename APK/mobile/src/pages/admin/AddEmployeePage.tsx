@@ -52,11 +52,16 @@ export default function AddEmployeePage() {
         title: 'Your EdgeFolio login',
         dialogTitle: `Send login to ${created.name}`,
         text: [
-          `Hi ${created.name}, mark your attendance from your phone with EdgeFolio by Jenix.`,
+          `Hi ${created.name}, you're invited to mark your attendance from your phone with EdgeFolio by Jenix.`,
+          ``,
           `1. Install the app: ${created.appDownloadUrl}`,
-          `2. Choose "Company code" and enter ${created.orgCode}`,
-          `3. Employee ID: ${created.empCode}`,
-          `   Temporary password: ${created.tempPassword} (you'll set your own after logging in)`,
+          `   (if Play Store says it is not available yet: https://edgefolio.iotsoft.in/download/apk)`,
+          `2. Open it, choose "Company code" and enter: ${created.orgCode}`,
+          `3. Log in with`,
+          `   Employee ID: ${created.empCode}`,
+          `   Temporary password: ${created.tempPassword}`,
+          `   (you'll set your own password after the first login)`,
+          `4. Set up Face ID once, then tap "Mark Attendance" every day.`,
         ].join('\n'),
       });
     } catch { /* closed */ }
@@ -94,7 +99,7 @@ export default function AddEmployeePage() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 px-5 py-6">
-      <h1 className="text-lg font-semibold text-slate-100">Add employee</h1>
+      <h1 className="text-lg font-semibold text-slate-100">Invite employee</h1>
       <div>
         <label className="mb-1 block text-sm text-slate-300" htmlFor="nm">Name</label>
         <input id="nm" className={input} value={name} onChange={(e) => setName(e.target.value)} />
@@ -117,7 +122,7 @@ export default function AddEmployeePage() {
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       <button type="submit" disabled={busy} className="w-full btn-primary py-3 font-semibold text-white disabled:opacity-50">
-        {busy ? 'Adding…' : 'Add employee'}
+        {busy ? 'Creating…' : 'Create login & invite'}
       </button>
     </form>
   );

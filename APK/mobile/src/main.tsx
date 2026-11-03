@@ -7,6 +7,9 @@ import { NetworkStatusProvider } from './lib/network';
 import { AuthedNotificationsProvider } from './lib/notifications';
 import '@fontsource-variable/plus-jakarta-sans';
 import './index.css';
+import { installRipples } from './lib/ripple';
+
+installRipples();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

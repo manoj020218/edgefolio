@@ -53,13 +53,17 @@ export default function CompanyPage() {
     void share('Install EdgeFolio for Windows', lines.join('\n'));
   }
 
+  // App-only company: every invite is personal - "Invite employee" creates the Employee ID and a
+  // temporary password and its message carries them. PC-managed company: HR issues logins in
+  // EdgeFolio for Windows, so this shares the app link + company code only.
   function shareInvite() {
     if (!c) return;
+    if (c.employeesManagedIn === 'app') { navigate('/admin/employees/new'); return; }
     void share('Join on EdgeFolio', [
       `Join ${c.companyName} on EdgeFolio by Jenix to mark your attendance from your phone.`,
       `1. Install the app: ${c.appDownloadUrl}`,
       `2. Open it, choose "Company code" and enter ${c.orgCode}`,
-      `3. Log in with your Employee ID and the password HR gives you.`,
+      `3. Log in with the Employee ID and password your HR sends you.`,
     ].join('\n'));
   }
 
@@ -126,12 +130,13 @@ export default function CompanyPage() {
 
       <div className="space-y-2.5">
         <button type="button" onClick={shareInvite} className={`${btn} btn-primary`}>
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20"><Send size={15} /></span> Invite employees
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
+            {c.employeesManagedIn === 'app' ? <UserPlus size={15} /> : <Send size={15} />}
+          </span>
+          {c.employeesManagedIn === 'app' ? 'Invite employee' : 'Invite employees'}
         </button>
         {c.employeesManagedIn === 'app' ? (
-          <button type="button" onClick={() => navigate('/admin/employees/new')} className={`${btn} btn-ghost`}>
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500/25 text-brand-300"><UserPlus size={15} /></span> Add employee
-          </button>
+          <p className="px-1 text-xs text-slate-400">Type the employee&rsquo;s name &mdash; the app creates their Employee ID and a temporary password, then sends the app link, company code and login in one message.</p>
         ) : (
           <p className="px-1 text-xs text-slate-400">Employees are managed in EdgeFolio for Windows on your office computer.</p>
         )}
