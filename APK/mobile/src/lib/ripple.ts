@@ -1,7 +1,11 @@
-// "Water drop" touch feedback for every .btn-primary / .btn-ghost: a soft splash plus an
-// expanding ring from the exact touch point (styles: .ef-ripple in index.css). One delegated
-// listener for the whole app, so no component needs to change.
-const SELECTOR = '.btn-primary, .btn-ghost';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
+// Touch feedback for the whole app, from one delegated listener (no component changes needed):
+//  • "Water drop" ripple on every .btn-primary / .btn-ghost (styles: .ef-ripple in index.css).
+//  • A light vibration on every button, tab and link: a firmer light tap for the main buttons,
+//    a soft selection "tick" for everything else. Turn off with localStorage['edgefolio.haptics']='off'.
+const RIPPLE_SELECTOR = '.btn-primary, .btn-ghost';
+const TAP_SELECTOR = 'button, a[href], [role="button"], [role="tab"], input[type="checkbox"], input[type="radio"], select';
 
 function spawn(btn: HTMLElement, x: number, y: number) {
   const r = btn.getBoundingClientRect();
@@ -18,13 +22,29 @@ function spawn(btn: HTMLElement, x: number, y: number) {
   }
 }
 
+function hapticsOn(): boolean {
+  try { return localStorage.getItem('edgefolio.haptics') !== 'off'; } catch { return true; }
+}
+
+let lastBuzz = 0;
+function buzz(strong: boolean) {
+  const now = Date.now();
+  if (now - lastBuzz < 60 || !hapticsOn()) return;   // no machine-gun buzzing on fast taps
+  lastBuzz = now;
+  const p = strong ? Haptics.impact({ style: ImpactStyle.Light }) : Haptics.selectionChanged();
+  void p.catch(() => { /* web / no vibrator */ });
+}
+
 export function installRipples(): void {
   document.addEventListener(
     'pointerdown',
     (e) => {
-      const btn = (e.target as HTMLElement | null)?.closest?.(SELECTOR) as HTMLElement | null;
-      if (!btn || (btn as HTMLButtonElement).disabled) return;
-      spawn(btn, e.clientX, e.clientY);
+      const target = e.target as HTMLElement | null;
+      const el = target?.closest?.(TAP_SELECTOR) as HTMLElement | null;
+      if (!el || (el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true') return;
+      const main = el.matches(RIPPLE_SELECTOR) ? el : (target?.closest?.(RIPPLE_SELECTOR) as HTMLElement | null);
+      if (main) spawn(main, e.clientX, e.clientY);
+      buzz(Boolean(main));
     },
     { passive: true },
   );
