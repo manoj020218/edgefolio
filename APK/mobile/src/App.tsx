@@ -19,6 +19,7 @@ import BroadcastPage from './pages/admin/BroadcastPage';
 import PasswordResetsPage from './pages/admin/PasswordResetsPage';
 import FaceRequestsPage from './pages/admin/FaceRequestsPage';
 import NotificationsPage from './pages/NotificationsPage';
+import UpdateBanner from './components/UpdateBanner';
 import PayrollPage from './pages/admin/PayrollPage';
 import EmployeeShell from './pages/employee/EmployeeShell';
 import HomePage from './pages/employee/HomePage';
@@ -114,6 +115,8 @@ export default function App() {
   const showEmployeeShell = !isAdmin || viewMode === 'employee';
 
   return (
+    <>
+    <UpdateBanner />
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
 
@@ -181,5 +184,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

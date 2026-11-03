@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { authApiPost, ApiError } from '../lib/api';
+import AppLogo from '../components/AppLogo';
 
 interface Props {
   onBack: () => void;
@@ -37,9 +38,7 @@ export default function ForgotPasswordPage({ onBack }: Props) {
     return (
       <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
-            E
-          </div>
+          <AppLogo />
           <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Request <span className="text-gradient">sent</span></h1>
           <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">Your HR-admin has been notified. They&rsquo;ll share a temporary password with you directly.</p>
         </div>
@@ -57,9 +56,7 @@ export default function ForgotPasswordPage({ onBack }: Props) {
       </button>
 
       <div className="mb-8 flex flex-col items-center text-center">
-        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
-          E
-        </div>
+        <AppLogo />
         <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Forgot <span className="text-gradient">Password</span></h1>
         <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">Enter your Employee ID or email. Your HR-admin will approve the request and share a temporary password with you.</p>
       </div>

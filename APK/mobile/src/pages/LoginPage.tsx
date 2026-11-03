@@ -5,6 +5,7 @@ import { apiGet, ApiError, isCloudModeSync, cachedOrgCodeSync, resetConnection, 
 import { googleIdToken } from '../lib/google';
 import { useAuth } from '../lib/auth';
 import ForgotPasswordPage from './ForgotPasswordPage';
+import AppLogo from '../components/AppLogo';
 
 interface LoginCheckResponse {
   allowed: boolean;
@@ -90,9 +91,7 @@ export default function LoginPage() {
   return (
     <div className="animate-enter flex min-h-full flex-col justify-center px-7 py-10">
       <div className="mb-10 flex flex-col items-center">
-        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
-          E
-        </div>
+        <AppLogo />
         <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Welcome to <span className="text-gradient">EdgeFolio</span></h1>
         <p className="text-[13px] text-[#9aa0b8]">Sign in to mark attendance &amp; view your pay</p>
       </div>

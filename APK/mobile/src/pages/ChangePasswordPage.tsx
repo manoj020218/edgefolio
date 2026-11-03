@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { authApiPost, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import AppLogo from '../components/AppLogo';
 
 interface Props {
   // Set when reached voluntarily from Profile (not the forced gate) — called after
@@ -48,9 +49,7 @@ export default function ChangePasswordPage({ onDone }: Props) {
   return (
     <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">
       <div className="mb-8 flex flex-col items-center text-center">
-        <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-brand text-3xl font-extrabold text-white shadow-glow">
-          E
-        </div>
+        <AppLogo />
         <h1 className="mb-1.5 text-[26px] font-extrabold leading-tight text-[#f4f5fb]">Set a New <span className="text-gradient">Password</span></h1>
         <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">You&rsquo;re using a temporary password. Set your own before continuing.</p>
       </div>

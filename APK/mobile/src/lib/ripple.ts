@@ -2,8 +2,8 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 // Touch feedback for the whole app, from one delegated listener (no component changes needed):
 //  • "Water drop" ripple on every .btn-primary / .btn-ghost (styles: .ef-ripple in index.css).
-//  • A light vibration on every button, tab and link: a firmer light tap for the main buttons,
-//    a soft selection "tick" for everything else. Turn off with localStorage['edgefolio.haptics']='off'.
+//  • A vibration on every button, tab and link: medium tap for the main buttons, light tap for
+//    everything else. Turn off with localStorage['edgefolio.haptics']='off'.
 const RIPPLE_SELECTOR = '.btn-primary, .btn-ghost';
 const TAP_SELECTOR = 'button, a[href], [role="button"], [role="tab"], input[type="checkbox"], input[type="radio"], select';
 
@@ -31,7 +31,8 @@ function buzz(strong: boolean) {
   const now = Date.now();
   if (now - lastBuzz < 60 || !hapticsOn()) return;   // no machine-gun buzzing on fast taps
   lastBuzz = now;
-  const p = strong ? Haptics.impact({ style: ImpactStyle.Light }) : Haptics.selectionChanged();
+  // selectionChanged() is too faint / ignored on many phones (MIUI) — use real impacts.
+  const p = Haptics.impact({ style: strong ? ImpactStyle.Medium : ImpactStyle.Light });
   void p.catch(() => { /* web / no vibrator */ });
 }
 
