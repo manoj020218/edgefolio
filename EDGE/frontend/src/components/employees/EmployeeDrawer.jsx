@@ -5,7 +5,7 @@ import { Button, Badge, Input, Select } from '../atomic';
 import { CreatableSelect } from '../shared/CreatableSelect';
 import {
   updateEmployee, getCustomFields, getEmployeeCustomValues, setEmployeeCustomValues, getFaceStatus,
-  getSalaryPolicies, getSalaryStructures, getDepartments, createDepartment, getDesignations, createDesignation,
+  getSalaryPolicies, getSalaryStructures, getDepartments, createDepartment, getDesignations, createDesignation, getShifts,
   estimateSalaryStructure,
 } from '../../services/api';
 
@@ -49,6 +49,7 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
   const [salaryStructures, setSalaryStructures] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
+  const [shifts, setShifts] = useState([]);
   const [estimate, setEstimate] = useState(null);
   const [estimating, setEstimating] = useState(false);
   const estimateTimer = useRef(null);
@@ -58,6 +59,7 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
     getSalaryStructures().then((res) => setSalaryStructures(res.data || [])).catch(() => {});
     getDepartments().then((res) => setDepartments(res.data || [])).catch(() => {});
     getDesignations().then((res) => setDesignations(res.data || [])).catch(() => {});
+    getShifts().then((res) => setShifts(res.data || [])).catch(() => {});
   }, []);
 
   // Live "what would this actually pay out" preview while HR adjusts Basic,
@@ -84,6 +86,7 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
       phone: employee.phone || '',
       department: employee.department || '',
       designation: employee.designation || '',
+      shiftId: employee.shiftId || '',
       salary: employee.salary || '',
       status: employee.status || 'active',
       workType: employee.workType || 'office',
@@ -207,6 +210,10 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
                   <InfoRow label="Phone" value={employee.phone} />
                   <InfoRow label="Department" value={employee.department} />
                   <InfoRow label="Designation" value={employee.designation || 'Not set'} />
+                  <InfoRow label="Shift" value={(() => {
+                    const sh = shifts.find((x) => x.shiftId === employee.shiftId);
+                    return sh ? `${sh.shiftName} (${sh.startTime}–${sh.endTime}${sh.isOvernight ? ', overnight' : ''})` : 'Not set (day shift)';
+                  })()} />
                   <InfoRow label="Basic Salary" value={employee.salary ? `₹${Number(employee.salary).toLocaleString()}` : null} />
                   <InfoRow label="Joining Date" value={employee.joiningDate} />
                   <InfoRow label="Salary Structure" value={
@@ -252,6 +259,22 @@ export function EmployeeDrawer({ employee, onClose, onUpdated }) {
                       options={designations.map((d) => ({ value: d.name, label: d.name }))}
                       onCreate={async (name) => { const res = await createDesignation({ name }); setDesignations((p) => [...p, res.data]); return res.data; }}
                       createLabel="+ Create New Designation" placeholder="— Designation —" />
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Shift</label>
+                      <select
+                        value={form.shiftId || ''}
+                        onChange={(e) => setForm((p) => ({ ...p, shiftId: e.target.value }))}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500"
+                      >
+                        <option value="">Not set (day shift)</option>
+                        {shifts.map((sh) => (
+                          <option key={sh.shiftId} value={sh.shiftId}>
+                            {sh.shiftName} ({sh.startTime}–{sh.endTime}{sh.isOvernight ? ', overnight' : ''})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-slate-500">Night shift (e.g. 20:00–04:00): early-morning punches count on the evening the shift started.</p>
+                    </div>
                   </div>
 
                   {(estimating || estimate) && (

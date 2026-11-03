@@ -29,6 +29,13 @@ function runMigrations(db) {
       db.exec(`ALTER TABLE attendance_records ADD COLUMN ${col} ${i === 3 ? 'INTEGER NOT NULL DEFAULT 0' : `TEXT${i === 1 ? " NOT NULL DEFAULT 'office'" : ''}`}`);
     }
   });
+  if (!columnExists(db, 'attendance_records', 'overnight')) {
+    db.exec('ALTER TABLE attendance_records ADD COLUMN overnight INTEGER DEFAULT 0');
+  }
+  // employee -> shift link (used by services/shiftDay.js to resolve night shifts)
+  if (!columnExists(db, 'employees', 'shift_id')) {
+    db.exec('ALTER TABLE employees ADD COLUMN shift_id TEXT');
+  }
   // users
   if (!columnExists(db, 'users', 'password_must_change')) {
     db.exec('ALTER TABLE users ADD COLUMN password_must_change INTEGER NOT NULL DEFAULT 0');

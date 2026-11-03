@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { getDb } = require('../config/database');
 const { nowTime, toISODate } = require('../utils/dateUtils');
+const { workedHours } = require('../services/shiftDay');
 
 function listAttendanceByDate(date) {
   const db = getDb();
@@ -100,10 +101,7 @@ function toMins(timeValue) {
 }
 
 function deriveHoursWorked(checkIn, checkOut) {
-  const inMins = toMins(checkIn);
-  const outMins = toMins(checkOut);
-  if (inMins === null || outMins === null) return 0;
-  return Number(Math.max((outMins - inMins) / 60, 0).toFixed(2));
+  return workedHours(checkIn, checkOut);
 }
 
 function upsertCheckIn(memberId, date = toISODate()) {
@@ -181,6 +179,9 @@ function upsertAttendanceEvent(payload) {
   const checkOut = payload.checkOut ?? payload.check_out ?? existing?.check_out ?? null;
   const hoursWorked =
     payload.hoursWorked ?? payload.hours_worked ?? deriveHoursWorked(checkIn, checkOut);
+  const overnight = payload.overnight != null
+    ? (payload.overnight ? 1 : 0)
+    : (checkIn && checkOut && String(checkOut).slice(0, 5) < String(checkIn).slice(0, 5) ? 1 : 0);
   const status =
     payload.status || (checkIn || checkOut ? 'present' : existing?.status || 'absent');
   const faceMatch = payload.faceMatch ?? payload.face_match ?? existing?.face_match ?? 0;
@@ -196,8 +197,8 @@ function upsertAttendanceEvent(payload) {
     db.prepare(
       `
       INSERT INTO attendance_records (
-        event_id, member_id, date, check_in, check_out, status, hours_worked, face_match, leave_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        event_id, member_id, date, check_in, check_out, status, hours_worked, face_match, leave_type, overnight
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     ).run(
       eventId,
@@ -209,6 +210,7 @@ function upsertAttendanceEvent(payload) {
       Number(hoursWorked || 0),
       Number(faceMatch || 0),
       leaveType,
+      overnight,
     );
 
     return db.prepare('SELECT * FROM attendance_records WHERE event_id = ?').get(eventId);
@@ -217,7 +219,7 @@ function upsertAttendanceEvent(payload) {
   db.prepare(
     `
     UPDATE attendance_records
-    SET check_in = ?, check_out = ?, status = ?, hours_worked = ?, face_match = ?, leave_type = ?, updated_at = CURRENT_TIMESTAMP
+    SET check_in = ?, check_out = ?, status = ?, hours_worked = ?, face_match = ?, leave_type = ?, overnight = ?, updated_at = CURRENT_TIMESTAMP
     WHERE member_id = ? AND date = ?
     `,
   ).run(
@@ -227,6 +229,7 @@ function upsertAttendanceEvent(payload) {
     Number(hoursWorked || 0),
     Number(faceMatch || 0),
     leaveType,
+    overnight,
     memberId,
     date,
   );
@@ -324,7 +327,7 @@ function getLateEarlyStats(memberId, fromDate, toDate, lateGraceMinutes = 10, ea
   const shiftEnd = toMins(whRow?.end_time) ?? 24 * 60;
 
   const rows = db.prepare(
-    `SELECT check_in, check_out FROM attendance_records
+    `SELECT check_in, check_out, overnight FROM attendance_records
      WHERE member_id = ? AND date BETWEEN ? AND ? AND status = 'present'`,
   ).all(memberId, fromDate, toDate);
 
@@ -336,7 +339,7 @@ function getLateEarlyStats(memberId, fromDate, toDate, lateGraceMinutes = 10, ea
       if (inMins > shiftStart + lateGraceMinutes) lateDays += 1;
       else if (inMins < shiftStart - earlyGraceMinutes) earlyArrivalDays += 1;
     }
-    if (outMins !== null && outMins < shiftEnd - earlyGraceMinutes) earlyLeaveDays += 1;
+    if (!r.overnight && outMins !== null && outMins < shiftEnd - earlyGraceMinutes) earlyLeaveDays += 1;
   }
   return { lateDays, earlyLeaveDays, earlyArrivalDays };
 }

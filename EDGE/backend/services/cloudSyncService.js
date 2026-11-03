@@ -192,6 +192,8 @@ function runSync(trigger = 'interval') {
           machineEmpId: known.has(p.empId) ? p.empId : `cloud:${p.empId}`,
           mappedEmployeeId: known.has(p.empId) ? p.empId : null,
           punchDate: p.date, punchTime: p.time,
+          // cloud sends the shift's start date for night shifts; commit falls back to shiftDay when absent
+          workDate: p.workDate || null,
           direction: p.eventType === 'out' ? 'out' : 'in',
           mode: `cloud-${p.workType || 'app'}`,
           remark: p.geofenceOk === false ? 'outside-geofence' : null,

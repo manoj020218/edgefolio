@@ -1,5 +1,6 @@
 'use strict';
 const { getDb } = require('../config/database');
+const { workDateFor, addDays } = require('../services/shiftDay');
 
 function stageRecords(batchId, sourceType, records) {
   const db = getDb();
@@ -156,12 +157,36 @@ function commitMappedRecords(batchId = null) {
   const punches = staged.filter(r => r.record_type === 'punch');
   const dailies = staged.filter(r => r.record_type === 'daily');
 
-  // Group ALOG punches by (employee, date) → find first-in and last-out
+  // Group punches by (employee, WORK date) -> first-in and last-out. The work date is the date a
+  // shift started, so a 20:00 -> 04:00 night shift stays one record even though its last punch is
+  // on the next calendar date (see services/shiftDay.js). Punches carry real date+time stamps.
+  const norm = (t) => String(t).length === 5 ? `${t}:00` : String(t);
+  const mk = (date, time) => ({ stamp: `${date} ${norm(time)}`, date, time });
   const punchGroups = {};
+  const lookupInBatch = (empId, date) => {
+    const g = punchGroups[`${empId}::${date}`];
+    if (!g || !g.ins.length) return db
+      .prepare('SELECT check_in, check_out FROM attendance_records WHERE member_id = ? AND date = ?')
+      .get(empId, date) || null;
+    const ins = g.ins.map((x) => x.stamp).sort();
+    const outs = g.outs.map((x) => x.stamp).sort();
+    const first = g.ins.find((x) => x.stamp === ins[0]);
+    const last = outs.length ? outs[outs.length - 1] : null;
+    return { check_in: first.time, check_out: last && last !== ins[0] ? last.slice(11) : null };
+  };
+  const rawWorkDate = (p) => {
+    try { const w = JSON.parse(p.raw_json || '{}').workDate; return /^\d{4}-\d{2}-\d{2}$/.test(w || '') ? w : null; }
+    catch { return null; }
+  };
+  punches.sort((x, y) =>
+    String(x.punch_date).localeCompare(String(y.punch_date)) ||
+    String(x.punch_time || '').localeCompare(String(y.punch_time || '')));
   for (const p of punches) {
-    const key = `${p.mapped_employee_id}::${p.punch_date}`;
+    const workDate = (p.punch_time && (rawWorkDate(p) || workDateFor(db, p.mapped_employee_id, p.punch_date, p.punch_time, lookupInBatch)))
+      || p.punch_date;
+    const key = `${p.mapped_employee_id}::${workDate}`;
     if (!punchGroups[key]) {
-      punchGroups[key] = { employeeId: p.mapped_employee_id, date: p.punch_date, ins: [], outs: [], ids: [] };
+      punchGroups[key] = { employeeId: p.mapped_employee_id, date: workDate, ins: [], outs: [], ids: [] };
     }
     // Some terminals (e.g. this device's ALOG export — see alogService.js) don't
     // report a real per-punch direction at all; every row's "direction" ends up
@@ -173,15 +198,15 @@ function commitMappedRecords(batchId = null) {
     // The U5 face terminal reports no direction either; older U5 staging rows were
     // hard-coded 'in', which meant a U5 day never got a check-out. Treat U5 as directionless.
     const direction = p.source_type === 'u5_face' ? null : p.direction;
-    if (p.punch_time && (direction === 'in'  || direction == null)) punchGroups[key].ins.push(p.punch_time);
-    if (p.punch_time && (direction === 'out' || direction == null)) punchGroups[key].outs.push(p.punch_time);
+    if (p.punch_time && (direction === 'in'  || direction == null)) punchGroups[key].ins.push(mk(p.punch_date, p.punch_time));
+    if (p.punch_time && (direction === 'out' || direction == null)) punchGroups[key].outs.push(mk(p.punch_date, p.punch_time));
     punchGroups[key].ids.push(p.id);
   }
 
   // Merge with the attendance already saved for that day. Punches for one day can arrive
   // in several commits (the U5 poll stages new punches every 30 s); without this a later
   // commit replaced the earlier check-in with its own, later, first punch.
-  const getExisting = db.prepare('SELECT check_in, check_out FROM attendance_records WHERE member_id = ? AND date = ?');
+  const getExisting = db.prepare('SELECT check_in, check_out, overnight FROM attendance_records WHERE member_id = ? AND date = ?');
 
   const markDone  = db.prepare("UPDATE machine_import_staging SET status = 'committed' WHERE id = ?");
   const markError = db.prepare("UPDATE machine_import_staging SET status = 'error' WHERE id = ?");
@@ -192,18 +217,29 @@ function commitMappedRecords(batchId = null) {
   db.transaction(() => {
     for (const group of Object.values(punchGroups)) {
       const existing = getExisting.get(group.employeeId, group.date);
-      const ins  = group.ins.concat(existing && existing.check_in  ? [existing.check_in]  : []).sort();
-      const outs = group.outs.concat(existing && existing.check_out ? [existing.check_out] : []).sort();
-      const checkIn  = ins[0] || null;
-      let   checkOut = outs[outs.length - 1] || null;
+      const ins  = group.ins.slice();
+      const outs = group.outs.slice();
+      if (existing && existing.check_in) ins.push(mk(group.date, existing.check_in));
+      if (existing && existing.check_out) {
+        const nextDay = existing.overnight || (existing.check_in && existing.check_out < existing.check_in);
+        outs.push(mk(nextDay ? addDays(group.date, 1) : group.date, existing.check_out));
+      }
+      ins.sort((x, y) => x.stamp.localeCompare(y.stamp));
+      outs.sort((x, y) => x.stamp.localeCompare(y.stamp));
+      const inP  = ins[0] || null;
+      let   outP = outs[outs.length - 1] || null;
       // A directionless single punch is both "first" and "last" -- that's a check-in only.
-      if (checkOut && checkOut === checkIn) checkOut = null;
+      if (outP && inP && outP.stamp === inP.stamp) outP = null;
+      const checkIn  = inP ? inP.time : null;
+      const checkOut = outP ? outP.time : null;
+      const overnight = outP && outP.date > group.date ? 1 : 0;
       try {
         upsertAttendanceEvent({
           memberId: group.employeeId,
           date: group.date,
           checkIn,
           checkOut,
+          overnight,
           status: checkIn || checkOut ? 'present' : 'absent',
           faceMatch: 0,
           attendance_mode: 'machine',

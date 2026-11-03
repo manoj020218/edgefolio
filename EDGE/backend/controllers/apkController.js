@@ -8,6 +8,21 @@ const { getJwtSecret } = require('../config/secrets');
 const fcm = require('../services/fcmService');
 const { notifyEmployees } = require('../services/appNotifyService');
 const { toIstParts, todayIST } = require('../utils/dateUtils');
+const { workDateFor, workedHours, stampMs, addDays: addDaysIso } = require('../services/shiftDay');
+
+const MAX_SHIFT_MS = 20 * 3600000;
+
+// Night shifts: the phone's open shift is the employee's latest punch if it is an 'in' made on
+// the same calendar date, or within the last 20h (an 8 PM check-in is still open at 4 AM).
+// Returns { workDate } (the attendance_records date the shift belongs to) or null.
+function findOpenMobileShift(db, empId, date, time) {
+  const last = db
+    .prepare('SELECT event_type, date, time FROM mobile_punch_events WHERE member_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
+    .get(empId);
+  if (!last || last.event_type !== 'in') return null;
+  if (last.date !== date && stampMs(date, time) - stampMs(last.date, last.time) > MAX_SHIFT_MS) return null;
+  return { workDate: workDateFor(db, empId, last.date, last.time), inDate: last.date, inTime: last.time };
+}
 const payrollEngine = require('../services/payrollEngine');
 const { serializePayrollRun, serializePayslip } = require('../utils/serializers');
 
@@ -143,20 +158,20 @@ function getTodayStatusHandler(req, res, next) {
     const empId = req.user?.empId;
     if (!empId) throw createHttpError(401, 'Not authenticated as APK employee');
 
-    const today = todayIST();
+    const nowParts = toIstParts(new Date());
+    const today = nowParts.date;
     const db = getDb();
 
+    const open = findOpenMobileShift(db, empId, today, nowParts.time);
+    const attendanceDate = open ? open.workDate : workDateFor(db, empId, today, nowParts.time);
     const record = db
       .prepare('SELECT check_in, check_out, hours_worked, status FROM attendance_records WHERE member_id = ? AND date = ?')
-      .get(empId, today);
+      .get(empId, attendanceDate);
     // check_in/check_out on the record are the day's first-in/last-out summary
     // (payroll-facing) — they don't tell you whether the employee is mid a
     // later re-check-in cycle after an earlier checkout today, so "currently
     // working" is derived separately from the latest raw punch instead.
-    const lastPunch = db
-      .prepare('SELECT event_type FROM mobile_punch_events WHERE member_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1')
-      .get(empId, today);
-    const currentlyWorking = lastPunch?.event_type === 'in';
+    const currentlyWorking = Boolean(open);
     const todayAttendance = record
       ? { checkIn: record.check_in, checkOut: record.check_out, hoursWorked: record.hours_worked, status: record.status, currentlyWorking }
       : null;
@@ -295,11 +310,14 @@ async function mobileAttendanceHandler(req, res, next) {
     // — convert to IST wall-clock date/time rather than reading UTC components
     // directly, or "today" and the check-in clock time both silently read 5.5
     // hours early (and a full calendar day early before 05:30 IST).
-    const { date: today, time: checkIn } = toIstParts(timestamp);
+    const { date: realDate, time: checkIn } = toIstParts(timestamp);
     const db = getDb();
 
     const emp = db.prepare('SELECT id, name FROM employees WHERE id = ?').get(empId);
     if (!emp) throw createHttpError(404, 'Employee not found');
+
+    // Night shifts: an early-morning punch belongs to the previous evening's work date.
+    const today = workDateFor(db, empId, realDate, checkIn);
 
     // Confirm an active HR assignment for this work type today
     const assignment = db
@@ -326,8 +344,8 @@ async function mobileAttendanceHandler(req, res, next) {
     // earlier finished cycle's check_out would otherwise be indistinguishable
     // from a still-open one.
     const lastPunch = db
-      .prepare('SELECT event_type, time FROM mobile_punch_events WHERE member_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1')
-      .get(empId, today);
+      .prepare('SELECT event_type, time FROM mobile_punch_events WHERE member_id = ? AND date IN (?, ?) ORDER BY created_at DESC, rowid DESC LIMIT 1')
+      .get(empId, today, realDate);
     if (lastPunch?.event_type === 'in') {
       return sendOk(res, { alreadyMarked: true, checkedInAt: lastPunch.time });
     }
@@ -337,7 +355,7 @@ async function mobileAttendanceHandler(req, res, next) {
     db.prepare(
       `INSERT INTO mobile_punch_events (id, member_id, date, event_type, time, work_type, face_match, location_json)
        VALUES (?, ?, ?, 'in', ?, ?, ?, ?)`,
-    ).run(punchId, empId, today, checkIn, workType, Number(similarity || 0), JSON.stringify(location));
+    ).run(punchId, empId, realDate, checkIn, workType, Number(similarity || 0), JSON.stringify(location));
 
     const existing = db
       .prepare('SELECT event_id FROM attendance_records WHERE member_id = ? AND date = ?')
@@ -384,21 +402,21 @@ async function mobileCheckoutHandler(req, res, next) {
     const { timestamp } = req.body || {};
     if (!timestamp) throw createHttpError(400, 'timestamp is required');
 
-    const { date: today, time: checkOutTime } = toIstParts(timestamp);
+    const { date: realDate, time: checkOutTime } = toIstParts(timestamp);
     const db = getDb();
 
     // Must be mid an open check-in (see mobileAttendanceHandler) — mirrors
     // desktop upsertCheckOut refusing a checkout with no check-in on file.
-    const lastPunch = db
-      .prepare('SELECT event_type FROM mobile_punch_events WHERE member_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1')
-      .get(empId, today);
-    if (lastPunch?.event_type !== 'in') {
+    // A night shift's check-in was made the previous evening (<= 20h ago).
+    const open = findOpenMobileShift(db, empId, realDate, checkOutTime);
+    if (!open) {
       throw createHttpError(404, 'No active check-in found for today');
     }
+    const workDate = open.workDate;
 
     const record = db
       .prepare('SELECT event_id, check_in, attendance_mode FROM attendance_records WHERE member_id = ? AND date = ?')
-      .get(empId, today);
+      .get(empId, workDate);
     if (!record || !record.check_in) {
       throw createHttpError(404, 'No check-in found for today');
     }
@@ -408,18 +426,18 @@ async function mobileCheckoutHandler(req, res, next) {
     db.prepare(
       `INSERT INTO mobile_punch_events (id, member_id, date, event_type, time, work_type)
        VALUES (?, ?, ?, 'out', ?, ?)`,
-    ).run(punchId, empId, today, checkOutTime, workType);
+    ).run(punchId, empId, realDate, checkOutTime, workType);
 
     // hours_worked stays first-in → LATEST-out (record.check_in never changes
     // once set — see mobileAttendanceHandler), so re-checking-in and out again
-    // extends the same day's total rather than starting a new count.
-    const [inH, inM] = record.check_in.split(':').map(Number);
-    const [outH, outM] = checkOutTime.split(':').map(Number);
-    const hoursWorked = Number(Math.max(0, (outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2));
+    // extends the same day's total rather than starting a new count. A check-out
+    // earlier on the clock than the check-in is the next morning (night shift).
+    const hoursWorked = workedHours(record.check_in, checkOutTime);
+    const overnight = realDate !== workDate ? 1 : 0;
 
     db.prepare(
-      `UPDATE attendance_records SET check_out = ?, hours_worked = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ?`,
-    ).run(checkOutTime, hoursWorked, record.event_id);
+      `UPDATE attendance_records SET check_out = ?, hours_worked = ?, overnight = ?, updated_at = CURRENT_TIMESTAMP WHERE event_id = ?`,
+    ).run(checkOutTime, hoursWorked, overnight, record.event_id);
 
     const emp = db.prepare('SELECT name FROM employees WHERE id = ?').get(empId);
     if (emp) notifyWatchers(db, empId, emp.name, 'checkout', checkOutTime, workType).catch(() => {});
@@ -451,7 +469,8 @@ async function batchSyncHandler(req, res, next) {
       for (const r of records) {
         try {
           if (!r.empId || !r.timestamp || !['tour', 'wfh'].includes(r.workType)) { failed++; continue; }
-          const { date: today, time: checkIn } = toIstParts(r.timestamp);
+          const { date: realDate, time: checkIn } = toIstParts(r.timestamp);
+          const today = workDateFor(db, r.empId, realDate, checkIn);
           const mode = r.workType === 'tour' ? 'mobile-tour' : 'mobile-wfh';
           const result = insert.run(
             randomUUID(), r.empId, today, checkIn,
@@ -477,33 +496,29 @@ async function batchSyncHandler(req, res, next) {
 function liveFeedHandler(req, res, next) {
   try {
     const db = getDb();
-    const today = todayIST();
+    const nowParts = toIstParts(new Date());
+    const today = nowParts.date;
+    const nowHHMM = nowParts.time.slice(0, 5);
 
     const total = db.prepare("SELECT COUNT(*) AS n FROM employees WHERE status = 'active'").get().n;
 
     const feed = db
       .prepare(
-        `SELECT ar.event_id, ar.member_id, ar.check_in, ar.check_out, ar.attendance_mode, ar.status,
+        `SELECT ar.event_id, ar.member_id, ar.date, ar.check_in, ar.check_out, ar.attendance_mode, ar.status,
                 e.name, e.department, e.designation, e.emp_code
          FROM attendance_records ar
          JOIN employees e ON e.id = ar.member_id
-         WHERE ar.date = ?
+         WHERE ar.date = ? OR (ar.date = ? AND ar.check_out IS NULL AND ar.check_in >= '16:00')
          ORDER BY ar.check_in DESC`,
       )
-      .all(today);
-
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      .all(today, addDaysIso(today, -1))
+      // yesterday's still-open evening check-ins are night-shift workers on shift right now
+      .filter((r) => r.date === today || stampMs(today, nowHHMM) - stampMs(r.date, r.check_in) <= MAX_SHIFT_MS);
 
     const mapped = feed.map((r) => {
       let hoursWorked = 0;
       if (r.check_in) {
-        const [ih, im] = r.check_in.split(':').map(Number);
-        const inMinutes = ih * 60 + im;
-        const endMinutes = r.check_out
-          ? r.check_out.split(':').map(Number).reduce((h, m, i) => i === 0 ? h + m * 60 : h + m, 0)
-          : nowMinutes;
-        hoursWorked = Math.max(0, (endMinutes - inMinutes) / 60);
+        hoursWorked = workedHours(r.check_in, r.check_out || nowHHMM);
       }
       return {
         empId: r.member_id,

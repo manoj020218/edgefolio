@@ -101,6 +101,9 @@ function updateEmployee(id, payload) {
     salary_structure_group_id: payload.salaryStructureGroupId !== undefined
       ? (payload.salaryStructureGroupId || null)
       : (payload.salary_structure_group_id !== undefined ? (payload.salary_structure_group_id || null) : existing.salary_structure_group_id),
+    shift_id: payload.shiftId !== undefined
+      ? (payload.shiftId || null)
+      : (existing.shift_id ?? null),
     updated_at: new Date().toISOString(),
   };
 
@@ -114,6 +117,7 @@ function updateEmployee(id, payload) {
         bank_name=@bank_name, payment_mode=@payment_mode,
         salary_policy_group_id=@salary_policy_group_id,
         salary_structure_group_id=@salary_structure_group_id,
+        shift_id=@shift_id,
         updated_at=@updated_at
     WHERE id=@id
   `).run(next);
@@ -140,6 +144,10 @@ function patchEmployee(id, fields) {
   if ('appRole' in fields) {
     updates.push('app_role = ?');
     values.push(fields.appRole);
+  }
+  if ('shiftId' in fields) {
+    updates.push('shift_id = ?');
+    values.push(fields.shiftId || null);
   }
   if ('salaryPolicyGroupId' in fields) {
     updates.push('salary_policy_group_id = ?');
