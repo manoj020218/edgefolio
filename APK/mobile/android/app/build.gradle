@@ -17,8 +17,8 @@ android {
         applicationId "in.iotsoft.edgefolio"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 45
-        versionName "1.0.35"
+        versionCode 46
+        versionName "1.0.36"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -40,6 +40,8 @@ android {
         release {
             minifyEnabled true
             shrinkResources true
+            // Bundle native debug symbols (TFLite / ML Kit .so) so Play can symbolicate native crashes & ANRs.
+            ndk { debugSymbolLevel 'SYMBOL_TABLE' }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
