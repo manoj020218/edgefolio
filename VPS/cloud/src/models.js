@@ -91,8 +91,9 @@ const punchSchema = new Schema({
   empId: { type: String, required: true },
   eventType: { type: String, enum: ['in', 'out'], required: true },
   at:   { type: Date, required: true },                // UTC instant from the phone
-  date: { type: String, required: true },              // org-local YYYY-MM-DD
+  date: { type: String, required: true },              // org-local YYYY-MM-DD of this instant
   time: { type: String, required: true },              // org-local HH:MM:SS
+  workDate: { type: String, default: null },           // shift start date (night shift: the evening's date)
   workType: { type: String, default: null },           // office | tour | wfh
   source:   { type: String, default: 'app' },          // app | app-offline | machine
   faceMatch: { type: Number, default: 0 },
@@ -117,6 +118,9 @@ const daySchema = new Schema({
   date:  { type: String, required: true },
   checkIn:  { type: String, default: null },
   checkOut: { type: String, default: null },
+  checkInAt:  { type: Date, default: null },           // exact instants (night shifts cross midnight)
+  checkOutAt: { type: Date, default: null },
+  overnight:  { type: Boolean, default: false },       // check-out on the next calendar day
   hoursWorked: { type: Number, default: 0 },
   status: { type: String, default: 'present' },
   mode:   { type: String, default: null },              // mobile-office | mobile-tour | mobile-wfh

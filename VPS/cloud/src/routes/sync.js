@@ -177,7 +177,7 @@ function syncRouter({ billing } = {}) {
     const page = rows.slice(0, limit);
     sendOk(res, {
       punches: page.map((p) => ({
-        seq: p.seq, empId: p.empId, eventType: p.eventType, at: p.at, date: p.date, time: p.time,
+        seq: p.seq, empId: p.empId, eventType: p.eventType, at: p.at, date: p.date, time: p.time, workDate: p.workDate || p.date,
         workType: p.workType, source: p.source, faceMatch: p.faceMatch, geofenceOk: p.geofenceOk,
         location: p.location && p.location.lat != null ? { lat: p.location.lat, lon: p.location.lon, accuracy: p.location.accuracy } : null,
       })),

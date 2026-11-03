@@ -19,6 +19,7 @@
  */
 const crypto = require('crypto');
 const express = require('express');
+const { toLocalParts, isoLocal, instantOf, workedBetween, offsetLabel } = require('../lib/time');
 const jwt = require('jsonwebtoken');
 const { Organisation, Employee } = require('../models');
 const { forOrg } = require('../tenancy');
@@ -228,7 +229,8 @@ function ownerRouter(config, { google, billing }) {
   r.get('/reports/attendance/link', auth, requireRole('owner', 'hr-admin'), ah(async (req, res) => {
     const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : null;
     if (!month) throw httpError(400, 'month=YYYY-MM is required');
-    const t = jwt.sign({ purpose: 'report-attendance', orgId: req.user.orgId, month }, config.jwtSecret, { expiresIn: '10m', algorithm: 'HS256' });
+    const format = req.query.format === 'excel' ? 'excel' : 'csv';
+    const t = jwt.sign({ purpose: 'report-attendance', orgId: req.user.orgId, month, format }, config.jwtSecret, { expiresIn: '10m', algorithm: 'HS256' });
     sendOk(res, { url: `${config.publicBaseUrl}/api/v1/reports/attendance.csv?t=${encodeURIComponent(t)}`, expiresInSec: 600 });
   }));
 
@@ -252,16 +254,39 @@ function reportsRouter(config) {
       db.Employee.find({}, { empId: 1, empCode: 1, name: 1, department: 1 }).lean(),
     ]);
     const byId = new Map(emps.map((e) => [e.empId, e]));
-    const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const lines = [['Date', 'Employee ID', 'Name', 'Department', 'Check-in', 'Check-out', 'Hours', 'Status', 'Mode'].join(',')];
+    // Column contract (stable — software may parse it):
+    //  work_date        YYYY-MM-DD, the shift's START date (a night shift 20:00→04:00 is one row)
+    //  employee_id      Employee ID exactly as stored (text; never a number)
+    //  employee_name, department   text; department is "" when not set
+    //  check_in/out     ISO 8601 local time WITH offset, e.g. 2026-11-03T20:02:11+05:30 ("" if missing)
+    //  worked_minutes   whole minutes between first check-in and last check-out (rounded)
+    //  worked_hours_2dp worked_minutes / 60, rounded half-up to 2 decimals
+    //  status, work_type (office | tour | wfh), overnight (yes | no), utc_offset (+05:30)
+    // format=csv: RFC 4180, UTF-8 WITHOUT BOM, CRLF. format=excel: same plus a UTF-8 BOM (so Excel
+    // shows non-English names) and employee_id written as ="0012" so Excel keeps leading zeros.
+    const excel = p.format === 'excel';
+    const tz = org.tzOffsetMin ?? 330;
+    const esc = (v) => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const idCell = (id) => (excel && id ? '"=' + '"'.repeat(2) + String(id).replace(/"/g, '"'.repeat(4)) + '"'.repeat(3) : esc(id ?? ''));
+    const lines = [['work_date', 'employee_id', 'employee_name', 'department', 'check_in', 'check_out', 'worked_minutes', 'worked_hours_2dp', 'status', 'work_type', 'overnight', 'utc_offset'].join(',')];
     for (const d of days) {
       const e = byId.get(d.empId) || {};
-      lines.push([d.date, e.empCode, e.name, e.department, d.checkIn, d.checkOut, d.hoursWorked, d.status, (d.mode || '').replace('mobile-', '')].map(esc).join(','));
+      const inAt = d.checkInAt || instantOf(d.date, d.checkIn, tz);
+      let outAt = d.checkOutAt || instantOf(d.date, d.checkOut, tz);
+      if (outAt && inAt && outAt < inAt) outAt = new Date(outAt.getTime() + 86400000);   // old overnight rows
+      const w = workedBetween(inAt, outAt);
+      const overnight = Boolean(outAt && toLocalParts(outAt, tz).date !== d.date);
+      lines.push([
+        esc(d.date), idCell(e.empCode), esc(e.name ?? ''), esc(e.department ?? ''),
+        esc(isoLocal(inAt, tz)), esc(isoLocal(outAt, tz)),
+        outAt ? w.minutes : '', outAt ? w.hours.toFixed(2) : '',
+        esc(d.status || ''), esc((d.mode || '').replace('mobile-', '')), overnight ? 'yes' : 'no', offsetLabel(tz),
+      ].join(','));
     }
-    const fname = `attendance-${org.orgCode}-${p.month}.csv`;
+    const fname = `attendance-${org.orgCode}-${p.month}${excel ? '-excel' : ''}.csv`;
     res.set('Content-Type', 'text/csv; charset=utf-8');
     res.set('Content-Disposition', `attachment; filename="${fname}"`);
-    res.send(`﻿${lines.join('\r\n')}\r\n`);   // BOM so Excel opens UTF-8 names correctly
+    res.send(`${excel ? '\ufeff' : ''}${lines.join('\r\n')}\r\n`);
   }));
   return r;
 }

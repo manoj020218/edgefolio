@@ -220,3 +220,31 @@ test('broadcast: announcement stored, everyone notified, Home can read it', asyn
   assert.deepStrictEqual((await client.get('/api/v1/holidays', { token: emp, query: { year: 2026 } })).body.data.map((h) => h.name), ['Christmas']);
   push.setTransport(null);
 });
+
+test('night shift 20:00 → 04:00: checkout after midnight closes the shift; CSV shows ISO times + overnight', async () => {
+  const { punchBody } = require('./helpers');
+  const db = forOrg(org._id);
+  await db.Punch.deleteMany({ empId: 'e2' });
+  await db.AttendanceDay.deleteMany({ empId: 'e2' });
+  const bala = await client.login('ADMN23', 'E2');
+  // 2026-11-10 20:00 IST = 14:30Z; 2026-11-11 04:00 IST = 22:30Z (previous day UTC)
+  const IN = '2026-11-10T14:30:00.000Z', OUT = '2026-11-10T22:30:00.000Z';
+  assert.strictEqual((await client.post('/api/v1/apk/attendance', { token: bala, body: punchBody('e2', IN) })).body.data.alreadyMarked, false);
+  const again = await client.post('/api/v1/apk/attendance', { token: bala, body: punchBody('e2', '2026-11-10T20:30:00.000Z') });
+  assert.strictEqual(again.body.data.alreadyMarked, true);                  // 02:00 IST, still on the same shift
+  const out = await client.post('/api/v1/apk/attendance/checkout', { token: bala, body: { timestamp: OUT } });
+  assert.strictEqual(out.status, 200);
+  assert.strictEqual(out.body.data.hoursWorked, 8);
+  const day = await db.AttendanceDay.findOne({ empId: 'e2', date: '2026-11-10' }).lean();
+  assert.deepStrictEqual([day.checkIn, day.checkOut, day.overnight], ['20:00:00', '04:00:00', true]);
+  assert.strictEqual(await db.AttendanceDay.countDocuments({ empId: 'e2', date: '2026-11-11' }), 0);
+
+  const link = await client.get('/api/v1/apk/reports/attendance/link', { token: owner, query: { month: '2026-11' } });
+  const csv = await (await fetch(link.body.data.url.replace(/^https?:\/\/[^/]+\/cloud/, srv.url).replace(/^https?:\/\/[^/]+(?=\/api)/, srv.url))).text();
+  const row = csv.split('\r\n').find((l) => l.startsWith('2026-11-10,E2,'));
+  assert.strictEqual(row, '2026-11-10,E2,Bala,Sales,2026-11-10T20:00:00+05:30,2026-11-11T04:00:00+05:30,480,8.00,present,office,yes,+05:30');
+  // A stale "in" older than 20 h does not block a new check-in.
+  await db.Punch.create({ seq: await db.nextSeq('punch'), empId: 'e2', eventType: 'in', at: new Date('2026-11-12T03:30:00Z'), date: '2026-11-12', time: '09:00:00', workDate: '2026-11-12' });
+  const next = await client.post('/api/v1/apk/attendance', { token: bala, body: punchBody('e2', '2026-11-13T03:30:00.000Z') });
+  assert.strictEqual(next.body.data.alreadyMarked, false);
+});

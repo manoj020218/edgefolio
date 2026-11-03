@@ -67,11 +67,13 @@ export default function CompanyPage() {
     ].join('\n'));
   }
 
-  async function exportMonth() {
+  // excel: UTF-8 with BOM, Employee IDs kept as text. csv: plain UTF-8 (no BOM) for payroll software.
+  // Both: ISO 8601 times with offset, worked minutes + hours (2 dp), night shifts on one row.
+  async function exportMonth(format: 'excel' | 'csv') {
     setExporting(true);
     setError(null);
     try {
-      const { url } = await apiGet<{ url: string }>('/reports/attendance/link', { month });
+      const { url } = await apiGet<{ url: string }>('/reports/attendance/link', { month, format });
       await Browser.open({ url });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create the export.');
@@ -148,14 +150,16 @@ export default function CompanyPage() {
 
       <div className="space-y-2 glass p-4">
         <p className="text-sm font-bold text-[#f4f5fb]">Export attendance</p>
+        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="input !py-2.5" />
         <div className="flex gap-2">
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-            className="flex-1 input !py-2.5 " />
-          <button type="button" onClick={exportMonth} disabled={exporting || !month} className="btn-primary gap-1.5 px-3.5 py-2 text-sm disabled:opacity-50">
-            <Download size={15} /> {exporting ? '…' : 'Excel (CSV)'}
+          <button type="button" onClick={() => void exportMonth('excel')} disabled={exporting || !month} className="btn-primary flex-1 gap-1.5 px-3 py-2.5 text-sm disabled:opacity-50">
+            <Download size={15} /> {exporting ? '…' : 'Excel'}
+          </button>
+          <button type="button" onClick={() => void exportMonth('csv')} disabled={exporting || !month} className="btn-ghost flex-1 gap-1.5 px-3 py-2.5 text-sm disabled:opacity-50">
+            <Download size={15} /> CSV (for software)
           </button>
         </div>
-        <p className="text-xs text-slate-500">Opens in your browser; the download link works for 10 minutes.</p>
+        <p className="text-xs text-slate-500">Times include the time zone (ISO 8601). A night shift (e.g. 8 PM–4 AM) is one row on the day it started. The link works for 10 minutes.</p>
         {error && <p className="text-xs text-danger">{error}</p>}
       </div>
 

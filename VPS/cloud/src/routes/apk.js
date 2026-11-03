@@ -13,7 +13,7 @@ const { PROFILE_FIELDS } = require('../models');
 const { resolveOrg, signToken, requireAuth, requireRole } = require('../auth');
 const { sendOk, sendCode, httpError, codedError } = require('../lib/http');
 const { verifySecret } = require('../lib/password');
-const { toLocalParts, todayLocal, minutesOf, hoursBetween } = require('../lib/time');
+const { toLocalParts, todayLocal, minutesOf, workedBetween } = require('../lib/time');
 const { notifyEmployees } = require('../lib/notify');
 
 const WORK_TYPES = ['office', 'tour', 'wfh'];
@@ -66,13 +66,24 @@ function serializeDay(d) {
  * Returns { alreadyMarked, checkedInAt?, eventId? }. Same punch-clock rules as EDGE: any number of
  * in/out cycles a day; the day row keeps the FIRST check-in and the LAST check-out.
  */
+// A shift may cross midnight (e.g. 8 PM → 4 AM). The open check-in is the employee's latest punch
+// if it is an "in" made within the last maxShiftHours (default 20) — regardless of calendar date.
+// The whole shift belongs to its start date (workDate).
+const maxShiftMs = (org) => Number(org?.settings?.maxShiftHours || 20) * 3600000;
+async function openShift(db, org, empId, at) {
+  const last = await db.Punch.findOne({ empId, at: { $lte: at } }).sort({ at: -1, _id: -1 }).lean();
+  if (last?.eventType !== 'in' || at - new Date(last.at) > maxShiftMs(org)) return null;
+  return { ...last, workDate: last.workDate || last.date };
+}
+
 async function recordCheckIn(db, org, emp, { workType, timestamp, similarity, liveness, location, deviceId, source, clientRef }) {
   const parts = toLocalParts(timestamp, org.tzOffsetMin);
   if (!parts) throw httpError(400, 'timestamp is not a valid date');
   const { date, time } = parts;
 
-  const last = await db.Punch.findOne({ empId: emp.empId, date }).sort({ at: -1, _id: -1 }).lean();
-  if (last?.eventType === 'in') return { alreadyMarked: true, checkedInAt: last.time };
+  const at = new Date(timestamp);
+  const open = await openShift(db, org, emp.empId, at);
+  if (open) return { alreadyMarked: true, checkedInAt: open.time };
 
   const geo = location ? await geofenceOk(db, org, location) : null;
   // Phase 3: when the org enforces it, an office punch must be inside an office's radius.
@@ -82,7 +93,7 @@ async function recordCheckIn(db, org, emp, { workType, timestamp, similarity, li
   const seq = await db.nextSeq('punch');
   const [punch] = await db.Punch.create([{
     seq,
-    empId: emp.empId, eventType: 'in', at: new Date(timestamp), date, time, workType,
+    empId: emp.empId, eventType: 'in', at, date, time, workDate: date, workType,
     source, faceMatch: Number(similarity || 0), liveness: liveness || null,
     location: location ? { lat: location.lat, lon: location.lon, accuracy: location.accuracy ?? null } : undefined,
     geofenceOk: geo, deviceId: deviceId || null, clientRef: clientRef || null,
@@ -91,13 +102,13 @@ async function recordCheckIn(db, org, emp, { workType, timestamp, similarity, li
   await db.AttendanceDay.updateOne(
     { empId: emp.empId, date },
     {
-      $setOnInsert: { checkIn: time, status: 'present' },
+      $setOnInsert: { checkIn: time, checkInAt: at, status: 'present' },
       $set: { mode: `mobile-${workType}`, faceMatch: Number(similarity || 0), ...(location ? { location: { lat: location.lat, lon: location.lon, accuracy: location.accuracy ?? null } } : {}) },
     },
     { upsert: true },
   );
   // An offline punch replayed later can be EARLIER than the stored first check-in.
-  await db.AttendanceDay.updateOne({ empId: emp.empId, date, checkIn: { $gt: time } }, { $set: { checkIn: time } });
+  await db.AttendanceDay.updateOne({ empId: emp.empId, date, checkIn: { $gt: time } }, { $set: { checkIn: time, checkInAt: at } });
   return { alreadyMarked: false, eventId: String(punch._id) };
 }
 
@@ -170,12 +181,13 @@ function apkRouter(config) {
   r.get('/today-status', ah(async (req, res) => {
     const db = forOrg(req.user.orgId);
     const today = todayLocal(req.org.tzOffsetMin);
-    const [day, last, assignment] = await Promise.all([
-      db.AttendanceDay.findOne({ empId: req.user.empId, date: today }).lean(),
-      db.Punch.findOne({ empId: req.user.empId, date: today }).sort({ at: -1, _id: -1 }).lean(),
+    const open = await openShift(db, req.org, req.user.empId, new Date());
+    const workDate = open ? open.workDate : today;            // night shift started yesterday → that day
+    const [day, assignment] = await Promise.all([
+      db.AttendanceDay.findOne({ empId: req.user.empId, date: workDate }).lean(),
       activeAssignment(db, req.user.empId, today),
     ]);
-    const todayAttendance = day ? { ...serializeDay(day), currentlyWorking: last?.eventType === 'in' } : null;
+    const todayAttendance = day ? { ...serializeDay(day), currentlyWorking: Boolean(open), workDate } : null;
     if (!assignment) return sendOk(res, { workType: 'office', assignment: null, todayAttendance });
     return sendOk(res, {
       workType: assignment.workType,
@@ -223,20 +235,28 @@ function apkRouter(config) {
     const { date, time } = parts;
     const db = forOrg(req.user.orgId);
 
-    const last = await db.Punch.findOne({ empId: req.user.empId, date }).sort({ at: -1, _id: -1 }).lean();
-    if (last?.eventType !== 'in') throw httpError(404, 'No active check-in found for today');
-    const day = await db.AttendanceDay.findOne({ empId: req.user.empId, date }).lean();
-    if (!day || !day.checkIn) throw httpError(404, 'No check-in found for today');
+    const at = new Date(timestamp);
+    // CLOUD: the open check-in may be from yesterday evening (night shift) — not only "today".
+    const last = await openShift(db, req.org, req.user.empId, at);
+    if (!last) throw httpError(404, 'No open check-in found (within the last 20 hours)');
+    const workDate = last.workDate;
+    const day = await db.AttendanceDay.findOne({ empId: req.user.empId, date: workDate }).lean();
+    if (!day || !day.checkIn) throw httpError(404, 'No check-in found for this shift');
 
     await db.Punch.create({
       seq: await db.nextSeq('punch'),
-      empId: req.user.empId, eventType: 'out', at: new Date(timestamp), date, time,
+      empId: req.user.empId, eventType: 'out', at, date, time, workDate,
       workType: last.workType, source: 'app', clientRef: req.body.clientRef || null,
     });
-    // Last-out wins; an older replayed checkout never shortens the day.
-    const checkOut = day.checkOut && minutesOf(day.checkOut) > minutesOf(time) ? day.checkOut : time;
-    const hoursWorked = hoursBetween(day.checkIn, checkOut);
-    await db.AttendanceDay.updateOne({ empId: req.user.empId, date }, { $set: { checkOut, hoursWorked } });
+    // Last-out wins; an older replayed checkout never shortens the shift. Worked time is measured
+    // between instants, so 20:00 → 04:00 is 8.00 h (not negative).
+    const outAt = day.checkOutAt && new Date(day.checkOutAt) > at ? new Date(day.checkOutAt) : at;
+    const inAt = day.checkInAt || last.at;
+    const { hours: hoursWorked } = workedBetween(inAt, outAt);
+    const outParts = toLocalParts(outAt, req.org.tzOffsetMin);
+    await db.AttendanceDay.updateOne({ empId: req.user.empId, date: workDate }, {
+      $set: { checkOut: outParts.time, checkOutAt: outAt, checkInAt: inAt, hoursWorked, overnight: outParts.date !== workDate },
+    });
     const me = await db.Employee.findOne({ empId: req.user.empId }, { empId: 1, name: 1 }).lean();
     if (me) notifyWatchers(db, me, 'checkout', time, last.workType);
     sendOk(res, { alreadyCheckedOut: false, checkedOutAt: time, hoursWorked });

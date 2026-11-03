@@ -147,8 +147,13 @@ test('export: short-lived CSV link for the month', async () => {
   assert.strictEqual(res.status, 200);
   assert.match(res.headers.get('content-disposition'), /attendance-.*-2026-11\.csv/);
   const bytes = Buffer.from(await res.arrayBuffer());
-  assert.deepStrictEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);   // BOM (fetch().text() would hide it)
-  assert.match(bytes.subarray(3).toString('utf8'), /^Date,Employee ID,Name,Department,Check-in,Check-out,Hours,Status,Mode/);
+  assert.notDeepStrictEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);   // csv format: NO BOM
+  assert.match(bytes.toString('utf8'), /^work_date,employee_id,employee_name,department,check_in,check_out,worked_minutes,worked_hours_2dp,status,work_type,overnight,utc_offset\r\n/);
+  // excel format: BOM + same columns
+  const xl = await client.get('/api/v1/apk/reports/attendance/link', { token: owner.token, query: { month: '2026-11', format: 'excel' } });
+  const xres = await fetch(xl.body.data.url.replace('https://example.test/cloud', srv.url));
+  assert.match(xres.headers.get('content-disposition'), /2026-11-excel\.csv/);
+  assert.deepStrictEqual([...Buffer.from(await xres.arrayBuffer()).subarray(0, 3)], [0xef, 0xbb, 0xbf]);
   assert.strictEqual((await fetch(`${srv.url}/api/v1/reports/attendance.csv?t=forged`)).status, 401);
   assert.strictEqual((await client.get('/api/v1/apk/reports/attendance/link', { token: owner.token, query: { month: 'bad' } })).status, 400);
 });
