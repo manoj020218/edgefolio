@@ -262,7 +262,13 @@ desktop-side behavior unaffected, that commit only touches the mobile build). Ve
 SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
 `/download` and `/download/portable` both return 200 on a full download.
 
-**Current live installer: v1.0.11, deployed 2026-11-03.** `EdgeFolio-Setup.exe` SHA256
+**Current live installer: v1.0.12, deployed 2026-11-03.** `EdgeFolio-Setup.exe` SHA256
+`f6b6278c6fe58d0f3a3210578356a4c21eb57b0cfa70448bfaa5a164126bfc82`; `EdgeFolio-Portable.exe` SHA256
+`0ff722140d2b7bd0184108c67ed4ddca51f81e29a361fd485a479f128d36a128`. Verified SHA256 local = VPS, both
+download routes 200. Adds night shifts (services/shiftDay.js, employees.shift_id + Shift picker,
+attendance_records.overnight). Not yet verified on a clean machine.
+
+**Previous: v1.0.11, deployed 2026-11-03.** `EdgeFolio-Setup.exe` SHA256
 `94f98660513e0093cbc555f283c037c48b6a8eff070edb36b1f689f0a012ff7f`; `EdgeFolio-Portable.exe` SHA256
 `1b418fab63aa47ee76bb3864bd6450304ae9f972813252d1e478f7e163fb2eda`. Verified: SHA256 matched local vs
 VPS; `/download` and `/download/portable` return 200 with the new sizes. Same backend as v1.0.10 plus the
