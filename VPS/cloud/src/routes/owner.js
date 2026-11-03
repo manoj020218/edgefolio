@@ -77,10 +77,16 @@ function ownerRouter(config, { google, billing }) {
         const s = await billing.signup({ companyName, contactName: ownerName, phone, email: g.email });
         licenseKey = s.licenseKey;
       } catch (e) {
-        if (e.status === 409) {
-          throw codedError(409, 'LICENCE_EXISTS', 'This email or phone already has an EdgeFolio licence. Enter its licence key (EdgeFolio desktop → Settings → License), or sign in if your company is already set up.');
+        if (e.status !== 409) throw e;
+        // Already registered (e.g. EdgeFolio for Windows or the website). Google has just proved this
+        // email is theirs, so reuse that licence instead of failing. If only the PHONE matched a
+        // different owner, there is nothing of theirs to reuse — explain instead.
+        const lic = billing.findLicenseByEmail ? await billing.findLicenseByEmail(g.email).catch(() => null) : null;
+        if (!lic || !lic.valid || String(lic.ownerEmail || '').toLowerCase() !== g.email) {
+          throw codedError(409, 'LICENCE_EXISTS', 'This mobile number is already registered with a different email. Use another mobile number, or sign in with the Google account it was registered with.');
         }
-        throw e;
+        licenseKey = lic.licenseKey;
+        billingClientId = lic.clientId || null;
       }
     }
 

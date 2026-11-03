@@ -5,6 +5,7 @@
  *   POST /api/edgefolio/signup                 (existing, public) → creates Client + EdgeLicense
  *   POST /api/edgefolio/cloud/verify-license   (server-to-server, X-Cloud-Key) → licence details
  *   POST /api/edgefolio/cloud/link             (server-to-server, X-Cloud-Key) → records the cloud org
+ *   POST /api/edgefolio/cloud/find-license     (server-to-server, X-Cloud-Key) → licence for a Google-verified email
  * Nothing about plans or prices is ever shown to users from here.
  */
 function createBilling({ baseUrl, apiKey }) {
@@ -33,6 +34,8 @@ function createBilling({ baseUrl, apiKey }) {
       call('/api/edgefolio/signup', { companyName, contactName, phone, email, agentCode: 'cloud-app' }),
     /** → { valid, licenseKey, clientId, companyName, ownerName, ownerEmail, ownerPhone, status } */
     verifyLicense: (licenseKey) => call('/api/edgefolio/cloud/verify-license', { licenseKey }, { withKey: true }),
+    /** Only ever called with an email Google has verified. → same shape as verifyLicense, or 404. */
+    findLicenseByEmail: (email) => call('/api/edgefolio/cloud/find-license', { email }, { withKey: true }),
     link: ({ licenseKey, orgCode, maxActiveEmployees }) =>
       call('/api/edgefolio/cloud/link', { licenseKey, orgCode, maxActiveEmployees }, { withKey: true }),
   };

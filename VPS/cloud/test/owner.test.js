@@ -24,6 +24,10 @@ const billing = {
     if (!l) throw Object.assign(new Error('not found'), { status: 404 });
     return { valid: l.valid, licenseKey: key, ownerEmail: l.email, clientId: `client-${key}` };
   },
+  async findLicenseByEmail(email) {
+    for (const [key, l] of licences) if (l.email === email && l.valid) return { valid: true, licenseKey: key, ownerEmail: l.email, clientId: `client-${key}` };
+    throw Object.assign(new Error('not found'), { status: 404 });
+  },
   links: [],
   async link(x) { this.links.push(x); return { ok: true }; },
 };
@@ -60,9 +64,16 @@ test('signup: Google + billing registration creates the company and signs the ow
   assert.match(company.body.data.appDownloadUrl, /\/download\/apk$/);
 });
 
-test('signup: same email again → LICENCE_EXISTS; with the licence key → signs in to the same company', async () => {
+test('signup: same Google email again → reuses its licence and signs in; phone of someone else → LICENCE_EXISTS', async () => {
   const again = await client.post('/api/v1/apk/signup', { body: { idToken: 'ravi@gmail.com', companyName: 'Dup', phone: '9000000000' } });
-  assert.deepStrictEqual([again.status, again.body.error], [409, 'LICENCE_EXISTS']);
+  assert.deepStrictEqual([again.body.data.created, again.body.data.orgCode, again.body.data.licenseKey], [false, owner.orgCode, 'EF-TEST-1']);
+  // Registered on the desktop first (licence, no cloud company yet) → signup creates the company on that licence.
+  licences.set('EF-PC-7', { email: 'pc@x.com', phone: '5550001', company: 'PC Co', valid: true });
+  const pc = await client.post('/api/v1/apk/signup', { body: { idToken: 'pc@x.com', companyName: 'PC Co', phone: '9111111111' } });
+  assert.deepStrictEqual([pc.body.data.created, pc.body.data.licenseKey], [true, 'EF-PC-7']);
+  // Phone belongs to another owner's licence, email has none → clear 409.
+  const clash = await client.post('/api/v1/apk/signup', { body: { idToken: 'new@x.com', companyName: 'New', phone: '5550001' } });
+  assert.deepStrictEqual([clash.status, clash.body.error], [409, 'LICENCE_EXISTS']);
   const withKey = await client.post('/api/v1/apk/signup', { body: { idToken: 'ravi@gmail.com', companyName: 'Dup', licenseKey: 'EF-TEST-1' } });
   assert.deepStrictEqual([withKey.body.data.created, withKey.body.data.orgCode], [false, owner.orgCode]);
 });
