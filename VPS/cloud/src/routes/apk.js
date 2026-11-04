@@ -16,6 +16,7 @@ const { sendOk, sendCode, httpError, codedError } = require('../lib/http');
 const { verifySecret } = require('../lib/password');
 const { toLocalParts, todayLocal, minutesOf, workedBetween } = require('../lib/time');
 const { notifyEmployees } = require('../lib/notify');
+const { suggestionsFor, FESTIVAL_YEARS } = require('../data/holidaySuggestions');
 const { resolveShift, monthDays, summarize } = require('../lib/dayStatus');
 const { loadShifts, serialize: serializeShift, parseShiftBody } = require('../lib/shifts');
 
@@ -569,6 +570,15 @@ function apkRouter(config) {
     const year = /^\d{4}$/.test(String(req.query.year || '')) ? String(req.query.year) : String(new Date().getFullYear());
     const rows = await forOrg(req.user.orgId).Holiday.find({ date: { $regex: `^${year}-` } }).sort({ date: 1 }).lean();
     sendOk(res, rows.map((h) => ({ id: String(h._id), date: h.date, name: h.name || '' })));
+  }));
+
+  // Suggested Indian public holidays for a year (src/data/holidaySuggestions.js). `added` marks the
+  // ones the company already has on that date; the admin chooses what to add.
+  r.get('/holidays/suggestions', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    const year = /^\d{4}$/.test(String(req.query.year || '')) ? Number(req.query.year) : new Date().getFullYear();
+    const have = new Set((await forOrg(req.user.orgId).Holiday.find({ date: { $regex: `^${year}-` } }, { date: 1 }).lean()).map((h) => h.date));
+    const list = suggestionsFor(year).map((h) => ({ ...h, added: have.has(h.date) }));
+    sendOk(res, list, { year, country: 'IN', festivalDatesKnown: FESTIVAL_YEARS.includes(year) });
   }));
 
   r.post('/holidays', requireRole('hr-admin', 'owner'), ah(async (req, res) => {

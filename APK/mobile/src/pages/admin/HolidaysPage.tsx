@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 import { apiDelete, apiGet, apiPost, ApiError } from '../../lib/api';
+import HolidaySuggestions from '../../components/HolidaySuggestions';
 
 interface Holiday { id: number | string; date: string; name: string }
 
@@ -97,6 +98,8 @@ export default function HolidaysPage() {
       {error && <p className="text-sm text-danger">{error}</p>}
       {!error && !rows && <p className="text-sm text-slate-400">Loading…</p>}
       {rows && rows.length === 0 && <p className="text-sm text-slate-400">No holidays for {year}.</p>}
+
+      {!readOnly && <HolidaySuggestions year={year} onAdded={load} />}
 
       <ul className="space-y-2">
         {rows?.map((h) => {

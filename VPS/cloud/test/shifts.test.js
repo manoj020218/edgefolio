@@ -247,3 +247,16 @@ test('app-only: POST /employees accepts shiftId', async () => {
   assert.strictEqual(ok.status, 200);
   assert.strictEqual((await db.Employee.findOne({ empId: ok.body.data.empId }).lean()).shiftId, shiftB.id);
 });
+
+test('holiday suggestions: India national + festivals, marks already-added, HR/owner only', async () => {
+  await db.Holiday.deleteMany({ date: '2026-10-02' });
+  await client.post('/api/v1/apk/holidays', { token: owner, body: { date: '2026-10-02', name: 'Gandhi Jayanti' } });
+  const r = await client.get('/api/v1/apk/holidays/suggestions', { token: owner, query: { year: 2026 } });
+  const gj = r.body.data.find((h) => h.date === '2026-10-02');
+  assert.deepStrictEqual([gj.type, gj.added, gj.verify], ['national', true, false]);
+  assert.ok(r.body.data.some((h) => h.name === 'Diwali (Deepavali)' && h.verify === true));
+  assert.strictEqual(r.body.meta.festivalDatesKnown, true);
+  const y = await client.get('/api/v1/apk/holidays/suggestions', { token: owner, query: { year: 2031 } });
+  assert.deepStrictEqual(y.body.data.map((h) => h.date), ['2031-01-26', '2031-08-15', '2031-10-02', '2031-12-25']);
+  assert.strictEqual((await client.get('/api/v1/apk/holidays/suggestions', { token: e1tok })).status, 403);
+});
