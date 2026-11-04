@@ -82,7 +82,7 @@ export default function FaceEnrollPage() {
         const messages: Record<string, string> = {
           PERMISSION_DENIED: 'Camera permission is required to set up Face ID.',
           LIVENESS_TIMEOUT: 'We could not see a blink. Face the light, blink slowly, and try again.',
-          EMBEDDING_FAILED: 'Face analysis failed. Please try again.',
+          EMBEDDING_FAILED: 'Your blinks were seen, but we could not capture your face clearly. Hold the phone at eye level, keep your face inside the oval, and try again.',
           MODEL_MISSING: 'Face recognition isn’t set up on this build yet.',
           CANCELLED: 'Cancelled.',
         };

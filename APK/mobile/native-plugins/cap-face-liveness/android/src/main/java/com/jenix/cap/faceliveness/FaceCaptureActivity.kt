@@ -49,7 +49,9 @@ private const val FORCE_RETRY_MS = 2_200L    // re-capture even if framing still
 // others (similarity to the rest below ENROLL_CONSISTENCY) is dropped and retaken.
 private const val ENROLL_ROUNDS = 3
 private const val ENROLL_CONSISTENCY = 0.75f
-private const val ENROLL_FORCE_MS = 4_000L   // enrollment waits longer for good framing
+private const val ENROLL_FORCE_MS = 2_500L   // enrollment waits a little longer for good framing
+private const val ENROLL_MAX_RETAKES = 2      // inconsistent capture retaken at most twice
+private const val TAG = "FaceLiveness"
 
 /**
  * Full-screen native camera flow: liveness check (blink/head-turn), then one
@@ -97,6 +99,7 @@ class FaceCaptureActivity : AppCompatActivity() {
     private var bestScore = -1f
     private var lastGuidance: String? = null
     private val enrollRounds = mutableListOf<FloatArray>()
+    private var enrollRetakes = 0
     private var livenessStartedAt = 0L
     private var lastBlinkCount = 0
     private var lastBlinkAt = 0L
@@ -144,9 +147,13 @@ class FaceCaptureActivity : AppCompatActivity() {
         // final call); otherwise it is a genuine liveness timeout.
         timeoutRunnable = Runnable {
             val best = bestEmbedding
+            android.util.Log.w(TAG, "timeout: liveness=$livenessPassed rounds=${enrollRounds.size} best=${best != null} capturing=$capturing")
             when {
                 best != null -> finishWith(embedding = best)
-                enrollRounds.size >= 2 -> finishWith(embedding = averageEmbeddings(enrollRounds))
+                // Enrollment: blinks done → keep whatever good captures we have (even one).
+                enrollRounds.isNotEmpty() -> finishWith(embedding = averageEmbeddings(enrollRounds))
+                // Blinks done but no clear capture → this is a framing/light problem, not liveness.
+                livenessPassed -> finishWith(reason = "EMBEDDING_FAILED")
                 else -> finishWith(reason = "LIVENESS_TIMEOUT")
             }
         }
@@ -272,6 +279,7 @@ class FaceCaptureActivity : AppCompatActivity() {
                 mainHandler.post { hintView.text = guidance }
                 return
             }
+            android.util.Log.d(TAG, "capture round: guidance=$guidance rounds=${enrollRounds.size}")
             startBurst("Checking… hold still")
             return
         }
@@ -300,6 +308,7 @@ class FaceCaptureActivity : AppCompatActivity() {
                 // stacking up concurrent captures.
                 if (capturing) return
                 livenessPassed = true
+                android.util.Log.d(TAG, "liveness passed (blinks=${livenessDetector.blinkCount}) enroll=${referenceEmbedding == null}")
                 mainHandler.post { guideView.blinks = 2 }
                 // Enrollment: the first round also waits for good framing (the retry branch above).
                 if (referenceEmbedding == null) {
@@ -380,7 +389,10 @@ class FaceCaptureActivity : AppCompatActivity() {
                 cosineSimilarity(enrollRounds[i], averageEmbeddings(others))
             }!!
             val others = enrollRounds.filterIndexed { j, _ -> j != worst }
-            if (cosineSimilarity(enrollRounds[worst], averageEmbeddings(others)) < ENROLL_CONSISTENCY) {
+            val agreement = cosineSimilarity(enrollRounds[worst], averageEmbeddings(others))
+            android.util.Log.d(TAG, "enroll consistency: worst=$worst agreement=$agreement retakes=$enrollRetakes")
+            if (agreement < ENROLL_CONSISTENCY && enrollRetakes < ENROLL_MAX_RETAKES) {
+                enrollRetakes++
                 enrollRounds.removeAt(worst)
                 guideView.animateProgress(enrollRounds.size.toFloat() / ENROLL_ROUNDS)
                 hintView.text = "One more, please. Look straight at the camera"

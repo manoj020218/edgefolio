@@ -68,7 +68,7 @@ export default function AttendancePage({ workType, onBack }: Props) {
         const messages: Record<string, string> = {
           PERMISSION_DENIED: 'Camera permission is required to mark attendance.',
           LIVENESS_TIMEOUT: 'We could not see a blink. Look at the camera, blink twice, and we will try again.',
-          EMBEDDING_FAILED: 'Face analysis failed. Please try again.',
+          EMBEDDING_FAILED: 'We could not capture your face clearly. Hold the phone at eye level and try again.',
           MODEL_MISSING: 'Face recognition isn’t set up on this build yet.',
           CANCELLED: 'Cancelled.',
         };
