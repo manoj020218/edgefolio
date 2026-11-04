@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { KeyRound, ScanFace } from 'lucide-react';
-import { apiGet, apiPatch, ApiError } from '../../lib/api';
+import { apiGet, apiPatch, ApiError, isCloudModeSync } from '../../lib/api';
+import type { Shift } from './ShiftsPage';
 import { useAuth } from '../../lib/auth';
 
 interface EmployeeRow {
@@ -13,6 +14,7 @@ interface EmployeeRow {
   appRole: string;
   mobileLoginEnabled: number;
   enrollmentStatus: string;
+  shiftId?: number | string | null;
 }
 
 export default function EmployeesPage() {
@@ -21,6 +23,11 @@ export default function EmployeesPage() {
 
   const [rows, setRows] = useState<EmployeeRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const cloud = isCloudModeSync();
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [appManaged, setAppManaged] = useState(false);
+  const canShift = cloud && appManaged && (user?.role === 'owner' || user?.role === 'hr-admin');
+  const defaultShift = shifts.find((s) => s.isDefault);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [issued, setIssued] = useState<{ empName: string; tempPassword: string } | null>(null);
 
@@ -31,6 +38,27 @@ export default function EmployeesPage() {
   }
 
   useEffect(load, []);
+
+  useEffect(() => {
+    if (!cloud) return;
+    apiGet<Shift[]>('/shifts').then(setShifts).catch(() => { /* optional */ });
+    apiGet<{ employeesManagedIn?: string }>('/company')
+      .then((c) => setAppManaged(c.employeesManagedIn === 'app'))
+      .catch(() => { /* stays read-only */ });
+  }, [cloud]);
+
+  async function changeShift(row: EmployeeRow, value: string) {
+    const picked = shifts.find((s) => String(s.id) === value);
+    setPendingId(row.id);
+    try {
+      await apiPatch(`/employees/${row.id}`, { shiftId: picked?.id ?? null });
+      setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, shiftId: picked?.id ?? null } : r)) : prev));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change the shift.');
+    } finally {
+      setPendingId(null);
+    }
+  }
 
   async function toggleLogin(row: EmployeeRow) {
     if (!canEdit) return;
@@ -104,6 +132,25 @@ export default function EmployeesPage() {
                 <p className="mt-1 text-xs capitalize text-slate-500">
                   Face enrollment: {r.enrollmentStatus}
                 </p>
+                {cloud && shifts.length > 0 && (
+                  canShift ? (
+                    <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+                      Shift
+                      <select
+                        value={r.shiftId != null ? String(r.shiftId) : String(defaultShift?.id ?? '')}
+                        disabled={pendingId === r.id}
+                        onChange={(e) => void changeShift(r, e.target.value)}
+                        className="rounded-lg bg-surface-light px-2 py-1 text-xs text-slate-200"
+                      >
+                        {shifts.map((s) => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                      </select>
+                    </label>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-400">
+                      Shift: {(shifts.find((s) => String(s.id) === String(r.shiftId)) ?? defaultShift)?.name ?? '—'}
+                    </p>
+                  )
+                )}
               </div>
               <button
                 disabled={!canEdit || pendingId === r.id}

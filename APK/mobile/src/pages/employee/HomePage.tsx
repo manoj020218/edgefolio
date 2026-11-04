@@ -200,14 +200,14 @@ export default function HomePage() {
           </div>
         </button>
         <div className="flex items-center gap-2.5">
-          <div className="glass !rounded-2xl px-3 py-1.5 text-right">
+          <button type="button" onClick={() => setCalendarOpen(true)} className="glass !rounded-2xl px-3 py-1.5 text-right active:scale-[0.97]">
             <p className="text-sm font-bold tabular-nums text-[#f4f5fb]">
               {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })}
             </p>
             <p className="text-xs text-slate-400">
               {now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' })}
             </p>
-          </div>
+          </button>
           <NotificationBell className="!h-10 !w-10" />
           <button
             onClick={() => setCalendarOpen(true)}

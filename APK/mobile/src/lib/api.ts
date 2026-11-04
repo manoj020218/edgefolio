@@ -191,6 +191,13 @@ export async function apiGet<T>(path: string, params?: Record<string, unknown>):
   return res.data.data as T;
 }
 
+// Like apiGet but also returns the envelope's `meta` (e.g. calendar summary).
+export async function apiGetFull<T>(path: string, params?: Record<string, unknown>): Promise<{ data: T; meta: unknown }> {
+  const res = await client.get<ApiEnvelope<T>>(path, { params });
+  if (!res.data.ok) throw toApiError(res.data);
+  return { data: res.data.data as T, meta: res.data.meta };
+}
+
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await client.post<ApiEnvelope<T>>(path, body);
   if (!res.data.ok) throw toApiError(res.data);

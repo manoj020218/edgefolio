@@ -59,6 +59,7 @@ const employeeSchema = new Schema({
   appRole: { type: String, enum: ['owner', 'hr-admin', 'employee'], default: 'employee' },
   mobileLoginEnabled: { type: Boolean, default: true },
   isFieldEmployee:    { type: Boolean, default: false },
+  shiftId: { type: String, default: null },                 // Shift _id; null = the company default shift
   status:  { type: String, enum: ['active', 'inactive'], default: 'active' },
   passwordHash:       { type: String, default: null },
   tempPasswordHash:   { type: String, default: null },
@@ -213,6 +214,23 @@ const holidaySchema = new Schema({ orgId: org, date: { type: String, required: t
 holidaySchema.index({ orgId: 1, date: 1 }, { unique: true });
 const Holiday = mongoose.model('Holiday', holidaySchema);
 
+// Work shift (ATTENDANCE_RULES_PLAN.md): times are org-local "HH:MM"; end < start = overnight.
+const shiftSchema = new Schema({
+  orgId: org,
+  name: { type: String, required: true, trim: true },
+  start: { type: String, required: true },
+  end: { type: String, required: true },
+  breakStart: { type: String, default: null },
+  breakEnd: { type: String, default: null },
+  breakPaid: { type: Boolean, default: false },          // false = the break is deducted from net hours
+  weeklyOff: { type: [Number], default: [0] },           // 0 = Sunday
+  graceMinutes: { type: Number, default: 10 },
+  isDefault: { type: Boolean, default: false },
+}, { timestamps: true });
+// At most one default shift per organisation (also stops two parallel first reads creating two).
+shiftSchema.index({ orgId: 1, isDefault: 1 }, { unique: true, partialFilterExpression: { isDefault: true } });
+const Shift = mongoose.model('Shift', shiftSchema);
+
 // Per-org atomic counters (punch sequence).
 const counterSchema = new Schema({ orgId: org, name: { type: String, required: true }, value: { type: Number, default: 0 } });
 counterSchema.index({ orgId: 1, name: 1 }, { unique: true });
@@ -226,7 +244,7 @@ const AuditLog = mongoose.model('AuditLog', new Schema({
 }, { timestamps: { createdAt: true, updatedAt: false } }));
 
 module.exports = {
-  Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, AuditLog, Counter,
+  Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, Shift, AuditLog, Counter,
   AlertSubscription, FaceRecaptureRequest, AppNotification, Announcement,
   PROFILE_FIELDS,
 };

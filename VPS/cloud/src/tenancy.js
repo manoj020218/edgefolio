@@ -9,7 +9,7 @@
 const mongoose = require('mongoose');
 const models = require('./models');
 
-const TENANT_MODELS = ['Employee', 'FaceProfile', 'Punch', 'AttendanceDay', 'Office', 'WorkAssignment', 'Holiday', 'AuditLog', 'Counter', 'AlertSubscription', 'FaceRecaptureRequest', 'AppNotification', 'Announcement'];
+const TENANT_MODELS = ['Employee', 'FaceProfile', 'Punch', 'AttendanceDay', 'Office', 'WorkAssignment', 'Holiday', 'Shift', 'AuditLog', 'Counter', 'AlertSubscription', 'FaceRecaptureRequest', 'AppNotification', 'Announcement'];
 
 function scope(Model, orgId) {
   const f = (filter = {}) => ({ ...filter, orgId });

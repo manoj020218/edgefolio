@@ -18,6 +18,7 @@
  * refused with MANAGED_IN_EDGE (EDGE owns the employee master).
  */
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const express = require('express');
 const { toLocalParts, isoLocal, instantOf, workedBetween, offsetLabel } = require('../lib/time');
 const jwt = require('jsonwebtoken');
@@ -27,6 +28,8 @@ const { createOrgRecord, randomTempPassword } = require('../orgAdmin');
 const { signToken, requireAuth, requireRole, orgCodeFrom } = require('../auth');
 const { sendOk, httpError, codedError } = require('../lib/http');
 const { hashSecret } = require('../lib/password');
+const { loadShifts } = require('../lib/shifts');
+const { resolveShift, computeDay } = require('../lib/dayStatus');
 
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const str = (v, max = 120) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
@@ -156,6 +159,13 @@ function ownerRouter(config, { google, billing }) {
   // ── Employees (app-only companies) ─────────────────────────────────────────
   const notOnPc = (req) => { if (edgeLinked(req.org)) throw codedError(409, 'MANAGED_IN_EDGE', 'Employees for this company are managed in EdgeFolio on the office PC.'); };
 
+  // shiftId: undefined/null = company default; otherwise must be one of this company's shifts.
+  const checkShiftId = async (db, v) => {
+    if (v === undefined || v === null || v === '') return null;
+    if (!mongoose.isValidObjectId(v) || !(await db.Shift.exists({ _id: String(v) }))) throw httpError(400, 'Unknown shift');
+    return String(v);
+  };
+
   r.post('/employees', auth, requireRole('owner', 'hr-admin'), ah(async (req, res) => {
     notOnPc(req);
     const b = req.body || {};
@@ -166,9 +176,11 @@ function ownerRouter(config, { google, billing }) {
     if (!empCode) empCode = `E${String(await db.nextSeq('empCode')).padStart(4, '0')}`;
     const role = ROLES.includes(b.appRole) ? b.appRole : 'employee';
     if (role === 'owner' && req.user.role !== 'owner') throw httpError(403, 'Only the owner can add another owner');
+    const shiftId = await checkShiftId(db, b.shiftId);
     const tempPassword = randomTempPassword();
     try {
       await db.Employee.create({
+        shiftId,
         empId: `cloud-${crypto.randomUUID()}`, empCode, name, email: str(b.email, 200)?.toLowerCase() || null,
         department: str(b.department, 100), designation: str(b.designation, 100), appRole: role,
         isFieldEmployee: Boolean(b.isFieldEmployee), tempPasswordHash: hashSecret(tempPassword), passwordMustChange: true,
@@ -179,7 +191,7 @@ function ownerRouter(config, { google, billing }) {
     }
     const emp = await db.Employee.findOne({ empCode }).collation({ locale: 'en', strength: 2 }).lean();
     await db.AuditLog.create({ actor: req.user.empId, action: 'employee-added', detail: { empCode } });
-    sendOk(res, { empId: emp.empId, empCode, name, appRole: role, tempPassword, orgCode: req.org.orgCode, appDownloadUrl: config.appDownloadUrl });
+    sendOk(res, { empId: emp.empId, empCode, name, appRole: role, shiftId, tempPassword, orgCode: req.org.orgCode, appDownloadUrl: config.appDownloadUrl });
   }));
 
   r.post('/employees/:id/reset-password', auth, requireRole('owner', 'hr-admin'), ah(async (req, res) => {
@@ -203,9 +215,10 @@ function ownerRouter(config, { google, billing }) {
     // Mobile login on/off is allowed for every company (EDGE's own app does the same); the rest only
     // for app-only companies.
     if (typeof b.mobileLoginEnabled === 'boolean' || b.mobileLoginEnabled === 0 || b.mobileLoginEnabled === 1) $set.mobileLoginEnabled = Boolean(b.mobileLoginEnabled);
-    const editable = ['name', 'department', 'designation', 'email', 'appRole', 'status', 'isFieldEmployee'];
+    const editable = ['shiftId', 'name', 'department', 'designation', 'email', 'appRole', 'status', 'isFieldEmployee'];
     if (editable.some((k) => k in b)) {
       notOnPc(req);
+      if ('shiftId' in b) $set.shiftId = await checkShiftId(db, b.shiftId);
       if ('name' in b && str(b.name)) $set.name = str(b.name);
       for (const k of ['department', 'designation']) if (k in b) $set[k] = str(b[k], 100);
       if ('email' in b) $set.email = str(b.email, 200)?.toLowerCase() || null;
@@ -222,7 +235,7 @@ function ownerRouter(config, { google, billing }) {
     if (!Object.keys($set).length) throw httpError(400, 'Nothing to change');
     await db.Employee.updateOne({ empId: emp.empId }, { $set });
     const after = await db.Employee.findOne({ empId: emp.empId }).lean();
-    sendOk(res, { id: after.empId, empCode: after.empCode, name: after.name, appRole: after.appRole, status: after.status, mobileLoginEnabled: after.mobileLoginEnabled ? 1 : 0 });
+    sendOk(res, { id: after.empId, empCode: after.empCode, name: after.name, appRole: after.appRole, status: after.status, shiftId: after.shiftId || null, mobileLoginEnabled: after.mobileLoginEnabled ? 1 : 0 });
   }));
 
   // ── Monthly attendance export ──────────────────────────────────────────────
@@ -249,10 +262,13 @@ function reportsRouter(config) {
     const org = await Organisation.findById(p.orgId).lean();
     if (!org) throw httpError(404, 'Company not found');
     const db = forOrg(org._id);
-    const [days, emps] = await Promise.all([
+    const [days, emps, shifts, holidays] = await Promise.all([
       db.AttendanceDay.find({ date: { $regex: `^${p.month}-` } }).sort({ date: 1 }).lean(),
-      db.Employee.find({}, { empId: 1, empCode: 1, name: 1, department: 1 }).lean(),
+      db.Employee.find({}, { empId: 1, empCode: 1, name: 1, department: 1, shiftId: 1 }).lean(),
+      loadShifts(db, org),
+      db.Holiday.find({ date: { $regex: `^${p.month}-` } }).lean(),
     ]);
+    const holName = new Map(holidays.map((h) => [h.date, h.name || '']));
     const byId = new Map(emps.map((e) => [e.empId, e]));
     // Column contract (stable — software may parse it):
     //  work_date        YYYY-MM-DD, the shift's START date (a night shift 20:00→04:00 is one row)
@@ -261,6 +277,10 @@ function reportsRouter(config) {
     //  check_in/out     ISO 8601 local time WITH offset, e.g. 2026-11-03T20:02:11+05:30 ("" if missing)
     //  worked_minutes   whole minutes between first check-in and last check-out (rounded)
     //  worked_hours_2dp worked_minutes / 60, rounded half-up to 2 decimals
+    //  shift_name       the employee's shift (the default shift when none is assigned)
+    //  gross_minutes    same as worked_minutes; break_minutes = overlap with the shift break when it is unpaid
+    //  net_minutes      gross - break; net_hours_2dp = net / 60 half-up (these four are "" without a check-out)
+    //  day_status       present | incomplete | leave | holiday | weekly_off | absent
     //  status, work_type (office | tour | wfh), overnight (yes | no), utc_offset (+05:30)
     // format=csv: RFC 4180, UTF-8 WITHOUT BOM, CRLF. format=excel: same plus a UTF-8 BOM (so Excel
     // shows non-English names) and employee_id written as ="0012" so Excel keeps leading zeros.
@@ -268,19 +288,23 @@ function reportsRouter(config) {
     const tz = org.tzOffsetMin ?? 330;
     const esc = (v) => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const idCell = (id) => (excel && id ? '"=' + '"'.repeat(2) + String(id).replace(/"/g, '"'.repeat(4)) + '"'.repeat(3) : esc(id ?? ''));
-    const lines = [['work_date', 'employee_id', 'employee_name', 'department', 'check_in', 'check_out', 'worked_minutes', 'worked_hours_2dp', 'status', 'work_type', 'overnight', 'utc_offset'].join(',')];
+    const lines = [['work_date', 'employee_id', 'employee_name', 'department', 'check_in', 'check_out', 'worked_minutes', 'worked_hours_2dp', 'status', 'work_type', 'overnight', 'utc_offset', 'shift_name', 'gross_minutes', 'break_minutes', 'net_minutes', 'net_hours_2dp', 'day_status'].join(',')];
     for (const d of days) {
       const e = byId.get(d.empId) || {};
       const inAt = d.checkInAt || instantOf(d.date, d.checkIn, tz);
       let outAt = d.checkOutAt || instantOf(d.date, d.checkOut, tz);
       if (outAt && inAt && outAt < inAt) outAt = new Date(outAt.getTime() + 86400000);   // old overnight rows
       const w = workedBetween(inAt, outAt);
+      const shift = resolveShift(shifts, e);
+      const dd = computeDay({ date: d.date, rec: d, shift, holidayName: holName.has(d.date) ? holName.get(d.date) : null, tz });
+      const full = dd.status === 'present';
       const overnight = Boolean(outAt && toLocalParts(outAt, tz).date !== d.date);
       lines.push([
         esc(d.date), idCell(e.empCode), esc(e.name ?? ''), esc(e.department ?? ''),
         esc(isoLocal(inAt, tz)), esc(isoLocal(outAt, tz)),
         outAt ? w.minutes : '', outAt ? w.hours.toFixed(2) : '',
         esc(d.status || ''), esc((d.mode || '').replace('mobile-', '')), overnight ? 'yes' : 'no', offsetLabel(tz),
+        esc(shift.name), full ? dd.grossMinutes : '', full ? dd.breakMinutes : '', full ? dd.netMinutes : '', full ? dd.netHours.toFixed(2) : '', dd.status,
       ].join(','));
     }
     const fname = `attendance-${org.orgCode}-${p.month}${excel ? '-excel' : ''}.csv`;

@@ -6,6 +6,8 @@ import ServerSetupPage from './pages/ServerSetupPage';
 import CreateCompanyPage from './pages/CreateCompanyPage';
 import CompanyPage from './pages/admin/CompanyPage';
 import AddEmployeePage from './pages/admin/AddEmployeePage';
+import ShiftsPage from './pages/admin/ShiftsPage';
+import HolidaysPage from './pages/admin/HolidaysPage';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import AttendancePage from './pages/AttendancePage';
@@ -180,6 +182,8 @@ export default function App() {
         <Route path="payroll" element={<PayrollPage />} />
         <Route path="company" element={<CompanyPage />} />
         <Route path="employees/new" element={<AddEmployeePage />} />
+        <Route path="shifts" element={<ShiftsPage />} />
+        <Route path="holidays" element={<HolidaysPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Share } from '@capacitor/share';
 import { Browser } from '@capacitor/browser';
-import { Building2, Copy, Check, Monitor, UserPlus, Send, Download } from 'lucide-react';
-import { apiGet } from '../../lib/api';
+import { Building2, Copy, Check, Monitor, UserPlus, Send, Download, Clock, CalendarDays, ChevronRight } from 'lucide-react';
+import { apiGet, isCloudModeSync } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 interface Company {
@@ -147,6 +147,25 @@ export default function CompanyPage() {
         </button>
         {c.linkedToPc && <p className="px-1 text-xs text-success">Connected to EdgeFolio for Windows — attendance flows into payroll.</p>}
       </div>
+
+      {isCloudModeSync() && (
+        <div className="space-y-2">
+          <button type="button" onClick={() => navigate('/admin/shifts')} className={`${row} w-full text-left active:scale-[0.98]`}>
+            <span className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500/25 text-brand-300"><Clock size={15} /></span>
+              <span className="text-[14px] font-semibold text-slate-100">Shifts &amp; working hours</span>
+            </span>
+            <ChevronRight size={16} className="text-slate-500" />
+          </button>
+          <button type="button" onClick={() => navigate('/admin/holidays')} className={`${row} w-full text-left active:scale-[0.98]`}>
+            <span className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/20 text-purple-300"><CalendarDays size={15} /></span>
+              <span className="text-[14px] font-semibold text-slate-100">Holidays</span>
+            </span>
+            <ChevronRight size={16} className="text-slate-500" />
+          </button>
+        </div>
+      )}
 
       <div className="space-y-2 glass p-4">
         <p className="text-sm font-bold text-[#f4f5fb]">Export attendance</p>

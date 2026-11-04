@@ -8,6 +8,7 @@
  * subscriptions, broadcast, analytics, payroll views, payslips, leave, requests/visits/docs.
  */
 const express = require('express');
+const mongoose = require('mongoose');
 const { forOrg } = require('../tenancy');
 const { PROFILE_FIELDS } = require('../models');
 const { resolveOrg, signToken, requireAuth, requireRole } = require('../auth');
@@ -15,6 +16,8 @@ const { sendOk, sendCode, httpError, codedError } = require('../lib/http');
 const { verifySecret } = require('../lib/password');
 const { toLocalParts, todayLocal, minutesOf, workedBetween } = require('../lib/time');
 const { notifyEmployees } = require('../lib/notify');
+const { resolveShift, monthDays, summarize } = require('../lib/dayStatus');
+const { loadShifts, serialize: serializeShift, parseShiftBody } = require('../lib/shifts');
 
 const WORK_TYPES = ['office', 'tour', 'wfh'];
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);   // async handler
@@ -442,7 +445,7 @@ function apkRouter(config) {
     const enrolled = new Set(faces.map((f) => f.empId));
     sendOk(res, emps.map((e) => ({
       id: e.empId, empCode: e.empCode, name: e.name, department: e.department, designation: e.designation,
-      appRole: e.appRole, mobileLoginEnabled: e.mobileLoginEnabled ? 1 : 0,
+      appRole: e.appRole, mobileLoginEnabled: e.mobileLoginEnabled ? 1 : 0, shiftId: e.shiftId || null,
       enrollmentStatus: enrolled.has(e.empId) ? 'complete' : 'pending',
     })));
   }));
@@ -477,29 +480,118 @@ function apkRouter(config) {
     sendOk(res, rows.map((x) => ({ month: x._id, present: x.present })));
   }));
 
+  // ── Monthly calendar: per-day status + net hours + summary (ATTENDANCE_RULES_PLAN.md §2, §3, §6) ──
   r.get('/attendance-calendar', ah(async (req, res) => {
-    const today = todayLocal(req.org.tzOffsetMin);
-    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : today.slice(0, 7);
+    const tz = req.org.tzOffsetMin ?? 330;
+    const today = todayLocal(tz);
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.month || '') ? req.query.month : today.slice(0, 7);
     const db = forOrg(req.user.orgId);
-    const [days, holidays] = await Promise.all([
-      db.AttendanceDay.find({ empId: req.user.empId, date: { $regex: `^${month}-` } }).lean(),
+    let empId = req.user.empId;
+    if (req.query.empId && String(req.query.empId) !== req.user.empId) {
+      if (!['hr-admin', 'owner'].includes(req.user.role)) throw httpError(403, 'Only HR or the owner can view another employee');
+      empId = String(req.query.empId);
+    }
+    const emp = await db.Employee.findOne({ empId }).lean();
+    if (!emp) throw httpError(404, 'Employee not found');
+    const [shifts, recs, holidays] = await Promise.all([
+      loadShifts(db, req.org),
+      db.AttendanceDay.find({ empId, date: { $regex: `^${month}-` } }).lean(),
       db.Holiday.find({ date: { $regex: `^${month}-` } }).lean(),
     ]);
-    const byDate = new Map(days.map((d) => [d.date, d]));
-    const holidaySet = new Set(holidays.map((h) => h.date));
-    const offSet = new Set(req.org.settings.weeklyOffDays || [0, 6]);
-    const [y, m] = month.split('-').map(Number);
-    const out = [];
-    for (let d = 1; d <= new Date(Date.UTC(y, m, 0)).getUTCDate(); d++) {
-      const date = `${month}-${String(d).padStart(2, '0')}`;
-      if (date > today) break;
-      const rec = byDate.get(date);
-      if (rec) { out.push({ date, status: rec.status, checkIn: rec.checkIn, checkOut: rec.checkOut, hoursWorked: rec.hoursWorked, leaveType: rec.leaveType }); continue; }
-      const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
-      const status = offSet.has(dow) ? 'weekly_off' : holidaySet.has(date) ? 'holiday' : 'absent';
-      out.push({ date, status, checkIn: null, checkOut: null, hoursWorked: 0, leaveType: null });
+    const shift = resolveShift(shifts, emp);
+    const days = monthDays({ month, recs, shift, holidays, tz, today });
+    const out = days.map((d) => ({ ...d, hoursWorked: d.netHours }));   // checkIn/checkOut/hoursWorked/leaveType kept for older apps
+    const { id, name, start, end, breakStart, breakEnd, breakPaid, weeklyOff } = shift;
+    sendOk(res, out, { month, shift: { id, name, start, end, breakStart: breakStart || null, breakEnd: breakEnd || null, breakPaid: Boolean(breakPaid), weeklyOff }, summary: summarize(days) });
+  }));
+
+  // ── Shifts ──
+  const notShiftOnPc = (req) => { if (req.org.edgeMachineId) throw codedError(409, 'MANAGED_IN_EDGE', 'Shifts and holidays for this company are managed in EdgeFolio on the office PC.'); };
+  // Active employees on a shift; the default shift also covers people with no (or a deleted) shift.
+  const countOnShift = (db, shifts, s) => db.Employee.countDocuments(s.isDefault
+    ? { status: 'active', $or: [{ shiftId: null }, { shiftId: s.id }, { shiftId: { $nin: shifts.map((x) => x.id) } }] }
+    : { status: 'active', shiftId: s.id });
+  const shiftWithCount = async (db, org, id) => {
+    const shifts = await loadShifts(db, org);
+    const s = shifts.find((x) => x.id === id);
+    return serializeShift(s, await countOnShift(db, shifts, s));
+  };
+  const shiftOr404 = async (db, org, id) => {
+    if (!mongoose.isValidObjectId(id)) throw httpError(404, 'Shift not found');
+    const s = (await loadShifts(db, org)).find((x) => x.id === String(id));
+    if (!s) throw httpError(404, 'Shift not found');
+    return s;
+  };
+
+  r.get('/shifts', ah(async (req, res) => {
+    const db = forOrg(req.user.orgId);
+    const shifts = await loadShifts(db, req.org);
+    sendOk(res, await Promise.all(shifts.map(async (s) => serializeShift(s, await countOnShift(db, shifts, s)))));
+  }));
+
+  r.post('/shifts', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    notShiftOnPc(req);
+    const db = forOrg(req.user.orgId);
+    const doc = parseShiftBody(req.body || {}, { partial: false });
+    await loadShifts(db, req.org);   // make sure the default exists before deciding on isDefault
+    if (doc.isDefault) await db.Shift.updateMany({ isDefault: true }, { $set: { isDefault: false } });
+    else doc.isDefault = false;
+    const made = await db.Shift.create(doc);
+    sendOk(res, await shiftWithCount(db, req.org, String(made._id)));
+  }));
+
+  r.patch('/shifts/:id', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    notShiftOnPc(req);
+    const db = forOrg(req.user.orgId);
+    const s = await shiftOr404(db, req.org, req.params.id);
+    const $set = parseShiftBody(req.body || {}, { partial: true });
+    if (!Object.keys($set).length) throw httpError(400, 'Nothing to change');
+    if (($set.start || s.start) === ($set.end || s.end)) throw httpError(400, 'start and end cannot be the same');
+    if ($set.isDefault === false && s.isDefault) throw codedError(409, 'SHIFT_DEFAULT', 'Make another shift the default instead.');
+    if ($set.isDefault === true && !s.isDefault) await db.Shift.updateMany({ isDefault: true }, { $set: { isDefault: false } });
+    await db.Shift.updateOne({ _id: s.id }, { $set });
+    sendOk(res, await shiftWithCount(db, req.org, s.id));
+  }));
+
+  r.delete('/shifts/:id', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    notShiftOnPc(req);
+    const db = forOrg(req.user.orgId);
+    const s = await shiftOr404(db, req.org, req.params.id);
+    if (s.isDefault) throw codedError(409, 'SHIFT_DEFAULT', 'The default shift cannot be deleted. Make another shift the default first.');
+    if (await db.Employee.countDocuments({ shiftId: s.id })) throw codedError(409, 'SHIFT_IN_USE', 'Employees are assigned to this shift. Move them to another shift first.');
+    await db.Shift.deleteOne({ _id: s.id });
+    sendOk(res, { deleted: true });
+  }));
+
+  // ── Holidays (GET is also served at /api/v1/holidays) ──
+  const DATE_OK = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+  r.get('/holidays', ah(async (req, res) => {
+    const year = /^\d{4}$/.test(String(req.query.year || '')) ? String(req.query.year) : String(new Date().getFullYear());
+    const rows = await forOrg(req.user.orgId).Holiday.find({ date: { $regex: `^${year}-` } }).sort({ date: 1 }).lean();
+    sendOk(res, rows.map((h) => ({ id: String(h._id), date: h.date, name: h.name || '' })));
+  }));
+
+  r.post('/holidays', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    notShiftOnPc(req);
+    const b = req.body || {};
+    const name = String(b.name ?? '').trim().slice(0, 120);
+    if (!DATE_OK(b.date)) throw httpError(400, 'date must be a valid YYYY-MM-DD');
+    if (!name) throw httpError(400, 'Holiday name is required');
+    try {
+      const h = await forOrg(req.user.orgId).Holiday.create({ date: b.date, name });
+      sendOk(res, { id: String(h._id), date: h.date, name: h.name });
+    } catch (e) {
+      if (e.code === 11000) throw codedError(409, 'HOLIDAY_EXISTS', 'There is already a holiday on that date.');
+      throw e;
     }
-    sendOk(res, out, { month });
+  }));
+
+  r.delete('/holidays/:id', requireRole('hr-admin', 'owner'), ah(async (req, res) => {
+    notShiftOnPc(req);
+    if (!mongoose.isValidObjectId(req.params.id)) throw httpError(404, 'Holiday not found');
+    const del = await forOrg(req.user.orgId).Holiday.deleteOne({ _id: req.params.id });
+    if (!del.deletedCount) throw httpError(404, 'Holiday not found');
+    sendOk(res, { deleted: true });
   }));
 
   // ── Work assignments (tour / WFH) — EDGE getWorkAssignmentsHandler & co. ──

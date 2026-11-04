@@ -148,7 +148,7 @@ test('export: short-lived CSV link for the month', async () => {
   assert.match(res.headers.get('content-disposition'), /attendance-.*-2026-11\.csv/);
   const bytes = Buffer.from(await res.arrayBuffer());
   assert.notDeepStrictEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);   // csv format: NO BOM
-  assert.match(bytes.toString('utf8'), /^work_date,employee_id,employee_name,department,check_in,check_out,worked_minutes,worked_hours_2dp,status,work_type,overnight,utc_offset\r\n/);
+  assert.match(bytes.toString('utf8'), /^work_date,employee_id,employee_name,department,check_in,check_out,worked_minutes,worked_hours_2dp,status,work_type,overnight,utc_offset,shift_name,gross_minutes,break_minutes,net_minutes,net_hours_2dp,day_status\r\n/);
   // excel format: BOM + same columns
   const xl = await client.get('/api/v1/apk/reports/attendance/link', { token: owner.token, query: { month: '2026-11', format: 'excel' } });
   const xres = await fetch(xl.body.data.url.replace('https://example.test/cloud', srv.url));

@@ -142,7 +142,7 @@ test('profile, history and calendar', async () => {
   assert.ok(hist.body.data.some((m) => m.month === '2026-10' && m.present === 2));
   const cal = await client.get('/api/v1/apk/attendance-calendar', { token, query: { month: '2026-10' } });
   const byDate = Object.fromEntries(cal.body.data.map((d) => [d.date, d.status]));
-  assert.strictEqual(byDate['2026-10-30'], 'present');
+  assert.strictEqual(byDate['2026-10-30'], 'incomplete');   // only a check-in was synced: plan section 2 = incomplete (orange)
   assert.strictEqual(byDate['2026-10-25'], 'weekly_off');   // a Sunday, org's only weekly off
   assert.strictEqual(byDate['2026-10-27'], 'absent');
   assert.strictEqual(cal.body.data.length, 31);

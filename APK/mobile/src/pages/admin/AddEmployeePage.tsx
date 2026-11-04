@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import type { Shift } from './ShiftsPage';
 import { useNavigate } from 'react-router-dom';
 import { Share } from '@capacitor/share';
 import { Send, Copy, Check } from 'lucide-react';
-import { apiPost } from '../../lib/api';
+import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 interface Created {
@@ -24,10 +25,22 @@ export default function AddEmployeePage() {
   const [empCode, setEmpCode] = useState('');
   const [department, setDepartment] = useState('');
   const [role, setRole] = useState<'employee' | 'hr-admin' | 'owner'>('employee');
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [shiftId, setShiftId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Created | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    apiGet<Shift[]>('/shifts')
+      .then((list) => {
+        setShifts(list);
+        const def = list.find((s) => s.isDefault) ?? list[0];
+        if (def) setShiftId(String(def.id));
+      })
+      .catch(() => { /* shift picker is optional */ });
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -37,6 +50,7 @@ export default function AddEmployeePage() {
     try {
       setCreated(await apiPost<Created>('/employees', {
         name: name.trim(), empCode: empCode.trim() || undefined, department: department.trim() || undefined, appRole: role,
+        shiftId: shiftId ? (shifts.find((s) => String(s.id) === shiftId)?.id ?? shiftId) : undefined,
       }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add the employee.');
@@ -112,6 +126,14 @@ export default function AddEmployeePage() {
         <label className="mb-1 block text-sm text-slate-300" htmlFor="dp">Department (optional)</label>
         <input id="dp" className={input} value={department} onChange={(e) => setDepartment(e.target.value)} />
       </div>
+      {shifts.length > 0 && (
+        <div>
+          <label className="mb-1 block text-sm text-slate-300" htmlFor="sh">Shift</label>
+          <select id="sh" className={input} value={shiftId} onChange={(e) => setShiftId(e.target.value)}>
+            {shifts.map((s) => <option key={s.id} value={String(s.id)}>{s.name} ({s.start}–{s.end}){s.isDefault ? ' · default' : ''}</option>)}
+          </select>
+        </div>
+      )}
       <div>
         <label className="mb-1 block text-sm text-slate-300" htmlFor="rl">Role</label>
         <select id="rl" className={input} value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
