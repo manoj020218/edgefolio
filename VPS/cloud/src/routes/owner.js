@@ -156,6 +156,16 @@ function ownerRouter(config, { google, billing }) {
     });
   }));
 
+  // Owner edits the company name (app-only companies; a PC-linked company takes its name from the PC).
+  r.patch('/company', auth, requireRole('owner'), ah(async (req, res) => {
+    if (edgeLinked(req.org)) throw codedError(409, 'MANAGED_IN_EDGE', 'The company name comes from EdgeFolio on the office PC. Change it there.');
+    const name = str(req.body?.companyName, 120);
+    if (!name || name.length < 2) throw httpError(400, 'Enter the company name');
+    await Organisation.updateOne({ _id: req.org._id }, { $set: { name } });
+    await forOrg(req.user.orgId).AuditLog.create({ actor: req.user.empId, action: 'company-renamed', detail: { from: req.org.name, to: name } });
+    sendOk(res, { companyName: name });
+  }));
+
   // ── Employees (app-only companies) ─────────────────────────────────────────
   const notOnPc = (req) => { if (edgeLinked(req.org)) throw codedError(409, 'MANAGED_IN_EDGE', 'Employees for this company are managed in EdgeFolio on the office PC.'); };
 

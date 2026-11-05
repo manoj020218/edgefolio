@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, User } from 'lucide-react';
-import { apiGet, ApiError, isCloudModeSync, cachedOrgCodeSync, resetConnection, cloudGoogleLogin } from '../lib/api';
-import { googleIdToken } from '../lib/google';
+import { apiGet, ApiError, isCloudModeSync, cachedOrgCodeSync, resetConnection } from '../lib/api';
+import GoogleCompanySignIn from '../components/GoogleCompanySignIn';
 import { useAuth } from '../lib/auth';
 import ForgotPasswordPage from './ForgotPasswordPage';
 import AppLogo from '../components/AppLogo';
@@ -14,7 +14,7 @@ interface LoginCheckResponse {
 }
 
 export default function LoginPage() {
-  const { login, startSession } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<'empCode' | 'password' | 'forgot'>('empCode');
@@ -64,26 +64,6 @@ export default function LoginPage() {
     }
   }
 
-  // Cloud mode: owners/HR whose Google email is on the company (VPS/cloud POST /apk/auth/google).
-  async function handleGoogle() {
-    setError(null);
-    setBusy(true);
-    try {
-      const idToken = await googleIdToken();
-      const res = await cloudGoogleLogin(idToken, cachedOrgCodeSync() ?? undefined);
-      if ('chooseCompany' in res) {
-        setError('This Google account belongs to several companies — enter the right company code first (Change company / server).');
-        return;
-      }
-      await startSession(res.token, res.user);
-      navigate('/', { replace: true });
-    } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : 'Google sign-in failed.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (step === 'forgot') {
     return <ForgotPasswordPage onBack={() => setStep('empCode')} />;
   }
@@ -128,20 +108,11 @@ export default function LoginPage() {
             Forgot password?
           </button>
           {isCloudModeSync() && (
-            <button
-              type="button"
+            <GoogleCompanySignIn
               disabled={busy}
-              onClick={handleGoogle}
-              className="flex w-full items-center justify-center gap-2.5 rounded-full bg-white py-3.5 text-[14px] font-semibold text-slate-800 shadow-lg transition duration-150 active:scale-[0.97] disabled:opacity-50"
-            >
-              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-              <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.3 5.7c4.3-4 6.8-9.9 7-17.1z"/>
-              <path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/>
-              <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2 1.4-4.9 2.3-8.6 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/>
-            </svg>
-              Owner / HR: Sign in with Google
-            </button>
+              onSignedIn={() => navigate('/', { replace: true })}
+              onError={setError}
+            />
           )}
           <p className="pt-3 text-center text-[12px] text-slate-500">
             {isCloudModeSync() ? `Company code ${cachedOrgCodeSync() ?? ''}` : 'Office computer'}

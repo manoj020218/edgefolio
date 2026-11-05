@@ -128,6 +128,16 @@ test('employees: owner adds one, employee logs in with the temp password and mus
   assert.strictEqual(self.status, 400);
 });
 
+test('company: owner renames it; HR/employees cannot; empty name refused', async () => {
+  const emp = await client.post('/api/v1/apk/employees', { token: owner.token, body: { name: 'Renu', appRole: 'hr-admin' } });
+  const hrLogin = await client.post('/api/v1/apk/auth/login', { orgCode: owner.orgCode, body: { empCode: emp.body.data.empCode, password: emp.body.data.tempPassword } });
+  assert.strictEqual((await client.patch('/api/v1/apk/company', { token: hrLogin.body.data.token, body: { companyName: 'Hack' } })).status, 403);
+  assert.strictEqual((await client.patch('/api/v1/apk/company', { token: owner.token, body: { companyName: ' ' } })).status, 400);
+  const ok = await client.patch('/api/v1/apk/company', { token: owner.token, body: { companyName: 'Ravi Builders & Sons' } });
+  assert.strictEqual(ok.body.data.companyName, 'Ravi Builders & Sons');
+  assert.strictEqual((await client.get('/api/v1/apk/company', { token: owner.token })).body.data.companyName, 'Ravi Builders & Sons');
+});
+
 test('PC-linked company: employees are managed in EdgeFolio desktop; sync connect checks the licence', async () => {
   const bad = await sync('POST', '/connect', null, { licenseKey: 'EF-UNKNOWN-1', machineId: 'PC-X' });
   assert.deepStrictEqual([bad.status, bad.body.error], [403, 'LICENCE_INVALID']);
@@ -138,6 +148,8 @@ test('PC-linked company: employees are managed in EdgeFolio desktop; sync connec
   assert.deepStrictEqual([add.status, add.body.error], [409, 'MANAGED_IN_EDGE']);
   const company = await client.get('/api/v1/apk/company', { token: owner.token });
   assert.deepStrictEqual([company.body.data.linkedToPc, company.body.data.employeesManagedIn], [true, 'pc']);
+  const rename = await client.patch('/api/v1/apk/company', { token: owner.token, body: { companyName: 'New name' } });
+  assert.deepStrictEqual([rename.status, rename.body.error], [409, 'MANAGED_IN_EDGE']);
 });
 
 test('export: short-lived CSV link for the month', async () => {

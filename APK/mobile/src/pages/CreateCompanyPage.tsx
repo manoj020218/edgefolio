@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { ApiError, cloudSignup, setCloudMode, CLOUD_BASE_URL } from '../lib/api';
+import { ApiError, cloudSignup, cloudGoogleLogin, setCloudMode, CLOUD_BASE_URL, type CloudSession } from '../lib/api';
 import { googleIdToken } from '../lib/google';
 import { useAuth } from '../lib/auth';
 import AppLogo from '../components/AppLogo';
@@ -22,12 +22,22 @@ export default function CreateCompanyPage({ onDone, onBack }: Props) {
   const [licenseKey, setLicenseKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // This Google account already has a company/companies: offer to open it instead of making a new one.
+  const [existing, setExisting] = useState<{ token: string; session?: CloudSession; list: { orgCode: string; companyName: string }[] } | null>(null);
 
   async function handleGoogle() {
     setError(null);
     setBusy(true);
     try {
-      setIdToken(await googleIdToken());
+      const token = await googleIdToken();
+      try {
+        const res = await cloudGoogleLogin(token);
+        if ('chooseCompany' in res) setExisting({ token, list: res.chooseCompany });
+        else setExisting({ token, session: res, list: [{ orgCode: res.orgCode, companyName: res.companyName }] });
+      } catch (e) {
+        if (!(e instanceof ApiError && e.code === 'NO_ACCOUNT')) throw e;
+        setIdToken(token);   // no company yet → straight to the form
+      }
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : 'Google sign-in was cancelled.');
     } finally {
@@ -64,6 +74,53 @@ export default function CreateCompanyPage({ onDone, onBack }: Props) {
 
   const input = 'input';
   const primary = 'w-full btn-primary py-3.5 text-[15px] disabled:opacity-50';
+
+  async function openExisting(orgCode: string) {
+    if (!existing) return;
+    setBusy(true);
+    setError(null);
+    try {
+      let s = existing.session;
+      if (!s || s.orgCode !== orgCode) {
+        const res = await cloudGoogleLogin(existing.token, orgCode);
+        if ('chooseCompany' in res) throw new Error('Please try again.');
+        s = res;
+      }
+      await setCloudMode(s.orgCode);
+      await startSession(s.token, s.user);
+      onDone(CLOUD_BASE_URL);
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : 'Could not open the company.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (existing && !idToken) {
+    return (
+      <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <AppLogo />
+          <h1 className="mb-1.5 text-[24px] font-extrabold leading-tight text-[#f4f5fb]">Welcome back</h1>
+          <p className="max-w-[300px] text-[13px] leading-relaxed text-[#9aa0b8]">
+            This Google account already has {existing.list.length === 1 ? 'a company' : 'companies'}. Open it — no need to create a new one.
+          </p>
+        </div>
+        <div className="space-y-2.5">
+          {existing.list.map((c) => (
+            <button key={c.orgCode} type="button" disabled={busy} onClick={() => void openExisting(c.orgCode)} className={primary}>
+              {busy ? 'Opening…' : `Open ${c.companyName}`}
+            </button>
+          ))}
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <button type="button" disabled={busy} onClick={() => setIdToken(existing.token)} className="w-full pt-2 text-center text-[13px] font-semibold text-brand-300">
+            Create another company instead
+          </button>
+          <button type="button" onClick={onBack} className="w-full text-center text-[13px] text-slate-400">Back</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-enter flex min-h-full flex-col justify-center px-6 py-10">

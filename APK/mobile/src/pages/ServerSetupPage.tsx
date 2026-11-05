@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { setBaseUrl, setCloudMode, clearOrgCode, checkCompanyCode, CLOUD_BASE_URL } from '../lib/api';
 import AppLogo from '../components/AppLogo';
+import GoogleCompanySignIn from '../components/GoogleCompanySignIn';
 
 interface Props {
   onDone: (baseUrl: string) => void;
@@ -20,6 +21,8 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
   const [port, setPort] = useState('7001');
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [noAccount, setNoAccount] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   async function handleCloud(e: FormEvent) {
     e.preventDefault();
@@ -125,6 +128,34 @@ export default function ServerSetupPage({ onDone, onCreateCompany }: Props) {
           >
             {checking ? 'Checking…' : company !== null ? 'Yes, this is my company' : 'Continue'}
           </button>
+
+          <div className="flex items-center gap-3 py-1 text-[11px] uppercase tracking-wider text-slate-500">
+            <span className="h-px flex-1 bg-white/10" />or<span className="h-px flex-1 bg-white/10" />
+          </div>
+          <GoogleCompanySignIn
+            label="Sign in with Google — no code needed"
+            disabled={checking}
+            onSignedIn={() => onDone(CLOUD_BASE_URL)}
+            onNoAccount={() => { setError(null); setNoAccount(true); }}
+            onError={(m) => { setNoAccount(false); setError(m); }}
+          />
+          {noAccount && (
+            <div className="rounded-2xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-[13px] text-amber-100">
+              No company uses this Google account yet.
+              {onCreateCompany ? (
+                <> <button type="button" onClick={onCreateCompany} className="font-semibold text-brand-300">Create your company</button>, or ask your HR to add this email to your employee record.</>
+              ) : ' Ask your HR to add this email to your employee record.'}
+            </div>
+          )}
+          <button type="button" onClick={() => setShowHelp((v) => !v)} className="w-full text-center text-[13px] font-semibold text-brand-300">
+            Forgot your company code?
+          </button>
+          {showHelp && (
+            <div className="glass space-y-1.5 px-4 py-3 text-[12.5px] leading-relaxed text-slate-300">
+              <p><b className="text-slate-100">Owner / HR:</b> tap “Sign in with Google” above — your company is found from your email.</p>
+              <p><b className="text-slate-100">Employee:</b> the code is in the invite message HR sent you (WhatsApp / SMS). If HR added your email, Google sign-in works for you too. Otherwise ask HR — they see the code on the Company screen.</p>
+            </div>
+          )}
         </form>
       ) : (
         <form onSubmit={handleLan} className="space-y-4">

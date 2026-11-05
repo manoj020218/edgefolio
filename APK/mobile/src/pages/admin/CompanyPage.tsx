@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Share } from '@capacitor/share';
 import { Browser } from '@capacitor/browser';
-import { Building2, Copy, Check, Monitor, UserPlus, Send, Download, Clock, CalendarDays, ChevronRight } from 'lucide-react';
-import { apiGet, isCloudModeSync } from '../../lib/api';
+import { Building2, Copy, Check, Monitor, UserPlus, Send, Download, Clock, CalendarDays, ChevronRight, Pencil, X } from 'lucide-react';
+import { apiGet, apiPatch, isCloudModeSync } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 interface Company {
@@ -27,6 +27,25 @@ export default function CompanyPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [exporting, setExporting] = useState(false);
+  const [editName, setEditName] = useState<string | null>(null);   // non-null = editing
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  async function saveName() {
+    const name = (editName ?? '').trim();
+    if (name.length < 2) { setNameError('Enter the company name'); return; }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      const r = await apiPatch<{ companyName: string }>('/company', { companyName: name });
+      setC((prev) => (prev ? { ...prev, companyName: r.companyName } : prev));
+      setEditName(null);
+    } catch (e) {
+      setNameError(e instanceof Error ? e.message : 'Could not save.');
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   useEffect(() => {
     localStorage.removeItem('edgefolio.justCreated');
@@ -92,11 +111,32 @@ export default function CompanyPage() {
     <div className="animate-enter space-y-5 px-5 py-6">
       <div className="flex items-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand shadow-glow"><Building2 className="h-5 w-5 text-white" /></div>
-        <div>
-          <h1 className="text-lg font-extrabold text-[#f4f5fb]">{c.companyName}</h1>
-          <p className="text-xs text-slate-400">{c.activeEmployees} active employee{c.activeEmployees === 1 ? '' : 's'}</p>
-        </div>
+        {editName === null ? (
+          <>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-lg font-extrabold text-[#f4f5fb]">{c.companyName}</h1>
+              <p className="text-xs text-slate-400">{c.activeEmployees} active employee{c.activeEmployees === 1 ? '' : 's'}</p>
+            </div>
+            {user?.role === 'owner' && !c.linkedToPc && (
+              <button type="button" onClick={() => { setEditName(c.companyName); setNameError(null); }} className="btn-ghost h-9 w-9 !rounded-full text-slate-200" aria-label="Edit company name">
+                <Pencil size={15} />
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="min-w-0 flex-1 space-y-2">
+            <input className="input !py-2.5" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={120} autoFocus aria-label="Company name" />
+            {nameError && <p className="text-xs text-danger">{nameError}</p>}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setEditName(null)} className="btn-ghost flex-1 py-2 text-xs"><X size={13} /> Cancel</button>
+              <button type="button" disabled={savingName} onClick={() => void saveName()} className="btn-primary flex-1 py-2 text-sm disabled:opacity-50">{savingName ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        )}
       </div>
+      {c.linkedToPc && user?.role === 'owner' && (
+        <p className="-mt-3 px-1 text-[11.5px] text-slate-500">Company name comes from EdgeFolio on the office PC — change it there.</p>
+      )}
 
       <div className="rounded-4xl bg-brand p-[1.5px] shadow-glow">
        <div className="rounded-[26.5px] bg-[#0d0f18]/95 p-5 backdrop-blur-xl">
