@@ -11,6 +11,8 @@ export interface Shift {
   breakStart: string | null;
   breakEnd: string | null;
   breakPaid: boolean;
+  breakMinutes?: number | null;   // PC-linked shifts: lunch length only (deducted from days of 5 h+)
+  fromPc?: boolean;
   weeklyOff: number[];
   graceMinutes: number;
   isDefault: boolean;
@@ -171,7 +173,9 @@ export default function ShiftsPage() {
                 <p className="mt-0.5 text-xs text-slate-400">
                   {s.breakStart && s.breakEnd
                     ? `Break ${s.breakStart}–${s.breakEnd} · Lunch ${s.breakPaid ? 'paid' : 'deducted'}`
-                    : 'No break'}
+                    : s.breakMinutes
+                      ? `Lunch ${s.breakMinutes} min · deducted on days of 5 h or more`
+                      : 'No break'}
                 </p>
               </div>
               {!readOnly && (

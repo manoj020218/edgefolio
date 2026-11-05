@@ -5,7 +5,7 @@
  *   connect()  → POST {cloud}/sync/connect with this PC's licence key + machine id
  *                → company code (employees type it in the app) + a private sync key
  *   runSync()  → push employees (EDGE owns the master) and reference data (company name, weekly
- *                offs, holidays, office locations) when they changed, then pull new phone punches
+ *                offs, holidays, office locations, office hours + shifts) when they changed, then pull new phone punches
  *                and commit them into attendance through the Machine Import pipeline.
  *
  * Everything is stored in app_preferences (cloud_*). The sync key never leaves this PC except to
@@ -64,7 +64,7 @@ function readEmployees() {
   return getDb().prepare(
     `SELECT e.id AS empId, e.emp_code AS empCode, e.name, e.email, e.department, e.designation,
             e.app_role AS appRole, e.mobile_login_enabled AS mobileLoginEnabled,
-            e.is_field_employee AS isFieldEmployee, e.status,
+            e.is_field_employee AS isFieldEmployee, e.status, e.shift_id AS shiftId,
             u.password_hash AS passwordHash, u.temp_password_hash AS tempPasswordHash,
             u.password_must_change AS passwordMustChange
      FROM employees e
@@ -87,7 +87,14 @@ function readReference() {
   try { weeklyOffDays = JSON.parse(db.prepare('SELECT weekly_off_days FROM working_hours WHERE id = 1').get()?.weekly_off_days || '[0,6]'); } catch { /* default */ }
   const companyName = db.prepare('SELECT company_name FROM company_settings WHERE id = 1').get()?.company_name || null;
   const holidays = db.prepare('SELECT date, name FROM holidays ORDER BY date').all();
-  return { companyName, weeklyOffDays, holidays, offices: readOffices(), enforceGeofence: getPref('cloud_enforce_geofence') === '1' };
+  // Shifts: EDGE is the master for PC-linked companies; the app shows them read-only.
+  const wh = db.prepare('SELECT start_time, end_time, break_duration FROM working_hours WHERE id = 1').get();
+  const workingHours = wh ? { start: wh.start_time, end: wh.end_time, breakMinutes: Number(wh.break_duration ?? 60) } : null;
+  const shifts = db.prepare('SELECT * FROM shifts ORDER BY shift_id').all().map((r) => ({
+    id: r.shift_id, name: r.shift_name, start: r.start_time, end: r.end_time,
+    breakMinutes: Number(r.break_duration || 0), graceMinutes: Number(r.grace_minutes ?? 10),
+  }));
+  return { companyName, weeklyOffDays, holidays, offices: readOffices(), enforceGeofence: getPref('cloud_enforce_geofence') === '1', workingHours, shifts };
 }
 
 const hashOf = (v) => crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');

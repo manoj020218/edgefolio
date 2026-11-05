@@ -5,7 +5,7 @@
  *
  *   POST /connect          link this PC (licence key + machine id) → { orgCode, syncKey }
  *   PUT  /employees        full employee snapshot from EDGE (EDGE owns the employee master)
- *   PUT  /reference        company name, weekly offs, holidays, offices (geofences)
+ *   PUT  /reference        company name, weekly offs, holidays, offices (geofences), shifts
  *   GET  /punches?after=N  punches with seq > N, in order → EDGE stages them into attendance
  *   POST /ack              EDGE confirms the last seq it committed
  *   GET  /status           link status for EDGE's settings screen
@@ -19,6 +19,7 @@ const express = require('express');
 const { Organisation } = require('../models');
 const { forOrg } = require('../tenancy');
 const { createOrgRecord } = require('../orgAdmin');
+const { loadShifts } = require('../lib/shifts');
 const { sendOk, httpError, codedError } = require('../lib/http');
 
 const ROLE_MAP = { owner: 'owner', 'hr-admin': 'hr-admin', admin: 'hr-admin' };   // anything else → employee
@@ -26,6 +27,46 @@ const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const newSyncKey = () => `efs_${crypto.randomBytes(32).toString('base64url')}`;
 const str = (v, max = 200) => (v == null || v === '' ? null : String(v).trim().slice(0, max));
+const hhmm = (v) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(v || '')); return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? `${m[1].padStart(2, '0')}:${m[2]}` : null; };
+const minutesOr = (v, dflt) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(Math.max(Math.round(Number(v)), 0), 600) : dflt);
+
+// Point each PC employee's shiftId at the cloud shift synced from their EDGE shift; anyone whose
+// EDGE shift is unknown (or none) falls back to the default shift (shiftId null).
+async function remapEdgeShifts(db) {
+  const synced = await db.Shift.find({ edgeShiftId: { $ne: null } }, { edgeShiftId: 1 }).lean();
+  for (const s of synced) {
+    await db.Employee.updateMany({ source: 'edge', edgeShiftId: s.edgeShiftId, shiftId: { $ne: String(s._id) } }, { $set: { shiftId: String(s._id) } });
+  }
+  await db.Employee.updateMany({ source: 'edge', edgeShiftId: { $nin: synced.map((s) => s.edgeShiftId) }, shiftId: { $ne: null } }, { $set: { shiftId: null } });
+}
+
+// EDGE is the master for shifts of a PC-linked company (plan step 7). The default shift takes
+// EDGE's office working hours; every EDGE shift becomes a cloud shift keyed by its shift_id.
+// EDGE has one weekly-off setting for the whole company, so every shift gets it.
+async function syncShifts(db, org, b, weeklyOff) {
+  await loadShifts(db, org);   // make sure the default exists
+  const wh = b.workingHours || {};
+  const defStart = hhmm(wh.start), defEnd = hhmm(wh.end);
+  if (defStart && defEnd && defStart !== defEnd) {
+    await db.Shift.updateOne({ isDefault: true }, { $set: {
+      start: defStart, end: defEnd, breakStart: null, breakEnd: null, breakPaid: false,
+      breakMinutes: minutesOr(wh.breakMinutes, 60), weeklyOff, graceMinutes: minutesOr(wh.graceMinutes, 10),
+    } });
+  }
+  const keep = [];
+  for (const s of b.shifts.slice(0, 100)) {
+    const edgeShiftId = str(s?.id, 100), start = hhmm(s?.start), end = hhmm(s?.end);
+    if (!edgeShiftId || !start || !end || start === end || keep.includes(edgeShiftId)) continue;
+    keep.push(edgeShiftId);
+    await db.Shift.updateOne({ edgeShiftId }, { $set: {
+      name: str(s.name, 60) || edgeShiftId, start, end, breakStart: null, breakEnd: null, breakPaid: false,
+      breakMinutes: minutesOr(s.breakMinutes, 0), weeklyOff, graceMinutes: minutesOr(s.graceMinutes, 10), isDefault: false,
+    } }, { upsert: true });
+  }
+  await db.Shift.deleteMany({ edgeShiftId: { $ne: null, $nin: keep }, isDefault: false });
+  await remapEdgeShifts(db);
+  return keep.length;
+}
 
 function requireSync() {
   return ah(async (req, res, next) => {
@@ -116,6 +157,7 @@ function syncRouter({ billing } = {}) {
         status: e.status === 'inactive' ? 'inactive' : 'active',
         source: 'edge',
       };
+      if ('shiftId' in e) $set.edgeShiftId = str(e.shiftId, 100);   // older EDGE versions don't send it
       // Password: apply EDGE's hash on first sync, or when it changed in EDGE since the last push.
       const incoming = str(e.passwordHash, 300);
       const prev = existing.get(empId);
@@ -131,6 +173,7 @@ function syncRouter({ billing } = {}) {
     }
     // Anyone EDGE no longer lists is deactivated (not deleted: punches keep their history).
     const gone = await db.Employee.updateMany({ source: 'edge', empId: { $nin: [...seen] }, status: 'active' }, { $set: { status: 'inactive' } });
+    if (list.some((e) => e && 'shiftId' in e)) await remapEdgeShifts(db);
     const activeCount = await db.Employee.countDocuments({ status: 'active' });
     // Never block: over the cap we keep working and record it for our team (plan §8).
     if (activeCount > (req.org.maxActiveEmployees || 50)) {
@@ -149,7 +192,7 @@ function syncRouter({ billing } = {}) {
     if (typeof b.enforceGeofence === 'boolean') $set['settings.enforceGeofence'] = b.enforceGeofence;
     if (Object.keys($set).length) await Organisation.updateOne({ _id: req.org._id }, { $set });
 
-    let holidays = 0, offices = 0;
+    let holidays = 0, offices = 0, shifts = null;
     if (Array.isArray(b.holidays)) {
       const rows = b.holidays.filter((h) => /^\d{4}-\d{2}-\d{2}$/.test(h?.date)).slice(0, 1000).map((h) => ({ date: h.date, name: str(h.name, 120) }));
       await db.Holiday.deleteMany({});
@@ -167,7 +210,12 @@ function syncRouter({ billing } = {}) {
       if (rows.length) await db.Office.create(rows);
       offices = rows.length;
     }
-    sendOk(res, { updated: Object.keys($set), holidays, offices });
+    if (Array.isArray(b.shifts)) {
+      const org = await Organisation.findById(req.org._id).lean();
+      const weeklyOff = Array.isArray(org.settings?.weeklyOffDays) ? org.settings.weeklyOffDays : [0];
+      shifts = await syncShifts(db, org, b, [...new Set(weeklyOff)].sort((x, y) => x - y));
+    }
+    sendOk(res, { updated: Object.keys($set), holidays, offices, shifts });
   }));
 
   r.get('/punches', ah(async (req, res) => {

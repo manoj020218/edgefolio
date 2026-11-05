@@ -6,6 +6,7 @@
 const { instantOf, workedBetween } = require('./time');
 
 const DAY_MS = 86400000;
+const FLAT_BREAK_AFTER_MIN = 300;   // a length-only break is deducted from days of 5 h or more
 const toMin = (hhmm) => { const [h, m] = String(hhmm || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 
 // Built-in rules used only if an organisation somehow has no shift row at all.
@@ -53,6 +54,8 @@ function hoursFor(date, inAt, outAt, shift, tz) {
   if (w) {
     const ms = Math.min(new Date(outAt).getTime(), w.end.getTime()) - Math.max(new Date(inAt).getTime(), w.start.getTime());
     brk = Math.min(gross, Math.max(0, Math.round(ms / 60000)));
+  } else if (!shift.breakPaid && !(shift.breakStart && shift.breakEnd) && shift.breakMinutes > 0 && gross >= FLAT_BREAK_AFTER_MIN) {
+    brk = Math.min(gross, shift.breakMinutes);   // EDGE shifts: lunch length only, no window
   }
   const net = Math.max(0, gross - brk);
   return { grossMinutes: gross, breakMinutes: brk, netMinutes: net, netHours: hours2dp(net) };
@@ -119,4 +122,4 @@ function monthDays({ month, recs, shift, holidays, tz, today }) {
   return out;
 }
 
-module.exports = { resolveShift, computeDay, summarize, monthDays, breakWindow, hours2dp, isOvernight, FALLBACK_SHIFT, toMin };
+module.exports = { FLAT_BREAK_AFTER_MIN, resolveShift, computeDay, summarize, monthDays, breakWindow, hours2dp, isOvernight, FALLBACK_SHIFT, toMin };

@@ -10,6 +10,8 @@ function serialize(s, employees = 0) {
   return {
     id: String(s._id || s.id), name: s.name, start: s.start, end: s.end,
     breakStart: s.breakStart || null, breakEnd: s.breakEnd || null, breakPaid: Boolean(s.breakPaid),
+    breakMinutes: s.breakStart && s.breakEnd ? null : (s.breakMinutes > 0 ? s.breakMinutes : null),
+    fromPc: Boolean(s.edgeShiftId),
     weeklyOff: [...(s.weeklyOff || [])], graceMinutes: s.graceMinutes ?? 10, isDefault: Boolean(s.isDefault),
     overnight: isOvernight(s), employees,
   };

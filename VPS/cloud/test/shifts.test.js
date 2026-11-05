@@ -48,7 +48,7 @@ test('default shift is created lazily with the contract values', async () => {
   const g = r.body.data[0];
   assert.deepStrictEqual({ ...g, id: 'x', employees: 0 }, {
     id: 'x', name: 'General', start: '08:00', end: '18:00', breakStart: '13:00', breakEnd: '13:30', breakPaid: false,
-    weeklyOff: [0], graceMinutes: 10, isDefault: true, overnight: false, employees: 0,
+    breakMinutes: null, fromPc: false, weeklyOff: [0], graceMinutes: 10, isDefault: true, overnight: false, employees: 0,
   });
   assert.strictEqual(g.employees, 6);   // everyone is on the default shift
   assert.strictEqual((await client.get(`${S}/shifts`, { token: owner })).body.data.length, 1);   // not created twice

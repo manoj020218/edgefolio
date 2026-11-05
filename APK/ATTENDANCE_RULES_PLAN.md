@@ -81,8 +81,10 @@ Weekly offs · Net hours (sum).
    Shift picker).
 6. **Tests** (cloud): day status for each case, break deduction paid/unpaid, overnight + break,
    weekly off per shift, holiday, summary counts, CSV columns, permissions.
-7. **PC-linked companies**: sync sends shifts + employee shift from EdgeFolio for Windows (EDGE
-   already has shifts + `employees.shift_id`); app shows them read-only there.
+7. **PC-linked companies** ✅: `PUT /sync/reference` takes `workingHours {start,end,breakMinutes}` (→ the
+   default shift) and `shifts [{id,name,start,end,breakMinutes,graceMinutes}]` (upserted by EDGE shift_id,
+   removed ones deleted); every shift gets EDGE's company weekly-off days. `PUT /sync/employees` rows carry
+   `shiftId` (EDGE shift_id) → mapped to the cloud shift; unknown/none → default. App shows them read-only.
 8. Build app 1.0.43, deploy cloud, Play upload.
 
 ## 5. Decisions (owner)
@@ -98,7 +100,10 @@ Decided 2026-11-04:
 All under `/api/v1/apk`, JWT auth, responses `{ ok, data, meta }`. Times "HH:MM". Weekdays 0=Sun..6=Sat.
 
 Shift object:
-`{ id, name, start, end, breakStart|null, breakEnd|null, breakPaid:boolean, weeklyOff:number[], graceMinutes, isDefault, overnight:boolean, employees:number }`
+`{ id, name, start, end, breakStart|null, breakEnd|null, breakPaid:boolean, breakMinutes|null, fromPc:boolean, weeklyOff:number[], graceMinutes, isDefault, overnight:boolean, employees:number }`
+
+`breakMinutes` (PC-linked shifts only): EDGE keeps lunch as a length with no clock window; it is deducted
+from days of 5 h or more (Factories Act s.55 — no break is due before 5 h). `fromPc` = synced from EDGE.
 
 - `GET  /shifts` → Shift[] (any logged-in user; auto-creates the default "General" shift
   08:00–18:00, break 13:00–13:30, breakPaid false, weeklyOff [0], grace 10, isDefault true).

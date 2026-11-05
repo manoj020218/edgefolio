@@ -105,6 +105,36 @@ test('punches: paged pull by sequence, then ack', async () => {
   assert.deepStrictEqual([st.body.data.latestSeq, st.body.data.ackedSeq, st.body.data.companyName], [2, 2, 'Ramesh Textiles Pvt Ltd']);
 });
 
+test('shifts: EDGE office hours + shifts become read-only cloud shifts; employees follow their EDGE shift', async () => {
+  const list = employees(); list[0].shiftId = null; list[1].shiftId = 'SHIFT-N';
+  await sync('PUT', '/employees', edge.syncKey, { employees: list });                   // before the shift exists
+  const r = await sync('PUT', '/reference', edge.syncKey, {
+    weeklyOffDays: [0, 6],
+    workingHours: { start: '09:00:00', end: '18:00', breakMinutes: 60 },
+    shifts: [{ id: 'SHIFT-N', name: 'Shop floor', start: '09:00', end: '17:30', breakMinutes: 45, graceMinutes: 5 }, { id: 'BAD', start: 'x' }],
+  });
+  assert.strictEqual(r.body.data.shifts, 1);
+  const t = await client.login(edge.orgCode, 'E002', 'edge-pass');
+  const shifts = (await client.get('/api/v1/apk/shifts', { token: t })).body.data;
+  const def = shifts.find((s) => s.isDefault), floor = shifts.find((s) => s.name === 'Shop floor');
+  assert.deepStrictEqual([def.start, def.end, def.breakStart, def.breakMinutes, def.weeklyOff], ['09:00', '18:00', null, 60, [0, 6]]);
+  assert.deepStrictEqual([floor.end, floor.breakMinutes, floor.graceMinutes, floor.weeklyOff, floor.fromPc, floor.employees], ['17:30', 45, 5, [0, 6], true, 1]);
+  const edit = await client.post('/api/v1/apk/shifts', { token: t, body: { name: 'X', start: '08:00', end: '16:00' } });
+  assert.deepStrictEqual([edit.status, edit.body.error], [409, 'MANAGED_IN_EDGE']);
+
+  // 09:00–17:30 = 510 min; the 45-min lunch of Shop floor is deducted.
+  const cal = async () => (await client.get('/api/v1/apk/attendance-calendar', { token: t, query: { month: '2026-11' } })).body;
+  let c = await cal();
+  assert.strictEqual(c.meta.shift.name, 'Shop floor');
+  assert.deepStrictEqual(['grossMinutes', 'breakMinutes', 'netMinutes'].map((k) => c.data.find((d) => d.date === '2026-11-02')[k]), [510, 45, 465]);
+
+  // Shift removed in EDGE → the employee falls back to the default (office hours, 60-min lunch).
+  await sync('PUT', '/reference', edge.syncKey, { workingHours: { start: '09:00', end: '18:00', breakMinutes: 60 }, shifts: [] });
+  c = await cal();
+  assert.strictEqual(c.meta.shift.id, def.id);
+  assert.strictEqual(c.data.find((d) => d.date === '2026-11-02').netMinutes, 450);
+});
+
 test('isolation: another company\'s sync key never sees these punches or employees', async () => {
   const other = await sync('POST', '/connect', null, { licenseKey: 'EF-LIC-0002', machineId: 'PC-9', companyName: 'Other' });
   const pulled = await sync('GET', '/punches?after=0', other.body.data.syncKey);

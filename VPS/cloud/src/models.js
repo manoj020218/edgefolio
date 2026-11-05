@@ -60,6 +60,7 @@ const employeeSchema = new Schema({
   mobileLoginEnabled: { type: Boolean, default: true },
   isFieldEmployee:    { type: Boolean, default: false },
   shiftId: { type: String, default: null },                 // Shift _id; null = the company default shift
+  edgeShiftId: { type: String, default: null },             // PC-linked: the shift_id EDGE sent (mapped to shiftId)
   status:  { type: String, enum: ['active', 'inactive'], default: 'active' },
   passwordHash:       { type: String, default: null },
   tempPasswordHash:   { type: String, default: null },
@@ -226,6 +227,10 @@ const shiftSchema = new Schema({
   weeklyOff: { type: [Number], default: [0] },           // 0 = Sunday
   graceMinutes: { type: Number, default: 10 },
   isDefault: { type: Boolean, default: false },
+  // PC-linked companies: EDGE stores lunch as a length only (no clock window). Deducted from days of
+  // 5 h or more (no break is due before 5 h of work, Factories Act s.55). Ignored when a window is set.
+  breakMinutes: { type: Number, default: null },
+  edgeShiftId: { type: String, default: null },          // set on shifts synced from EDGE
 }, { timestamps: true });
 // At most one default shift per organisation (also stops two parallel first reads creating two).
 shiftSchema.index({ orgId: 1, isDefault: 1 }, { unique: true, partialFilterExpression: { isDefault: true } });
