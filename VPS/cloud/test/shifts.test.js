@@ -142,7 +142,7 @@ test('calendar: unpaid break deducted, off-day work, incomplete, holiday, leave,
   const d = byDate(r);
   assert.deepStrictEqual(
     { ...d['2025-03-03'], checkIn: undefined, checkOut: undefined },
-    { date: '2025-03-03', status: 'present', checkIn: undefined, checkOut: undefined, overnight: false, grossMinutes: 600, breakMinutes: 30, netMinutes: 570, netHours: 9.5, worked_on_off_day: false, holidayName: null, leaveType: null, hoursWorked: 9.5 });
+    { date: '2025-03-03', status: 'present', checkIn: undefined, checkOut: undefined, overnight: false, grossMinutes: 600, breakMinutes: 30, netMinutes: 570, netHours: 9.5, worked_on_off_day: false, holidayName: null, leaveType: null, late: false, lateMinutes: 0, early: false, earlyMinutes: 0, hoursWorked: 9.5 });
   assert.strictEqual(d['2025-03-03'].checkIn, '08:00:00');
   assert.strictEqual(d['2025-03-04'].breakMinutes, 0);
   assert.strictEqual(d['2025-03-04'].netMinutes, 240);
@@ -157,7 +157,7 @@ test('calendar: unpaid break deducted, off-day work, incomplete, holiday, leave,
   assert.strictEqual(d['2025-03-13'].status, 'leave');
   assert.strictEqual(d['2025-03-13'].leaveType, 'casual');
   assert.strictEqual(d['2025-03-10'].status, 'absent');         // Monday: e1 has no off day on Monday
-  assert.deepStrictEqual(r.body.meta.summary, { present: 3, incomplete: 1, absent: 21, leave: 1, holidays: 1, weeklyOffs: 4, netMinutes: 990, netHours: 16.5 });
+  assert.deepStrictEqual(r.body.meta.summary, { present: 3, incomplete: 1, absent: 21, leave: 1, holidays: 1, weeklyOffs: 4, netMinutes: 990, netHours: 16.5, lateDays: 1, lateMinutes: 360, earlyDays: 0, earlyMinutes: 0 });
   assert.strictEqual(r.body.meta.month, '2025-03');
   assert.deepStrictEqual(r.body.meta.shift, { id: r.body.meta.shift.id, name: 'General', start: '08:00', end: '18:00', breakStart: '13:00', breakEnd: '13:30', breakPaid: false, weeklyOff: [0] });
 });
@@ -201,16 +201,16 @@ test('CSV: new columns appended with a concrete row', async () => {
   const link = await client.get(`${S}/reports/attendance/link`, { token: owner, query: { month: '2025-03' } });
   const res = await fetch(link.body.data.url.replace('https://example.test/cloud', srv.url));
   const lines = (await res.text()).trim().split('\r\n');
-  assert.match(lines[0], /,utc_offset,shift_name,gross_minutes,break_minutes,net_minutes,net_hours_2dp,day_status$/);
+  assert.match(lines[0], /,utc_offset,shift_name,gross_minutes,break_minutes,net_minutes,net_hours_2dp,day_status,late_minutes,early_leave_minutes$/);
   const row = lines.find((l) => l.startsWith('2025-03-03,E1,'));
-  assert.ok(row.endsWith('+05:30,General,600,30,570,9.50,present'), row);
+  assert.ok(row.endsWith('+05:30,General,600,30,570,9.50,present,0,0'), row);
   assert.ok(row.includes(',600,10.00,'), row);   // worked_minutes / worked_hours_2dp unchanged (= gross)
   const inc = lines.find((l) => l.startsWith('2025-03-06,E1,'));
-  assert.ok(inc.endsWith('+05:30,General,,,,,incomplete'), inc);
+  assert.ok(inc.endsWith('+05:30,General,,,,,incomplete,0,0'), inc);
   const night = lines.find((l) => l.startsWith('2025-03-05,E4,'));
-  assert.ok(night.endsWith(',Night,480,30,450,7.50,present'), night);
+  assert.ok(night.endsWith(',Night,480,30,450,7.50,present,0,0'), night);
   const paid = lines.find((l) => l.startsWith('2025-03-03,E3,'));
-  assert.ok(paid.endsWith(',Paid lunch,600,0,600,10.00,present'), paid);
+  assert.ok(paid.endsWith(',Paid lunch,600,0,600,10.00,present,0,0'), paid);
 });
 
 test('PC-linked company: shift/holiday/shift-assignment writes are MANAGED_IN_EDGE', async () => {

@@ -11,6 +11,7 @@ const express = require('express');
 const { createMetrics } = require('./metrics');
 const { apkRouter } = require('./routes/apk');
 const { authRouter } = require('./routes/authRoutes');
+const { requestsRouter } = require('./routes/requests');
 const { syncRouter } = require('./routes/sync');
 const { commonRouter } = require('./routes/common');
 const { appCors } = require('./cors');
@@ -28,7 +29,10 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0', de
 
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');           // client IP from nginx's X-Forwarded-For
-  app.use(express.json({ limit: '256kb' }));    // embeddings are ~2 KB; no photos through the API
+  // embeddings are ~2 KB, so 256 KB; only POST /requests may carry a receipt photo (<= 1.5 MB, base64)
+  const smallJson = express.json({ limit: '256kb' });
+  const billJson = express.json({ limit: '2300kb' });
+  app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/v1/apk/requests' ? billJson : smallJson)(req, res, next));
   const cors = appCors(config.corsOrigins);      // app origins only; mounted on app routes below
   app.use('/health', cors);                      // the app's reachability check
 
@@ -60,6 +64,7 @@ function createApp({ config, getDbState = () => 'unknown', version = '0.0.0', de
   });
 
   app.use('/api/v1/apk', cors, ownerRouter(config, { google, billing }));   // before apkRouter's auth wall
+  app.use('/api/v1/apk', cors, requestsRouter(config));
   app.use('/api/v1/apk', cors, apkRouter(config));
   app.use('/api/v1/reports', reportsRouter(config));
   app.use('/api/v1/auth', cors, authRouter(config));

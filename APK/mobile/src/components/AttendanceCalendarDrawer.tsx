@@ -17,6 +17,10 @@ interface DayRecord {
   worked_on_off_day?: boolean;
   holidayName?: string | null;
   leaveType?: string | null;
+  late?: boolean;
+  lateMinutes?: number;
+  early?: boolean;
+  earlyMinutes?: number;
 }
 
 interface Summary {
@@ -28,6 +32,10 @@ interface Summary {
   weeklyOffs: number;
   netMinutes: number;
   netHours: number;
+  lateDays?: number;
+  lateMinutes?: number;
+  earlyDays?: number;
+  earlyMinutes?: number;
 }
 
 interface ShiftMeta {
@@ -188,6 +196,8 @@ export default function AttendanceCalendarDrawer({ open, onClose, empId }: Props
         ['Leave', s.leave, 'text-blue-400'],
         ['Holidays', s.holidays, 'text-purple-400'],
         ['Weekly off', s.weeklyOffs, 'text-slate-400'],
+        ...(s.lateDays != null ? [['Late', s.lateDays, 'text-amber-400'] as [string, number, string]] : []),
+        ...(s.earlyDays != null ? [['Early', s.earlyDays, 'text-amber-400'] as [string, number, string]] : []),
         ['Net hours', (s.netHours ?? s.netMinutes / 60).toFixed(1), 'text-brand-300'],
       ]
     : [];
@@ -309,6 +319,12 @@ export default function AttendanceCalendarDrawer({ open, onClose, empId }: Props
                   </div>
                   {sel.checkIn && sel.checkOut && (sel.breakMinutes ?? 0) > 0 && (
                     <p className="mt-2 text-[11.5px] text-slate-400">Break deducted: {sel.breakMinutes} min</p>
+                  )}
+                  {((sel.lateMinutes ?? 0) > 0 || (sel.earlyMinutes ?? 0) > 0) && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(sel.lateMinutes ?? 0) > 0 && <span className="chip !border-amber-400/40 !text-amber-300">Late {sel.lateMinutes} min</span>}
+                      {(sel.earlyMinutes ?? 0) > 0 && <span className="chip !border-amber-400/40 !text-amber-300">Left early {sel.earlyMinutes} min</span>}
+                    </div>
                   )}
                   {sel.status === 'incomplete' && <p className="mt-2 text-[11.5px] text-orange-300">Only one punch recorded.</p>}
                 </>

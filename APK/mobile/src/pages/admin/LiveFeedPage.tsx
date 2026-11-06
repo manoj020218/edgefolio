@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Megaphone } from 'lucide-react';
+import { ClipboardCheck, Megaphone } from 'lucide-react';
 import { apiGet, ApiError } from '../../lib/api';
+import { useApprovalsInfo } from '../../lib/approvals';
 
 interface FeedEntry {
   empId: number;
@@ -24,6 +25,7 @@ interface LiveFeed {
 export default function LiveFeedPage() {
   const [data, setData] = useState<LiveFeed | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const approvals = useApprovalsInfo();
 
   useEffect(() => {
     apiGet<LiveFeed>('/live-feed')
@@ -42,6 +44,13 @@ export default function LiveFeedPage() {
           <Megaphone size={16} /> Broadcast
         </Link>
       </div>
+
+      {approvals.available && approvals.pendingCount > 0 && (
+        <Link to="/admin/approvals" className="mb-3 flex items-center gap-2 glass !border-warning px-3 py-2.5 text-sm text-slate-100">
+          <ClipboardCheck size={16} className="text-warning" />
+          {approvals.pendingCount} request{approvals.pendingCount === 1 ? '' : 's'} waiting for approval
+        </Link>
+      )}
 
       {error && <p className="text-sm text-danger">{error}</p>}
       {!error && !data && <p className="text-sm text-slate-400">Loading…</p>}

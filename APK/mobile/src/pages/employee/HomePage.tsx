@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Bell, Calendar, CalendarDays, CloudOff, Download, PartyPopper, RefreshCw, ClipboardList, Umbrella, CalendarCheck } from 'lucide-react';
-import { apiGet, apiPost, rootApiGet, isCloudModeSync } from '../../lib/api';
+import { apiGet, apiGetFull, apiPost, rootApiGet, isCloudModeSync } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { useAuth } from '../../lib/auth';
 import { useNetworkStatus } from '../../lib/network';
 import { enqueue } from '../../lib/offlineQueue';
 import { celebrate } from '../../lib/feedback';
+import type { LeaveBalanceType } from './requestTypes';
 import AttendanceCalendarDrawer from '../../components/AttendanceCalendarDrawer';
 import NotificationBell from '../../components/NotificationBell';
 
@@ -69,6 +70,7 @@ export default function HomePage() {
 
   const [status, setStatus] = useState<TodayStatus | null>(null);
   const [leave, setLeave] = useState<LeaveBalance | null>(null);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveBalanceType[] | null>(null);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [nextHoliday, setNextHoliday] = useState<Holiday | null>(null);
@@ -104,7 +106,13 @@ export default function HomePage() {
   useEffect(() => {
     refreshStatus();
     apiGet<{ enrolled: boolean }>('/faces/self-enroll').then((r) => setFaceEnrolled(r.enrolled)).catch(() => {});
-    apiGet<LeaveBalance>('/leave-balance').then(setLeave).catch(() => {});
+    apiGetFull<LeaveBalance>('/leave-balance')
+      .then(({ data, meta }) => {
+        setLeave(data);
+        const t = (meta as { types?: LeaveBalanceType[] } | undefined)?.types;
+        if (isCloudModeSync() && Array.isArray(t) && t.length >= 2) setLeaveTypes(t);
+      })
+      .catch(() => {});
     apiGet<RequestRow[]>('/requests', { status: 'pending' })
       .then((rows) => setPendingCount(rows.length))
       .catch(() => {});
@@ -313,18 +321,29 @@ export default function HomePage() {
           <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">{pendingCount ?? '—'}</p>
           <p className="text-[10px] text-[#9aa0b8]">Pending tasks</p>
         </div>
-        <div className="glass animate-enter delay-3 p-3 text-center">
-          <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-xl bg-info/15 text-info"><Umbrella size={16} /></div>
-          <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">
-            {leave ? `${leave.casual} / ${leave.sick}` : '—'}
-          </p>
-          <p className="text-[10px] text-[#9aa0b8]">CL / SL left</p>
-        </div>
-        <div className="glass animate-enter delay-4 p-3 text-center">
-          <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-xl bg-success/15 text-success"><CalendarCheck size={16} /></div>
-          <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">{leave?.annual ?? '—'}</p>
-          <p className="text-[10px] text-[#9aa0b8]">Annual left</p>
-        </div>
+        {(() => {
+          const left = (t: LeaveBalanceType | undefined) => (t ? (t.remaining == null ? '∞' : String(t.remaining)) : '—');
+          const shortName = (t: LeaveBalanceType) => (t.name.length > 8 ? t.name.slice(0, 7) + '…' : t.name);
+          const a = leaveTypes?.[0];
+          const b = leaveTypes?.[1];
+          const c = leaveTypes?.[2];
+          return (
+            <>
+              <div className="glass animate-enter delay-3 p-3 text-center">
+                <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-xl bg-info/15 text-info"><Umbrella size={16} /></div>
+                <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">
+                  {leaveTypes ? `${left(a)} / ${left(b)}` : leave ? `${leave.casual} / ${leave.sick}` : '—'}
+                </p>
+                <p className="text-[10px] text-[#9aa0b8]">{leaveTypes && a && b ? `${shortName(a)} / ${shortName(b)} left` : 'CL / SL left'}</p>
+              </div>
+              <div className="glass animate-enter delay-4 p-3 text-center">
+                <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-xl bg-success/15 text-success"><CalendarCheck size={16} /></div>
+                <p className="text-lg font-extrabold tabular-nums text-[#f4f5fb]">{leaveTypes ? left(c) : leave?.annual ?? '—'}</p>
+                <p className="text-[10px] text-[#9aa0b8]">{leaveTypes && c ? `${shortName(c)} left` : 'Annual left'}</p>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {announcement && (() => {

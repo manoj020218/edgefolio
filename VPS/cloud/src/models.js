@@ -35,6 +35,8 @@ const orgSchema = new Schema({
     allowOfficeMobile:  { type: Boolean, default: true },         // cloud orgs may have no machine
     requireWorkAssignment: { type: Boolean, default: false },     // EDGE-style tour/wfh gate, opt-in
     enforceGeofence:    { type: Boolean, default: false },        // office punches must be inside an office radius
+    // Yearly leave quota per type (LEAVE_AND_LATE_PLAN.md section 2). Unset = lib/leave.js defaults.
+    leaveTypes: { type: [new Schema({ key: String, name: String, perYear: { type: Number, default: null } }, { _id: false })], default: undefined },
   },
 }, { timestamps: true });
 // Partial (not sparse) unique indexes: only real strings are indexed, so unlinked orgs never clash.
@@ -236,6 +238,33 @@ const shiftSchema = new Schema({
 shiftSchema.index({ orgId: 1, isDefault: 1 }, { unique: true, partialFilterExpression: { isDefault: true } });
 const Shift = mongoose.model('Shift', shiftSchema);
 
+// Employee requests (leave, advance, expense ... LEAVE_AND_LATE_PLAN.md section 3). Leave rows also
+// carry fromDate/toDate/leaveType/halfDay/yearDays so balances and the calendar can query them.
+const requestSchema = new Schema({
+  orgId: org,
+  empId: { type: String, required: true },
+  type:  { type: String, required: true },
+  title: { type: String, required: true },
+  details: { type: Schema.Types.Mixed, default: {} },
+  status: { type: String, enum: ['pending', 'approved', 'rejected', 'cancelled'], default: 'pending' },
+  decisionNote: { type: String, default: null },
+  decidedBy: { type: String, default: null },          // empId
+  decidedAt: { type: Date, default: null },
+  days: { type: Number, default: null },                // leave: working days (0.5 for a half day)
+  year: { type: Number, default: null },                // leave: year of fromDate
+  yearDays: { type: Schema.Types.Mixed, default: null },// leave: { '2026': 2, '2027': 1 }
+  leaveType: { type: String, default: null },
+  fromDate: { type: String, default: null },
+  toDate:   { type: String, default: null },
+  halfDay:  { type: Boolean, default: false },
+  bill: { type: new Schema({ data: String, mime: String }, { _id: false }), default: null, select: false },
+  hasBill: { type: Boolean, default: false },
+}, { timestamps: true });
+requestSchema.index({ orgId: 1, empId: 1, createdAt: -1 });
+requestSchema.index({ orgId: 1, status: 1, createdAt: -1 });
+requestSchema.index({ orgId: 1, type: 1, empId: 1, fromDate: 1 });
+const EmployeeRequest = mongoose.model('EmployeeRequest', requestSchema);
+
 // Per-org atomic counters (punch sequence).
 const counterSchema = new Schema({ orgId: org, name: { type: String, required: true }, value: { type: Number, default: 0 } });
 counterSchema.index({ orgId: 1, name: 1 }, { unique: true });
@@ -250,6 +279,6 @@ const AuditLog = mongoose.model('AuditLog', new Schema({
 
 module.exports = {
   Organisation, Employee, FaceProfile, Punch, AttendanceDay, Office, WorkAssignment, Holiday, Shift, AuditLog, Counter,
-  AlertSubscription, FaceRecaptureRequest, AppNotification, Announcement,
+  AlertSubscription, FaceRecaptureRequest, AppNotification, Announcement, EmployeeRequest,
   PROFILE_FIELDS,
 };

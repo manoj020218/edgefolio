@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { KeyRound, ScanFace } from 'lucide-react';
+import { ClipboardCheck, KeyRound, ScanFace } from 'lucide-react';
 import { apiGet, apiPatch, ApiError, isCloudModeSync } from '../../lib/api';
 import type { Shift } from './ShiftsPage';
 import { useAuth } from '../../lib/auth';
+import { useApprovalsInfo } from '../../lib/approvals';
 
 interface EmployeeRow {
   id: number;
@@ -18,6 +19,7 @@ interface EmployeeRow {
 }
 
 export default function EmployeesPage() {
+  const approvals = useApprovalsInfo();
   const { user } = useAuth();
   const canEdit = user?.role === 'hr-admin';
 
@@ -89,6 +91,15 @@ export default function EmployeesPage() {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-100">Employees</h1>
         <div className="flex gap-2">
+          {approvals.available && (
+            <Link
+              to="/admin/approvals"
+              className="flex items-center gap-1.5 rounded-md bg-surface-light px-3 py-1.5 text-sm text-slate-200"
+            >
+              <ClipboardCheck size={16} /> Approvals
+              {approvals.pendingCount > 0 && <span className="rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">{approvals.pendingCount}</span>}
+            </Link>
+          )}
           <Link
             to="/admin/face-requests"
             className="flex items-center gap-1.5 rounded-md bg-surface-light px-3 py-1.5 text-sm text-slate-200"

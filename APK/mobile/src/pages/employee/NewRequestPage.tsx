@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Upload } from 'lucide-react';
-import { apiPost, ApiError } from '../../lib/api';
-import { REQUEST_TYPES, EXPENSE_CATEGORIES, LEAVE_TYPES } from './requestTypes';
+import { apiGet, apiGetFull, apiPost, ApiError, isCloudModeSync } from '../../lib/api';
+import { REQUEST_TYPES, EXPENSE_CATEGORIES, LEAVE_TYPES, type LeaveTypeCfg, type LeaveBalanceType } from './requestTypes';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -24,7 +24,10 @@ export default function NewRequestPage() {
   const [toDate, setToDate] = useState(today());
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
-  const [leaveType, setLeaveType] = useState<(typeof LEAVE_TYPES)[number]>(LEAVE_TYPES[0]);
+  const [leaveType, setLeaveType] = useState<string>(LEAVE_TYPES[0]);
+  const [halfDay, setHalfDay] = useState(false);
+  const [cloudTypes, setCloudTypes] = useState<LeaveTypeCfg[] | null>(null);
+  const [balances, setBalances] = useState<LeaveBalanceType[] | null>(null);
   const [shiftText, setShiftText] = useState('');
   const [documentType, setDocumentType] = useState('');
   const [reason, setReason] = useState('');
@@ -32,6 +35,25 @@ export default function NewRequestPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  const isLeave = config?.type === 'leave';
+  const cloud = isCloudModeSync();
+
+  useEffect(() => {
+    if (!isLeave || !cloud) return;
+    apiGet<LeaveTypeCfg[]>('/leave-types')
+      .then((t) => { if (Array.isArray(t) && t.length) { setCloudTypes(t); setLeaveType((cur) => (t.some((x) => x.key === cur) ? cur : t[0].key)); } })
+      .catch(() => {});
+    apiGetFull<unknown>('/leave-balance')
+      .then(({ meta }) => {
+        const t = (meta as { types?: LeaveBalanceType[] } | undefined)?.types;
+        if (Array.isArray(t)) setBalances(t);
+      })
+      .catch(() => {});
+  }, [isLeave, cloud]);
+
+  const sameDay = fromDate === toDate;
+  const leftFor = balances?.find((b) => b.key === leaveType);
 
   if (!config) {
     return (
@@ -55,7 +77,10 @@ export default function NewRequestPage() {
       if (config.fields.includes('singleDate')) details.date = fromDate;
       if (config.fields.includes('amount')) details.amount = Number(amount) || 0;
       if (config.fields.includes('category')) details.category = category;
-      if (config.fields.includes('leaveType')) details.leaveType = leaveType;
+      if (config.fields.includes('leaveType')) {
+        details.leaveType = leaveType;
+        if (cloud && sameDay && halfDay) details.halfDay = true;
+      }
       if (config.fields.includes('shiftText')) details.requestedShift = shiftText;
       if (config.fields.includes('documentType')) details.documentType = documentType;
 
@@ -99,19 +124,25 @@ export default function NewRequestPage() {
           <div>
             <label className="mb-2 block text-xs font-semibold text-slate-400">Leave Type</label>
             <div className="flex gap-2">
-              {LEAVE_TYPES.map((lt) => (
+              {(cloudTypes ?? LEAVE_TYPES.map((k) => ({ key: k, name: k, perYear: null as number | null }))).map((lt) => (
                 <button
                   type="button"
-                  key={lt}
-                  onClick={() => setLeaveType(lt)}
+                  key={lt.key}
+                  onClick={() => setLeaveType(lt.key)}
                   className={`flex-1 rounded-xl py-2.5 text-xs font-semibold capitalize ${
-                    leaveType === lt ? 'bg-brand text-white shadow-glow' : 'bg-surface-light text-slate-300'
+                    leaveType === lt.key ? 'bg-brand text-white shadow-glow' : 'bg-surface-light text-slate-300'
                   }`}
                 >
-                  {lt}
+                  {lt.name}
                 </button>
               ))}
             </div>
+            {cloud && leftFor && (
+              <p className="mt-2 text-xs text-slate-400">
+                {leftFor.remaining == null ? 'No limit for this leave type' : `${leftFor.remaining} day${leftFor.remaining === 1 ? '' : 's'} left`}
+                {leftFor.pending > 0 ? ` (${leftFor.pending} pending)` : ''}
+              </p>
+            )}
           </div>
         )}
 
@@ -136,6 +167,13 @@ export default function NewRequestPage() {
               />
             </div>
           </div>
+        )}
+
+        {cloud && isLeave && sameDay && (
+          <label className="flex items-center justify-between glass px-4 py-3">
+            <span className="text-sm font-semibold text-slate-100">Half day</span>
+            <input type="checkbox" checked={halfDay} onChange={(e) => setHalfDay(e.target.checked)} className="h-5 w-5 accent-brand-500" />
+          </label>
         )}
 
         {config.fields.includes('singleDate') && (

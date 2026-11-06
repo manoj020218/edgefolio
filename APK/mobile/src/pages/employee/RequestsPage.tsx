@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   CalendarDays, Clock, Wallet, Receipt, Plane, RefreshCw, Home as HomeIcon, Timer, FileText,
 } from 'lucide-react';
-import { apiGet, ApiError } from '../../lib/api';
+import { apiGet, apiPost, ApiError, isCloudModeSync } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { REQUEST_TYPES, requestTypeLabel, type RequestType } from './requestTypes';
 
@@ -22,9 +22,10 @@ const ICONS: Record<RequestType, typeof CalendarDays> = {
 interface RequestRow {
   id: string;
   type: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   title: string;
   decisionNote: string | null;
+  decidedByName?: string | null;
   createdAt: string;
 }
 
@@ -43,6 +44,20 @@ export default function RequestsPage() {
   }
 
   useEffect(load, [filter]);
+
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  async function cancel(id: string) {
+    setCancellingId(id);
+    setError(null);
+    try {
+      await apiPost(`/requests/${id}/cancel`);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not cancel the request.');
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   return (
     <div className="animate-enter px-5" style={{ paddingTop: '52px' }}>
@@ -95,7 +110,9 @@ export default function RequestsPage() {
                     ? 'bg-success/15 text-success'
                     : r.status === 'rejected'
                       ? 'bg-danger/15 text-danger'
-                      : 'bg-warning/15 text-warning'
+                      : r.status === 'cancelled'
+                        ? 'bg-slate-500/20 text-slate-400'
+                        : 'bg-warning/15 text-warning'
                 }`}
               >
                 {r.status.toUpperCase()}
@@ -103,8 +120,19 @@ export default function RequestsPage() {
             </div>
             <p className="text-xs text-slate-400">
               {requestTypeLabel(r.type)} &middot; {formatDateTime(r.createdAt)}
+              {r.decidedByName && r.status !== 'pending' && r.status !== 'cancelled' ? ` · by ${r.decidedByName}` : ''}
               {r.decisionNote ? ` · ${r.decisionNote}` : ''}
             </p>
+            {r.status === 'pending' && isCloudModeSync() && (
+              <button
+                type="button"
+                disabled={cancellingId === r.id}
+                onClick={() => void cancel(r.id)}
+                className="btn-ghost mt-2.5 px-3 py-1.5 text-xs font-semibold text-slate-200 disabled:opacity-50"
+              >
+                {cancellingId === r.id ? 'Cancelling…' : 'Cancel request'}
+              </button>
+            )}
           </div>
         ))}
         {rows && rows.length === 0 && <p className="text-sm text-slate-400">No requests {filter !== 'all' ? `(${filter})` : 'yet'}.</p>}

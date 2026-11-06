@@ -8,6 +8,8 @@ import CompanyPage from './pages/admin/CompanyPage';
 import AddEmployeePage from './pages/admin/AddEmployeePage';
 import ShiftsPage from './pages/admin/ShiftsPage';
 import HolidaysPage from './pages/admin/HolidaysPage';
+import ApprovalsPage from './pages/admin/ApprovalsPage';
+import LeaveTypesPage from './pages/admin/LeaveTypesPage';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import AttendancePage from './pages/AttendancePage';
@@ -184,6 +186,8 @@ export default function App() {
         <Route path="employees/new" element={<AddEmployeePage />} />
         <Route path="shifts" element={<ShiftsPage />} />
         <Route path="holidays" element={<HolidaysPage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
+        <Route path="leave-types" element={<LeaveTypesPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

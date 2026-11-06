@@ -19,6 +19,7 @@ const { notifyEmployees } = require('../lib/notify');
 const { suggestionsFor, FESTIVAL_YEARS } = require('../data/holidaySuggestions');
 const { resolveShift, monthDays, summarize } = require('../lib/dayStatus');
 const { loadShifts, serialize: serializeShift, parseShiftBody } = require('../lib/shifts');
+const { leaveDatesFor } = require('../lib/leave');
 
 const WORK_TYPES = ['office', 'tour', 'wfh'];
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);   // async handler
@@ -494,13 +495,14 @@ function apkRouter(config) {
     }
     const emp = await db.Employee.findOne({ empId }).lean();
     if (!emp) throw httpError(404, 'Employee not found');
-    const [shifts, recs, holidays] = await Promise.all([
+    const [shifts, recs, holidays, leaveByDate] = await Promise.all([
       loadShifts(db, req.org),
       db.AttendanceDay.find({ empId, date: { $regex: `^${month}-` } }).lean(),
       db.Holiday.find({ date: { $regex: `^${month}-` } }).lean(),
+      leaveDatesFor(db, empId, `${month}-01`, `${month}-31`),
     ]);
     const shift = resolveShift(shifts, emp);
-    const days = monthDays({ month, recs, shift, holidays, tz, today });
+    const days = monthDays({ month, recs, shift, holidays, tz, today, leaveByDate });
     const out = days.map((d) => ({ ...d, hoursWorked: d.netHours }));   // checkIn/checkOut/hoursWorked/leaveType kept for older apps
     const { id, name, start, end, breakStart, breakEnd, breakPaid, weeklyOff } = shift;
     sendOk(res, out, { month, shift: { id, name, start, end, breakStart: breakStart || null, breakEnd: breakEnd || null, breakPaid: Boolean(breakPaid), weeklyOff }, summary: summarize(days) });

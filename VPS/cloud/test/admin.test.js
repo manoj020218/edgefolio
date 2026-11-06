@@ -242,7 +242,7 @@ test('night shift 20:00 → 04:00: checkout after midnight closes the shift; CSV
   const link = await client.get('/api/v1/apk/reports/attendance/link', { token: owner, query: { month: '2026-11' } });
   const csv = await (await fetch(link.body.data.url.replace(/^https?:\/\/[^/]+\/cloud/, srv.url).replace(/^https?:\/\/[^/]+(?=\/api)/, srv.url))).text();
   const row = csv.split('\r\n').find((l) => l.startsWith('2026-11-10,E2,'));
-  assert.strictEqual(row, '2026-11-10,E2,Bala,Sales,2026-11-10T20:00:00+05:30,2026-11-11T04:00:00+05:30,480,8.00,present,office,yes,+05:30,General,480,0,480,8.00,present');
+  assert.strictEqual(row, '2026-11-10,E2,Bala,Sales,2026-11-10T20:00:00+05:30,2026-11-11T04:00:00+05:30,480,8.00,present,office,yes,+05:30,General,480,0,480,8.00,present,720,0');
   // A stale "in" older than 20 h does not block a new check-in.
   await db.Punch.create({ seq: await db.nextSeq('punch'), empId: 'e2', eventType: 'in', at: new Date('2026-11-12T03:30:00Z'), date: '2026-11-12', time: '09:00:00', workDate: '2026-11-12' });
   const next = await client.post('/api/v1/apk/attendance', { token: bala, body: punchBody('e2', '2026-11-13T03:30:00.000Z') });

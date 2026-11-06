@@ -10,6 +10,8 @@ const CHANNEL_BY_TYPE = {
   ATTENDANCE_ALERT: 'ef_alerts_v2',
   FACE_RECAPTURE_REQUEST: 'ef_requests_v2',
   FACE_RECAPTURE_DECISION: 'ef_requests_v2',
+  REQUEST_NEW: 'ef_requests_v2',
+  REQUEST_DECISION: 'ef_requests_v2',
 };
 // Announcements get their own sound per kind: SOS = gong, holiday = happy chime, others = strong buzz.
 const ANNOUNCE_CHANNEL = { sos: 'ef_sos_v2', holiday: 'ef_holiday_v2' };

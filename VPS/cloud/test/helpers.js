@@ -43,7 +43,7 @@ function api(url) {
     return { status: res.status, body: await res.json() };
   }
   return {
-    get: (p, o) => call('GET', p, o), post: (p, o) => call('POST', p, o), patch: (p, o) => call('PATCH', p, o), del: (p, o) => call('DELETE', p, o),
+    get: (p, o) => call('GET', p, o), post: (p, o) => call('POST', p, o), patch: (p, o) => call('PATCH', p, o), put: (p, o) => call('PUT', p, o), del: (p, o) => call('DELETE', p, o),
     async login(orgCode, empCode, password = 'secret1') {
       const r = await call('POST', '/api/v1/apk/auth/login', { orgCode, body: { empCode, password } });
       if (!r.body.ok) throw new Error(`login failed: ${JSON.stringify(r.body)}`);

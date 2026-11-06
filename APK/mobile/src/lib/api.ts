@@ -210,6 +210,12 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return res.data.data as T;
 }
 
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const res = await client.put<ApiEnvelope<T>>(path, body);
+  if (!res.data.ok) throw toApiError(res.data);
+  return res.data.data as T;
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const res = await client.delete<ApiEnvelope<T>>(path);
   if (!res.data.ok) throw toApiError(res.data);

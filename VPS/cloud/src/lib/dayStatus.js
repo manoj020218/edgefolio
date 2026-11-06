@@ -47,6 +47,19 @@ function punchInstants(rec, date, tz) {
   return { inAt, outAt };
 }
 
+// Late arrival / early leave (LEAVE_AND_LATE_PLAN.md section 1): minutes beyond the shift grace.
+// Only on working days. An overnight shift ends on the next calendar day.
+function lateEarly(date, inAt, outAt, shift, tz) {
+  const grace = (shift.graceMinutes ?? 10) * 60000;
+  let lateMinutes = 0; let earlyMinutes = 0;
+  const start = instantOf(date, `${shift.start}:00`, tz);
+  if (inAt && start && inAt.getTime() > start.getTime() + grace) lateMinutes = Math.round((inAt.getTime() - start.getTime()) / 60000);
+  let end = instantOf(date, `${shift.end}:00`, tz);
+  if (end && isOvernight(shift)) end = new Date(end.getTime() + DAY_MS);
+  if (outAt && end && outAt.getTime() < end.getTime() - grace) earlyMinutes = Math.round((end.getTime() - outAt.getTime()) / 60000);
+  return { late: lateMinutes > 0, lateMinutes, early: earlyMinutes > 0, earlyMinutes };
+}
+
 function hoursFor(date, inAt, outAt, shift, tz) {
   const gross = workedBetween(inAt, outAt).minutes;
   let brk = 0;
@@ -65,26 +78,35 @@ function hoursFor(date, inAt, outAt, shift, tz) {
  * One employee-day. `rec` = AttendanceDay row or null. Returns null for dates after `today`
  * (pass today = null to skip that check).
  */
-function computeDay({ date, rec, shift, holidayName = null, tz = 330, today = null }) {
-  if (today && date > today) return null;
+function computeDay({ date, rec, shift, holidayName = null, tz = 330, today = null, leaveType = null }) {
+  // Future dates are omitted, except approved leave on a working day (so planned leave shows).
+  if (today && date > today && !leaveType) return null;
   const hasIn = Boolean(rec && (rec.checkIn || rec.checkInAt));
   const hasOut = Boolean(rec && (rec.checkOut || rec.checkOutAt));
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
   const weeklyOff = (shift.weeklyOff || []).includes(dow);
   const offDay = Boolean(holidayName) || weeklyOff;
+  if (today && date > today && offDay) return null;
   const day = {
     date, status: 'absent', checkIn: rec ? rec.checkIn || null : null, checkOut: rec ? rec.checkOut || null : null,
     overnight: false, grossMinutes: 0, breakMinutes: 0, netMinutes: 0, netHours: 0,
     worked_on_off_day: false, holidayName: holidayName || null, leaveType: rec ? rec.leaveType || null : null,
+    late: false, lateMinutes: 0, early: false, earlyMinutes: 0,
   };
   if (hasIn && hasOut) {
     const { inAt, outAt } = punchInstants(rec, date, tz);
     Object.assign(day, { status: 'present', worked_on_off_day: offDay }, hoursFor(date, inAt, outAt, shift, tz));
     day.overnight = Boolean(rec.overnight) || new Date(outAt.getTime() + tz * 60000).toISOString().slice(0, 10) !== date;
+    if (!offDay) Object.assign(day, lateEarly(date, inAt, outAt, shift, tz));
   } else if (hasIn || hasOut) {
     day.status = 'incomplete';
-  } else if (day.leaveType || (rec && /^(leave|on_leave)$/.test(rec.status || ''))) {
+    if (hasIn && !offDay) {
+      const inAt = rec.checkInAt || instantOf(date, rec.checkIn, tz);
+      Object.assign(day, lateEarly(date, inAt, null, shift, tz));
+    }
+  } else if (day.leaveType || (leaveType && !offDay) || (rec && /^(leave|on_leave)$/.test(rec.status || ''))) {
     day.status = 'leave';
+    if (!day.leaveType) day.leaveType = leaveType || null;
   } else if (holidayName) {
     day.status = 'holiday';
   } else if (weeklyOff) {
@@ -94,7 +116,7 @@ function computeDay({ date, rec, shift, holidayName = null, tz = 330, today = nu
 }
 
 function summarize(days) {
-  const s = { present: 0, incomplete: 0, absent: 0, leave: 0, holidays: 0, weeklyOffs: 0, netMinutes: 0, netHours: 0 };
+  const s = { present: 0, incomplete: 0, absent: 0, leave: 0, holidays: 0, weeklyOffs: 0, netMinutes: 0, netHours: 0, lateDays: 0, lateMinutes: 0, earlyDays: 0, earlyMinutes: 0 };
   for (const d of days) {
     if (d.status === 'present') s.present++;
     else if (d.status === 'incomplete') s.incomplete++;
@@ -103,20 +125,22 @@ function summarize(days) {
     else if (d.status === 'holiday') s.holidays++;
     else if (d.status === 'weekly_off') s.weeklyOffs++;
     s.netMinutes += d.netMinutes || 0;
+    if (d.late) { s.lateDays++; s.lateMinutes += d.lateMinutes; }
+    if (d.early) { s.earlyDays++; s.earlyMinutes += d.earlyMinutes; }
   }
   s.netHours = hours2dp(s.netMinutes);
   return s;
 }
 
 // Every day of `month` (YYYY-MM) up to `today`, for one employee.
-function monthDays({ month, recs, shift, holidays, tz, today }) {
+function monthDays({ month, recs, shift, holidays, tz, today, leaveByDate = null }) {
   const byDate = new Map(recs.map((r) => [r.date, r]));
   const hol = new Map(holidays.map((h) => [h.date, h.name || '']));
   const [y, m] = month.split('-').map(Number);
   const out = [];
   for (let d = 1; d <= new Date(Date.UTC(y, m, 0)).getUTCDate(); d++) {
     const date = `${month}-${String(d).padStart(2, '0')}`;
-    const day = computeDay({ date, rec: byDate.get(date) || null, shift, holidayName: hol.has(date) ? hol.get(date) : null, tz, today });
+    const day = computeDay({ date, rec: byDate.get(date) || null, shift, holidayName: hol.has(date) ? hol.get(date) : null, tz, today, leaveType: leaveByDate ? leaveByDate.get(date) || null : null });
     if (day) out.push(day);
   }
   return out;

@@ -30,6 +30,7 @@ const { sendOk, httpError, codedError } = require('../lib/http');
 const { hashSecret } = require('../lib/password');
 const { loadShifts } = require('../lib/shifts');
 const { resolveShift, computeDay } = require('../lib/dayStatus');
+const { eachDate } = require('../lib/leave');
 
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const str = (v, max = 120) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
@@ -272,11 +273,12 @@ function reportsRouter(config) {
     const org = await Organisation.findById(p.orgId).lean();
     if (!org) throw httpError(404, 'Company not found');
     const db = forOrg(org._id);
-    const [days, emps, shifts, holidays] = await Promise.all([
+    const [days, emps, shifts, holidays, leaves] = await Promise.all([
       db.AttendanceDay.find({ date: { $regex: `^${p.month}-` } }).sort({ date: 1 }).lean(),
       db.Employee.find({}, { empId: 1, empCode: 1, name: 1, department: 1, shiftId: 1 }).lean(),
       loadShifts(db, org),
       db.Holiday.find({ date: { $regex: `^${p.month}-` } }).lean(),
+      db.EmployeeRequest.find({ type: 'leave', status: 'approved', fromDate: { $lte: `${p.month}-31` }, toDate: { $gte: `${p.month}-01` } }, { empId: 1, leaveType: 1, fromDate: 1, toDate: 1 }).lean(),
     ]);
     const holName = new Map(holidays.map((h) => [h.date, h.name || '']));
     const byId = new Map(emps.map((e) => [e.empId, e]));
@@ -291,6 +293,7 @@ function reportsRouter(config) {
     //  gross_minutes    same as worked_minutes; break_minutes = overlap with the shift break when it is unpaid
     //  net_minutes      gross - break; net_hours_2dp = net / 60 half-up (these four are "" without a check-out)
     //  day_status       present | incomplete | leave | holiday | weekly_off | absent
+    //  late_minutes, early_leave_minutes  minutes past the shift grace (0 when on time / not a full working day)
     //  status, work_type (office | tour | wfh), overnight (yes | no), utc_offset (+05:30)
     // format=csv: RFC 4180, UTF-8 WITHOUT BOM, CRLF. format=excel: same plus a UTF-8 BOM (so Excel
     // shows non-English names) and employee_id written as ="0012" so Excel keeps leading zeros.
@@ -298,15 +301,33 @@ function reportsRouter(config) {
     const tz = org.tzOffsetMin ?? 330;
     const esc = (v) => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const idCell = (id) => (excel && id ? '"=' + '"'.repeat(2) + String(id).replace(/"/g, '"'.repeat(4)) + '"'.repeat(3) : esc(id ?? ''));
-    const lines = [['work_date', 'employee_id', 'employee_name', 'department', 'check_in', 'check_out', 'worked_minutes', 'worked_hours_2dp', 'status', 'work_type', 'overnight', 'utc_offset', 'shift_name', 'gross_minutes', 'break_minutes', 'net_minutes', 'net_hours_2dp', 'day_status'].join(',')];
-    for (const d of days) {
+    const lines = [['work_date', 'employee_id', 'employee_name', 'department', 'check_in', 'check_out', 'worked_minutes', 'worked_hours_2dp', 'status', 'work_type', 'overnight', 'utc_offset', 'shift_name', 'gross_minutes', 'break_minutes', 'net_minutes', 'net_hours_2dp', 'day_status', 'late_minutes', 'early_leave_minutes'].join(',')];
+    // Approved leave on days with no attendance row becomes a row too (day_status = leave). A punch wins.
+    const leaveMap = new Map();
+    for (const lv of leaves) for (const date of eachDate(lv.fromDate, lv.toDate)) leaveMap.set(`${lv.empId}|${date}`, lv.leaveType);
+    const have = new Set(days.map((d) => `${d.empId}|${d.date}`));
+    const leaveRows = [];
+    for (const lv of leaves) {
+      for (const date of eachDate(lv.fromDate, lv.toDate)) {
+        if (date.startsWith(`${p.month}-`) && !have.has(`${lv.empId}|${date}`) && byId.has(lv.empId)) { have.add(`${lv.empId}|${date}`); leaveRows.push({ empId: lv.empId, date, leaveOnly: lv.leaveType }); }
+      }
+    }
+    const allRows = days.concat(leaveRows).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    for (const d of allRows) {
       const e = byId.get(d.empId) || {};
+      if (d.leaveOnly) {
+        const shift = resolveShift(shifts, e);
+        const dd = computeDay({ date: d.date, rec: null, shift, holidayName: holName.has(d.date) ? holName.get(d.date) : null, tz, leaveType: d.leaveOnly });
+        if (dd.status !== 'leave') continue;   // holiday / weekly off: not a leave day
+        lines.push([esc(d.date), idCell(e.empCode), esc(e.name ?? ''), esc(e.department ?? ''), '', '', '', '', '', '', 'no', offsetLabel(tz), esc(shift.name), '', '', '', '', 'leave', '', ''].join(','));
+        continue;
+      }
       const inAt = d.checkInAt || instantOf(d.date, d.checkIn, tz);
       let outAt = d.checkOutAt || instantOf(d.date, d.checkOut, tz);
       if (outAt && inAt && outAt < inAt) outAt = new Date(outAt.getTime() + 86400000);   // old overnight rows
       const w = workedBetween(inAt, outAt);
       const shift = resolveShift(shifts, e);
-      const dd = computeDay({ date: d.date, rec: d, shift, holidayName: holName.has(d.date) ? holName.get(d.date) : null, tz });
+      const dd = computeDay({ date: d.date, rec: d, shift, holidayName: holName.has(d.date) ? holName.get(d.date) : null, tz, leaveType: leaveMap.get(`${d.empId}|${d.date}`) || null });
       const full = dd.status === 'present';
       const overnight = Boolean(outAt && toLocalParts(outAt, tz).date !== d.date);
       lines.push([
@@ -314,7 +335,7 @@ function reportsRouter(config) {
         esc(isoLocal(inAt, tz)), esc(isoLocal(outAt, tz)),
         outAt ? w.minutes : '', outAt ? w.hours.toFixed(2) : '',
         esc(d.status || ''), esc((d.mode || '').replace('mobile-', '')), overnight ? 'yes' : 'no', offsetLabel(tz),
-        esc(shift.name), full ? dd.grossMinutes : '', full ? dd.breakMinutes : '', full ? dd.netMinutes : '', full ? dd.netHours.toFixed(2) : '', dd.status,
+        esc(shift.name), full ? dd.grossMinutes : '', full ? dd.breakMinutes : '', full ? dd.netMinutes : '', full ? dd.netHours.toFixed(2) : '', dd.status, dd.lateMinutes, dd.earlyMinutes,
       ].join(','));
     }
     const fname = `attendance-${org.orgCode}-${p.month}${excel ? '-excel' : ''}.csv`;

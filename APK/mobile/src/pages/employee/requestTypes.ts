@@ -40,3 +40,7 @@ export const LEAVE_TYPES = ['casual', 'sick', 'annual'] as const;
 export function requestTypeLabel(type: string): string {
   return REQUEST_TYPES.find((t) => t.type === type)?.label ?? type;
 }
+
+// Cloud leave types (GET /leave-types) and balances (GET /leave-balance meta.types).
+export interface LeaveTypeCfg { key: string; name: string; perYear: number | null }
+export interface LeaveBalanceType extends LeaveTypeCfg { used: number; pending: number; remaining: number | null }

@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Share } from '@capacitor/share';
 import { Browser } from '@capacitor/browser';
-import { Building2, Copy, Check, Monitor, UserPlus, Send, Download, Clock, CalendarDays, ChevronRight, Pencil, X } from 'lucide-react';
+import { Building2, Copy, Check, Monitor, UserPlus, Send, Download, Clock, CalendarDays, ChevronRight, Pencil, X, ClipboardCheck, Umbrella } from 'lucide-react';
 import { apiGet, apiPatch, isCloudModeSync } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useApprovalsInfo } from '../../lib/approvals';
 
 interface Company {
   orgCode: string;
@@ -22,6 +23,7 @@ interface Company {
 export default function CompanyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const approvals = useApprovalsInfo();
   const [c, setC] = useState<Company | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -204,6 +206,25 @@ export default function CompanyPage() {
             </span>
             <ChevronRight size={16} className="text-slate-500" />
           </button>
+          {!c.linkedToPc && (
+            <>
+              <button type="button" onClick={() => navigate('/admin/approvals')} className={`${row} w-full text-left active:scale-[0.98]`}>
+                <span className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-success/20 text-success"><ClipboardCheck size={15} /></span>
+                  <span className="text-[14px] font-semibold text-slate-100">Approvals</span>
+                  {approvals.pendingCount > 0 && <span className="rounded-full bg-danger px-2 text-[11px] font-bold text-white">{approvals.pendingCount}</span>}
+                </span>
+                <ChevronRight size={16} className="text-slate-500" />
+              </button>
+              <button type="button" onClick={() => navigate('/admin/leave-types')} className={`${row} w-full text-left active:scale-[0.98]`}>
+                <span className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-info/20 text-info"><Umbrella size={15} /></span>
+                  <span className="text-[14px] font-semibold text-slate-100">Leave types</span>
+                </span>
+                <ChevronRight size={16} className="text-slate-500" />
+              </button>
+            </>
+          )}
         </div>
       )}
 
