@@ -1,6 +1,6 @@
 # EdgeFolio — Marketing, Licensing & Distribution HANDOFF
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-11-06 (see §0 RESUME HERE)
 **Covers:** the self-serve onboarding flow, the free-forever licensing model, the
 installer/distribution pipeline, and everything found broken and fixed along the way.
 **Read this before touching `/onboard`, `VPS/marketing/`, the billing-server EdgeFolio
@@ -9,6 +9,55 @@ routes, or the Electron installer build.**
 Testing of this work by the product owner is still pending as of this writing — treat
 everything below as "implemented and deployed" but **not yet end-to-end verified by a
 real user on a clean machine**. Update this doc with results once that happens.
+
+---
+
+## 0. RESUME HERE (state on 2026-11-06 — read first after a restart / power cut)
+
+**All code is committed and pushed to `origin/master`** (last feature commit `5efc56e`).
+Nothing is half-edited. Feature plans (decisions + API contracts): `APK/ATTENDANCE_RULES_PLAN.md`
+(shifts, holidays, monthly calendar, net hours) and `APK/LEAVE_AND_LATE_PLAN.md` (late/early marks,
+requests + leave approval with yearly quota; section 7 = as-built deviations).
+
+| Part | Built | Live? |
+|---|---|---|
+| Cloud API (`VPS/cloud`, PM2 `edgefolio-cloud`, port 3090) | `5efc56e` | **NO — live is `19546cd`.** Needs deploy (late/early + requests/approvals). Tests 64/64. |
+| App 1.0.45 (versionCode 55) | AAB `APK/play-store-assets/release/edgefolio-1.0.45-55.aab` (+ mapping-1.0.45.txt) | **NO.** Website APK still 1.0.44; Play not uploaded. Local `VPS/marketing/downloads/EdgeFolio.apk` is 1.0.45, SHA256 `5e701324bd24b261ec6c2a6d5b9d495406fcf3f47c017fe52911e7945b7132fa`. |
+| App 1.0.44 (54) | — | Website yes; Play: sent for review 2026-11-05 with the app-level trader declaration (ToS URL `/terms-and-conditions`). |
+| Windows EDGE 1.0.13 | `dist-exe/` | Yes (website). Sends shifts + employee shift to cloud. |
+| Marketing site | `129e51d` (terms cover the phone app) | Yes. |
+
+**Next steps, in order**
+1. Deploy cloud (auto mode blocks production deploys — owner switches Claude Code to manual mode):
+   ```
+   # deploy-cloud.sh (copy to /tmp on the VPS and run): cd /root/projects/public-credit/edgefolio &&
+   #   git pull --ff-only origin master && cd VPS/cloud && node --check src/routes/apk.js &&
+   #   pm2 restart edgefolio-cloud --update-env && curl -s http://127.0.0.1:3090/health
+   D:\plink_git.bat root@154.61.69.200 "cd /root/projects/public-credit/edgefolio && git pull --ff-only origin master && cd VPS/cloud && node --check src/routes/requests.js && pm2 restart edgefolio-cloud --update-env && sleep 4 && curl -s http://127.0.0.1:3090/health"
+   ```
+   Check: `/api/v1/apk/requests`, `/approvals`, `/leave-types`, `/leave-balance` answer 401 without a token (not 404).
+2. Upload APK 1.0.45 to the website: `pscp` `VPS/marketing/downloads/EdgeFolio.apk` →
+   `root@154.61.69.200:/root/projects/public-credit/edgefolio/VPS/marketing/downloads/EdgeFolio.apk.part`,
+   check `sha256sum` = the hash above, then `mv` to `EdgeFolio.apk` (downloads are not in git).
+3. Owner uploads `edgefolio-1.0.45-55.aab` to Play → Closed testing (Alpha) → Send for review
+   (mapping is inside the AAB; Play extracts it — no separate upload).
+4. Test on a phone: employee leave request → owner Company → Approvals → approve; calendar shows
+   blue leave + Late/Early chips; Company → Leave types edit.
+
+**Open items (not started)**
+- PC-linked companies: leave requests from the app → EDGE (sync) and EDGE decisions back. Today the
+  cloud answers 409 `MANAGED_IN_EDGE` and the app hides Approvals/Leave types for them.
+- Owner to verify 2026 festival dates in `VPS/cloud/src/data/holidaySuggestions.js`; add next year's table yearly.
+- Play production needs 12 testers opted in for 14 consecutive days.
+- `HANDOFF.md` hashes: keep §5 "Current live installer" in sync when a new EDGE build ships.
+
+**Working rules (owner):** PLINK/PSCP via `D:\plink_git.bat` / `D:\pscp_git.bat` (password inside, never in
+git); git over HTTPS; never commit VPS credentials, support contact details or pricing; Firebase /
+OAuth secrets stay outside git (`/root/secrets` on VPS, `Salary_On/goolgle` locally); the owner types
+passwords into Play Console themselves. Tests: cloud `cd VPS/cloud && MONGOMS_VERSION=4.4.29 npm test`;
+EDGE `cd EDGE && ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron --test tests/integration/*.test.js`.
+App build: `cd APK/mobile && npm run build && npx cap sync android && cd android && ./gradlew.bat assembleRelease bundleRelease`
+(bump `android/app/build.gradle` versionCode/versionName + `package.json` first).
 
 ---
 
