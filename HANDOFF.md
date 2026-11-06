@@ -262,7 +262,17 @@ desktop-side behavior unaffected, that commit only touches the mobile build). Ve
 SHA256 matched between local build and the VPS copy (`sha256sum` over plink),
 `/download` and `/download/portable` both return 200 on a full download.
 
-**Current live installer: v1.0.12, deployed 2026-11-03.** `EdgeFolio-Setup.exe` SHA256
+**Current live installer: v1.0.13, deployed 2026-11-05.** `EdgeFolio-Setup.exe` SHA256
+`59376f4e8341bbec58217467a0f14a2531563912a427ae94e9cc87220e3592a1`; `EdgeFolio-Portable.exe` SHA256
+`e03305eb7c66cd977c3d1cc8e2e2e2fc5d46b573cc95bbbf3d944a647de5974e`. Verified SHA256 local = VPS. Adds
+shift sync to the cloud (`readReference` sends `workingHours` + `shifts`, employees send `shiftId`;
+cloud `routes/sync.js syncShifts/remapEdgeShifts`). Cloud live at `19546cd`; `/download/apk` = app
+1.0.44 (`ad4cc29d…79fb3`): shifts/holidays/monthly calendar, suggested Indian holidays, Google sign-in
+without a company code, owner edits company name. Play: 1.0.44 (54) sent for review 2026-11-05 with
+the app-level trader declaration (ToS = /terms-and-conditions). Owner to verify 2026 festival dates in
+`VPS/cloud/src/data/holidaySuggestions.js` (table needs a new year each year).
+
+**Previous: v1.0.12, deployed 2026-11-03.** `EdgeFolio-Setup.exe` SHA256
 `f6b6278c6fe58d0f3a3210578356a4c21eb57b0cfa70448bfaa5a164126bfc82`; `EdgeFolio-Portable.exe` SHA256
 `0ff722140d2b7bd0184108c67ed4ddca51f81e29a361fd485a479f128d36a128`. Verified SHA256 local = VPS, both
 download routes 200. Adds night shifts (services/shiftDay.js, employees.shift_id + Shift picker,
